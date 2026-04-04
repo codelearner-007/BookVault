@@ -40,7 +40,7 @@ BEGIN
     WHERE ur.user_id = (event->>'user_id')::UUID;
 
     -- Inject claims into JWT
-    event := jsonb_set(event, '{claims,user_role}', to_jsonb(COALESCE(user_role, 'user')));
+    event := jsonb_set(event, '{claims,user_role}', to_jsonb(COALESCE(user_role, 'admin')));
     event := jsonb_set(event, '{claims,permissions}', to_jsonb(COALESCE(user_permissions, ARRAY[]::TEXT[])));
     event := jsonb_set(event, '{claims,hierarchy_level}', to_jsonb(hierarchy_level));
 

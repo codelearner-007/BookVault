@@ -60,3 +60,12 @@
 - Register form: textbox "Full Name (Optional)", textbox "Email", textbox "Password", textbox "Confirm Password", button "Register"
 - Nav: link "Login", link "Get Started"
 - User actions menu: menuitem "Assign Role", menuitem "Reset Password", menuitem "Ban User", menuitem "Delete User"
+
+## BookVault (2026-04-04) — New project, distinct from BasicSass template above
+- [Full state](project_bookvault_state.md) — routing, architecture, issues, build status
+- .env.local has PLACEHOLDERS — must configure before live browser testing
+- Build: passes clean (npx next build), 28 routes, JS not TypeScript
+- middleware.js deprecation warning (Next.js 16): rename to proxy.js
+- Hardcoded emerald/amber colors in: SuperAdminHomePage, AdminRBACPage, UserStatsCards, UserStatusBadge
+- Super Admin sidebar: Dashboard, Users, Profile | Admin sidebar: Dashboard, Audit Logs, Profile
+- /app → middleware redirects to /super-admin or /admin based on role

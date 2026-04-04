@@ -1,9 +1,18 @@
 # Frontend Next Dev - Agent Memory
 
 ## Pre-existing Build Issues
+- Turbopack build error when running `npx next build` outside project dir; always `cd frontend` first.
 - `frontend/src/app/api/users/[userId]/ban/route.ts` - type error: async params pattern
 - `frontend/src/app/api/users/[userId]/resend-verification/route.ts` - type error: missing `password` in `generateLink`
 - These are NOT related to frontend page/component changes.
+
+## Admin Dashboard (New - 2026-04-04)
+- `/admin` is for every authenticated user (no RBAC guard). Layout: `AdminShellLayout.jsx`.
+- Nav: Dashboard (`/admin`), Audit Logs (`/admin/audit`), Profile (`/admin/profile`).
+- Components: `AdminDashboardPage.jsx` (account info via `authService.getCurrentUser()`), `AdminAuditPage.jsx` (own logs: passes `user.id` from `useGlobal()` as `user_id` param to `listAuditLogs()`), `AdminProfilePage.jsx` (shadcn `Tabs` wrapping `ProfileSection`/`PasswordSection`/`SecuritySection`).
+- Static `/admin/audit` and `/admin/profile` routes take priority over `[module]` dynamic route (Next.js routing rule).
+- Old RBAC modules (`/admin/rbac`, `/admin/users`, `/admin/audit` via `[module]`) still work unchanged.
+- Legacy `AdminHomePage.jsx` and `AdminLayout.jsx` in `components/admin/` — not used by new dashboard; leave in place.
 
 ## Project Structure Notes
 - Landing page: `frontend/src/app/page.tsx` (server component)
@@ -37,11 +46,23 @@
 - RBAC forms inline in Dialog components (RoleCreateDialog, RoleEditDialog) - acceptable since they ARE dialog components
 - All forms use react-hook-form + zodResolver + shadcn Form/FormField/FormItem/FormControl/FormMessage
 
+## Shell Layout Pattern (Authoritative - from AdminShellLayout.jsx)
+- Mobile: CSS `translate-x` on sidebar (`-translate-x-full` / `translate-x-0`) + fixed overlay div
+- NOT `hidden/flex` class toggle (that was the older `AdminLayout.jsx` pattern)
+- Bottom section: theme toggle row + user DropdownMenu; `side="top"` on DropdownMenuContent
+- Mobile top bar: hamburger button + product name text (no separate top bar on desktop)
+
+## Route Layout Pattern (admin, super-admin)
+- Server async function with `getMe()` + redirect if unauthenticated
+- Role-gating: `user.app_metadata?.user_role !== 'super_admin'` then redirect
+- Wrap with `<Providers initialAuth={...}>` then shell layout component
+- `export const dynamic = 'force-dynamic'` required on all admin/super-admin layouts
+
 ## Service Layer Pattern
 - `apiClient` (lib/services/api-client.ts) - base URL `/api`, handles JSON, error extraction
 - `authService` (lib/services/auth.service.ts) - all auth ops via apiClient (/api/auth/*), incl. exchangeCodeForSession
 - `userService` (lib/services/user.service.ts) - profile + password via apiClient
-- `rbac.service.ts` - direct fetch() with `/api/v1/` and `/api/users/` prefixes
+- `rbac.service.js` - uses apiClient with `/v1/` prefix; exports: `listRoles`, `getUserStats`, `listUsersWithRoles`, `banUser`, `unbanUser`, `deleteUser`, `resendVerificationEmail`, `sendPasswordResetEmail`, `assignRoleToUser`, `removeRoleFromUser`
 - OAuth: `authService.signInWithOAuth()` uses dynamic import of Supabase client (only exception)
 
 ## Architecture Compliance (2026-02-06 Review)

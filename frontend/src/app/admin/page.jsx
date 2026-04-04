@@ -1,4 +1,4 @@
-import AdminHomePage from '@/components/admin/AdminHomePage';
+import AdminDashboardPage from '@/components/admin/AdminDashboardPage';
 
 export const metadata = {
   title: 'Dashboard | Admin',
@@ -6,6 +6,6 @@ export const metadata = {
 
 export const dynamic = 'force-dynamic';
 
-export default async function AdminPage() {
-  return <AdminHomePage />;
+export default function AdminPage() {
+  return <AdminDashboardPage />;
 }

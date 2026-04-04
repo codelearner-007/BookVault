@@ -10,7 +10,7 @@ class UserClaims(BaseModel):
 
     user_id: str = Field(..., description="User UUID from auth.users")
     email: EmailStr = Field(..., description="User email address")
-    user_role: str = Field(default="user", description="User's assigned role name")
+    user_role: str = Field(default="admin", description="User's assigned role name")
     hierarchy_level: int = Field(default=100, description="Role hierarchy level")
     permissions: List[str] = Field(
         default_factory=list, description="List of permissions (e.g., 'users:read_all')"

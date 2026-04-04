@@ -4,7 +4,7 @@
 
 ### Tables (6 total, all with UUID v7 PKs)
 - `user_profiles` - user_id (FK auth.users), full_name, avatar_url, department
-- `roles` - name (UNIQUE), description, hierarchy_level, is_system
+- `roles` - name (UNIQUE), description, hierarchy_level, is_system — system roles: `super_admin` (10000), `admin` (100; renamed from `user` on 2026-04-04)
 - `permissions` - module + action (UNIQUE together), description
 - `user_roles` - user_id + role_id junction (UNIQUE together)
 - `role_permissions` - role_id + permission_id junction (UNIQUE together)
@@ -17,7 +17,7 @@
 - `protect_super_admin_permissions()` - prevents removing super_admin perms
 - `i_have_permission(module, action)` - JWT claims permission check (STABLE)
 - `auto_assign_permission_to_super_admin()` - SECURITY DEFINER
-- `handle_new_user()` - SECURITY DEFINER, first user = super_admin
+- `handle_new_user()` - SECURITY DEFINER, first user = super_admin, all others = admin (not user)
 - `prevent_super_admin_manual_assignment()` - SECURITY DEFINER, role-based check
 - `custom_access_token_hook(event)` - JWT claims hook (migration 20260201000002)
 

@@ -1,9 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import { checkMFAStatus } from '@/lib/utils/mfa-check'
-import { ADMIN_MODULES, canAccessAdminModule, canSeeAdminEntry } from '@/lib/rbac/access'
-
-const KNOWN_ADMIN_MODULE_KEYS = new Set(ADMIN_MODULES.map((m) => m.key))
 
 export async function updateSession(request) {
     let supabaseResponse = NextResponse.next({
@@ -40,7 +37,10 @@ export async function updateSession(request) {
     const {data: user} = await supabase.auth.getUser()
 
     const pathname = request.nextUrl.pathname
-    const isProtectedArea = pathname.startsWith('/app') || pathname.startsWith('/admin')
+    const isProtectedArea =
+        pathname.startsWith('/app') ||
+        pathname.startsWith('/admin') ||
+        pathname.startsWith('/super-admin')
 
     if ((!user || !user.user) && isProtectedArea) {
         const url = request.nextUrl.clone()
@@ -69,49 +69,42 @@ export async function updateSession(request) {
                 timestamp: new Date().toISOString(),
             });
             // Fail CLOSED: redirect to login when MFA status cannot be determined.
-            // This prevents bypassing MFA enforcement via network errors or
-            // unexpected exceptions.
             const url = request.nextUrl.clone()
             url.pathname = '/auth/login'
             return NextResponse.redirect(url)
         }
     }
 
-    // Centralized admin authorization (route gating)
-    if (user && user.user && pathname.startsWith('/admin')) {
-        // Extract JWT claims (verified) from the current access token.
-        // This works in Edge runtime and verifies the JWT against the project's JWKS.
+    // Role-based dashboard routing and cross-access guards
+    if (user && user.user && isProtectedArea) {
         const { data: claimsData, error: claimsError } = await supabase.auth.getClaims()
         if (claimsError) {
             console.error('Failed to get JWT claims in middleware:', claimsError)
         }
 
         const jwtClaims = claimsData?.claims ?? {}
-        const permissions = normalizePermissions(jwtClaims.permissions)
-        const claims = { permissions }
+        const userRole = jwtClaims.user_role ?? 'admin'
+        const isSuperAdmin = userRole === 'super_admin'
 
-        // Require "admin entry" permission for any /admin route (including /admin itself)
-        if (!canSeeAdminEntry(claims)) {
+        // /app/* — legacy shell: redirect to role-appropriate dashboard
+        if (pathname.startsWith('/app')) {
             const url = request.nextUrl.clone()
-            url.pathname = '/forbidden'
-            url.searchParams.set('returnTo', '/app')
-            url.searchParams.set('returnLabel', 'Back to App')
-            url.searchParams.set('message', 'You do not have permission to access the admin area.')
+            url.pathname = isSuperAdmin ? '/super-admin' : '/admin'
             return NextResponse.redirect(url)
         }
 
-        // Module-level gating for known modules: /admin/<moduleKey>
-        const segments = pathname.split('/').filter(Boolean)
-        const moduleKey = segments[1]
-        if (moduleKey && KNOWN_ADMIN_MODULE_KEYS.has(moduleKey)) {
-            if (!canAccessAdminModule(claims, moduleKey)) {
-                const url = request.nextUrl.clone()
-                url.pathname = '/forbidden'
-                url.searchParams.set('returnTo', '/admin')
-                url.searchParams.set('returnLabel', 'Back to Admin')
-                url.searchParams.set('message', 'You do not have permission to access this admin module.')
-                return NextResponse.redirect(url)
-            }
+        // /super-admin/* — only super_admin allowed
+        if (pathname.startsWith('/super-admin') && !isSuperAdmin) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/admin'
+            return NextResponse.redirect(url)
+        }
+
+        // /admin/* — super_admin should use /super-admin instead
+        if (pathname.startsWith('/admin') && isSuperAdmin) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/super-admin'
+            return NextResponse.redirect(url)
         }
     }
 

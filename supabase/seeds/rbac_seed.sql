@@ -8,7 +8,7 @@
 -- ==============================================
 INSERT INTO public.roles (name, description, hierarchy_level, is_system) VALUES
     ('super_admin', 'Super Administrator with full system access', 10000, TRUE),
-    ('user', 'Regular user with basic permissions', 100, TRUE)
+    ('admin', 'Admin user with basic permissions', 100, TRUE)
 ON CONFLICT (name) DO UPDATE SET is_system = EXCLUDED.is_system;
 
 -- ==============================================
@@ -49,5 +49,5 @@ CROSS JOIN public.permissions p
 WHERE r.name = 'super_admin'
 ON CONFLICT (role_id, permission_id) DO NOTHING;
 
--- User: No admin permissions (profile operations use direct auth, not RBAC)
--- The 'user' role exists as a base role with no special permissions.
+-- Admin: No elevated permissions (profile operations use direct auth, not RBAC)
+-- The 'admin' role exists as a base role with no special permissions.

@@ -4,7 +4,7 @@
 -- ==============================================
 
 -- Note: UUID v7 function loaded from previous migration (20260201000000_uuid_v7_function.sql)
--- Using uuid_generate_v7() instead of uuid_generate_v7() for better performance
+-- Using uuid_generate_v7() instead of gen_random_uuid() for better insert performance
 
 -- ==============================================
 -- STEP 1: CREATE CORE TABLES
@@ -230,7 +230,7 @@ BEGIN
     JOIN public.roles r ON r.id = ur.role_id
     WHERE r.name = 'super_admin';
 
-    -- First user becomes super_admin, all others become regular user
+    -- First user becomes super_admin, all others become admin
     IF existing_super_admin_count = 0 THEN
         -- This is the FIRST user - make them super_admin
         SELECT id INTO target_role_id
@@ -239,10 +239,10 @@ BEGIN
 
         RAISE NOTICE 'First user detected - assigning super_admin role';
     ELSE
-        -- All subsequent users get 'user' role
+        -- All subsequent users get 'admin' role
         SELECT id INTO target_role_id
         FROM public.roles
-        WHERE name = 'user';
+        WHERE name = 'admin';
     END IF;
 
     -- Assign the role
@@ -393,9 +393,15 @@ CREATE POLICY "Admins can remove permissions from roles"
     USING (public.i_have_permission('permissions', 'update'));
 
 -- Audit Logs
+-- Super admin / privileged users can view all audit logs
 CREATE POLICY "Admins can view audit logs"
     ON public.audit_logs FOR SELECT
     USING (public.i_have_permission('audit', 'read'));
+
+-- Any authenticated user can view their own audit logs
+CREATE POLICY "Users can view own audit logs"
+    ON public.audit_logs FOR SELECT
+    USING (auth.uid() = user_id);
 
 -- Allow service role to insert audit logs (backend writes these via FastAPI)
 CREATE POLICY "Service role can insert audit logs"
