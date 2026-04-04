@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_db, require_permission
+from app.core.dependencies import get_db, require_role
 from app.schemas.common import PaginatedResponse
 from app.schemas.response.user import UserStatsResponse, UserWithRolesResponse
 from app.services.user_service import UserService
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 @router.get(
     "/stats",
     response_model=UserStatsResponse,
-    dependencies=[Depends(require_permission("users:read_all"))],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 async def get_user_stats(
     db: AsyncSession = Depends(get_db),
@@ -29,7 +29,7 @@ async def get_user_stats(
 @router.get(
     "/with-roles",
     response_model=PaginatedResponse[UserWithRolesResponse],
-    dependencies=[Depends(require_permission("users:read_all"))],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 async def list_users_with_roles(
     page: int = Query(1, ge=1),

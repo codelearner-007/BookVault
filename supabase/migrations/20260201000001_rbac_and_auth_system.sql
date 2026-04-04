@@ -34,16 +34,6 @@ CREATE TABLE IF NOT EXISTS public.roles (
     CONSTRAINT valid_hierarchy_level CHECK (hierarchy_level >= 0)
 );
 
--- Permissions Table (module:action format)
-CREATE TABLE IF NOT EXISTS public.permissions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
-    module TEXT NOT NULL,
-    action TEXT NOT NULL,
-    description TEXT,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    UNIQUE(module, action)
-);
-
 -- User Roles Junction
 CREATE TABLE IF NOT EXISTS public.user_roles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
@@ -51,15 +41,6 @@ CREATE TABLE IF NOT EXISTS public.user_roles (
     role_id UUID NOT NULL REFERENCES public.roles(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     UNIQUE(user_id, role_id)
-);
-
--- Role Permissions Junction
-CREATE TABLE IF NOT EXISTS public.role_permissions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
-    role_id UUID NOT NULL REFERENCES public.roles(id) ON DELETE CASCADE,
-    permission_id UUID NOT NULL REFERENCES public.permissions(id) ON DELETE CASCADE,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    UNIQUE(role_id, permission_id)
 );
 
 -- Audit Logs
@@ -115,94 +96,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Prevent removing permissions from super_admin
-CREATE OR REPLACE FUNCTION public.protect_super_admin_permissions()
-RETURNS TRIGGER AS $$
-DECLARE
-    role_name TEXT;
-BEGIN
-    -- Get role name
-    SELECT r.name INTO role_name
-    FROM public.roles r
-    WHERE r.id = OLD.role_id;
-
-    -- Block deletion of super_admin permissions
-    IF TG_OP = 'DELETE' AND role_name = 'super_admin' THEN
-        RAISE EXCEPTION 'Cannot remove permissions from super_admin role';
-    END IF;
-
-    RETURN OLD;
-END;
-$$ LANGUAGE plpgsql;
-
--- Check permission from JWT (used in RLS policies)
--- This is the ONLY permission check function - queries JWT claims, not database
-CREATE OR REPLACE FUNCTION public.i_have_permission(module_name TEXT, action_name TEXT)
-RETURNS BOOLEAN AS $$
-DECLARE
-    my_permissions TEXT[];
-    check_permission TEXT;
-BEGIN
-    -- Extract permissions array from JWT claims
-    SELECT ARRAY(
-        SELECT jsonb_array_elements_text(
-            COALESCE(
-                NULLIF(current_setting('request.jwt.claims', true), '')::jsonb->'permissions',
-                '[]'::jsonb
-            )
-        )
-    ) INTO my_permissions;
-
-    check_permission := module_name || ':' || action_name;
-    RETURN check_permission = ANY(my_permissions);
-END;
-$$ LANGUAGE plpgsql STABLE;
-
 -- ==============================================
--- STEP 3: AUTO-ASSIGNMENT TRIGGERS
+-- STEP 3: TRIGGERS
 -- ==============================================
-
--- Auto-assign new permissions to super_admin
--- When a new permission is created, automatically grant it to super_admin
-CREATE OR REPLACE FUNCTION public.auto_assign_permission_to_super_admin()
-RETURNS TRIGGER AS $$
-DECLARE
-    super_admin_role_id UUID;
-BEGIN
-    -- Get super_admin role id
-    SELECT id INTO super_admin_role_id
-    FROM public.roles
-    WHERE name = 'super_admin';
-
-    -- If super_admin role exists, assign this new permission to it
-    IF super_admin_role_id IS NOT NULL THEN
-        INSERT INTO public.role_permissions (role_id, permission_id)
-        VALUES (super_admin_role_id, NEW.id)
-        ON CONFLICT (role_id, permission_id) DO NOTHING;
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Trigger: Auto-assign new permissions to super_admin
-DROP TRIGGER IF EXISTS on_permission_created ON public.permissions;
-CREATE TRIGGER on_permission_created
-    AFTER INSERT ON public.permissions
-    FOR EACH ROW
-    EXECUTE FUNCTION public.auto_assign_permission_to_super_admin();
 
 -- Trigger: Protect system roles
 CREATE TRIGGER enforce_system_role_protection
     BEFORE UPDATE OR DELETE ON public.roles
     FOR EACH ROW
     EXECUTE FUNCTION public.protect_system_roles();
-
--- Trigger: Protect super_admin permissions
-CREATE TRIGGER enforce_super_admin_permissions
-    BEFORE DELETE ON public.role_permissions
-    FOR EACH ROW
-    EXECUTE FUNCTION public.protect_super_admin_permissions();
 
 -- ==============================================
 -- STEP 4: FIRST USER IS SUPER ADMIN
@@ -304,9 +206,7 @@ CREATE TRIGGER prevent_manual_super_admin_assignment
 -- ==============================================
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.permissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.role_permissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- ==============================================
@@ -324,51 +224,26 @@ CREATE POLICY "Users can update own profile"
 
 CREATE POLICY "Admins can view all profiles"
     ON public.user_profiles FOR SELECT
-    USING (public.i_have_permission('users', 'read_all'));
+    USING (
+        (current_setting('request.jwt.claims', true)::jsonb->>'user_role') IN ('admin', 'super_admin')
+    );
 
 CREATE POLICY "Admins can update all profiles"
     ON public.user_profiles FOR UPDATE
-    USING (public.i_have_permission('users', 'update_all'));
+    USING (
+        (current_setting('request.jwt.claims', true)::jsonb->>'user_role') IN ('admin', 'super_admin')
+    );
 
 CREATE POLICY "Admins can delete profiles"
     ON public.user_profiles FOR DELETE
-    USING (public.i_have_permission('users', 'delete_all'));
+    USING (
+        (current_setting('request.jwt.claims', true)::jsonb->>'user_role') IN ('admin', 'super_admin')
+    );
 
 -- ========== Roles RLS Policies ==========
 CREATE POLICY "Anyone can view roles"
     ON public.roles FOR SELECT
     USING (true);
-
-CREATE POLICY "Admins can create roles"
-    ON public.roles FOR INSERT
-    WITH CHECK (public.i_have_permission('roles', 'create'));
-
-CREATE POLICY "Admins can update roles"
-    ON public.roles FOR UPDATE
-    USING (public.i_have_permission('roles', 'update'))
-    WITH CHECK (public.i_have_permission('roles', 'update'));
-
-CREATE POLICY "Admins can delete roles"
-    ON public.roles FOR DELETE
-    USING (public.i_have_permission('roles', 'delete'));
-
--- ========== Permissions RLS Policies ==========
-CREATE POLICY "Anyone can view permissions"
-    ON public.permissions FOR SELECT
-    USING (true);
-
-CREATE POLICY "Admins can create permissions"
-    ON public.permissions FOR INSERT
-    WITH CHECK (public.i_have_permission('permissions', 'create'));
-
-CREATE POLICY "Admins can update permissions"
-    ON public.permissions FOR UPDATE
-    USING (public.i_have_permission('permissions', 'update'))
-    WITH CHECK (public.i_have_permission('permissions', 'update'));
-
-CREATE POLICY "Admins can delete permissions"
-    ON public.permissions FOR DELETE
-    USING (public.i_have_permission('permissions', 'delete'));
 
 -- User Roles
 CREATE POLICY "Users can view own roles"
@@ -377,26 +252,16 @@ CREATE POLICY "Users can view own roles"
 
 CREATE POLICY "Admins can manage user roles"
     ON public.user_roles FOR ALL
-    USING (public.i_have_permission('users', 'assign_roles'));
-
--- ========== Role Permissions RLS Policies ==========
-CREATE POLICY "Anyone can view role permissions"
-    ON public.role_permissions FOR SELECT
-    USING (true);
-
-CREATE POLICY "Admins can assign permissions to roles"
-    ON public.role_permissions FOR INSERT
-    WITH CHECK (public.i_have_permission('permissions', 'update'));
-
-CREATE POLICY "Admins can remove permissions from roles"
-    ON public.role_permissions FOR DELETE
-    USING (public.i_have_permission('permissions', 'update'));
+    USING (
+        (current_setting('request.jwt.claims', true)::jsonb->>'user_role') IN ('admin', 'super_admin')
+    );
 
 -- Audit Logs
--- Super admin / privileged users can view all audit logs
 CREATE POLICY "Admins can view audit logs"
     ON public.audit_logs FOR SELECT
-    USING (public.i_have_permission('audit', 'read'));
+    USING (
+        (current_setting('request.jwt.claims', true)::jsonb->>'user_role') IN ('admin', 'super_admin')
+    );
 
 -- Any authenticated user can view their own audit logs
 CREATE POLICY "Users can view own audit logs"
@@ -436,14 +301,11 @@ CREATE TRIGGER set_updated_at_roles
 GRANT USAGE ON SCHEMA public TO authenticated;
 
 -- Authenticated users: read-only on reference tables, read+insert on audit_logs
-GRANT SELECT ON public.user_profiles, public.roles, public.permissions, public.role_permissions, public.user_roles TO authenticated;
+GRANT SELECT ON public.user_profiles, public.roles, public.user_roles TO authenticated;
 GRANT SELECT, INSERT ON public.audit_logs TO authenticated;
 
 -- Grant USAGE on sequences so authenticated users can insert (audit_logs)
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated;
-
--- Grant execute on public functions needed for RLS policy evaluation
-GRANT EXECUTE ON FUNCTION public.i_have_permission(TEXT, TEXT) TO authenticated;
 
 -- Anon users: NO access to application tables
 -- (Supabase handles auth schema access for anon automatically)

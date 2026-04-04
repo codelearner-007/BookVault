@@ -148,12 +148,11 @@ def extract_user_claims(payload: Dict[str, Any]) -> Dict[str, Any]:
         payload: Decoded JWT payload
 
     Returns:
-        Dictionary containing user_id, email, role, hierarchy_level, permissions
+        Dictionary containing user_id, email, role, hierarchy_level
     """
     return {
         "user_id": payload.get("sub"),
         "email": payload.get("email"),
         "user_role": payload.get("user_role", "user"),
         "hierarchy_level": payload.get("hierarchy_level", 100),
-        "permissions": payload.get("permissions", []),
     }

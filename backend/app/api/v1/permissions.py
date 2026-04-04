@@ -5,7 +5,7 @@ from typing import List
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db, require_permission
+from app.core.dependencies import get_current_user, get_db, require_role
 from app.schemas.auth import CurrentUser
 from app.schemas.request.permission import CreatePermissionRequest
 from app.schemas.response.permission import (
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/permissions", tags=["Permissions"])
 @router.get(
     "",
     response_model=List[PermissionsGroupedByModuleResponse],
-    dependencies=[Depends(require_permission("permissions:read"))],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 async def list_permissions_grouped(
     db: AsyncSession = Depends(get_db),
@@ -43,7 +43,7 @@ async def list_permissions_grouped(
     "",
     response_model=PermissionResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_permission("permissions:create"))],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 async def create_permission(
     permission_data: CreatePermissionRequest,
@@ -69,7 +69,7 @@ async def create_permission(
 @router.delete(
     "/{permission_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_permission("permissions:delete"))],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 async def delete_permission(
     permission_id: str,

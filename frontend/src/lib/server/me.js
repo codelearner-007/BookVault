@@ -34,12 +34,11 @@ export async function getMe() {
     const customClaims = claimsData?.claims ?? {};
 
     // Merge custom JWT claims into app_metadata for consistent access
-    const appMetadata = normalizeAppMetadata({
+    const appMetadata = {
       ...user.app_metadata,
-      permissions: (customClaims.permissions || []),
       hierarchy_level: customClaims.hierarchy_level,
       user_role: customClaims.user_role,
-    });
+    };
 
     return {
       id: user.id,
@@ -56,35 +55,11 @@ export async function getMe() {
 }
 
 /**
- * Get user permissions from app_metadata
- */
-export function getUserPermissions(user) {
-  return user?.app_metadata?.permissions ?? [];
-}
-
-/**
  * Get user claims for RBAC checks
  */
 export function getUserClaims(user) {
   return {
-    permissions: user?.app_metadata?.permissions ?? [],
     hierarchy_level: user?.app_metadata?.hierarchy_level,
     user_role: user?.app_metadata?.user_role,
   };
-}
-
-function normalizeAppMetadata(appMetadata) {
-  if (!appMetadata) return undefined;
-
-  const permissions = (appMetadata.permissions ?? []).filter(isPermissionString);
-  return {
-    ...appMetadata,
-    permissions,
-  };
-}
-
-function isPermissionString(value) {
-  if (typeof value !== 'string') return false;
-  const colonIndex = value.indexOf(':');
-  return colonIndex > 0 && colonIndex < value.length - 1;
 }

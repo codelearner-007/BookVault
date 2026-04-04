@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { useAdminClaims } from '@/components/admin/AdminClaimsContext';
-import { hasPermission } from '@/lib/utils/rbac';
 import {
   listRoles,
   getUserStats,
@@ -63,10 +62,11 @@ export function useUserManagement() {
 
   // Permission checks
   const claims = useAdminClaims();
-  const canAssignRoles = hasPermission(claims.permissions, 'users:assign_roles');
-  const canUpdateAll = hasPermission(claims.permissions, 'users:update_all');
-  const canDeleteAll = hasPermission(claims.permissions, 'users:delete_all');
-  const hasAnyAction = canAssignRoles || canUpdateAll || canDeleteAll;
+  const isAdmin = claims?.user_role === 'admin' || claims?.user_role === 'super_admin';
+  const canAssignRoles = isAdmin;
+  const canUpdateAll = isAdmin;
+  const canDeleteAll = isAdmin;
+  const hasAnyAction = isAdmin;
 
   // Helper: check if user is superadmin
   const isSuperAdmin = useCallback((user) => {

@@ -1,7 +1,5 @@
 """Authentication and authorization schemas."""
 
-from typing import List
-
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -12,30 +10,20 @@ class UserClaims(BaseModel):
     email: EmailStr = Field(..., description="User email address")
     user_role: str = Field(default="admin", description="User's assigned role name")
     hierarchy_level: int = Field(default=100, description="Role hierarchy level")
-    permissions: List[str] = Field(
-        default_factory=list, description="List of permissions (e.g., 'users:read_all')"
-    )
 
 
 class CurrentUser(BaseModel):
-    """Current authenticated user with permissions."""
+    """Current authenticated user."""
 
     user_id: str
     email: EmailStr
     user_role: str
     hierarchy_level: int
-    permissions: List[str]
 
-    def has_permission(self, permission: str) -> bool:
-        """Check if user has a specific permission."""
-        return permission in self.permissions
+    def has_role(self, role: str) -> bool:
+        return self.user_role == role
 
-    def has_any_permission(self, permissions: List[str]) -> bool:
-        """Check if user has any of the specified permissions."""
-        return any(p in self.permissions for p in permissions)
-
-    def has_all_permissions(self, permissions: List[str]) -> bool:
-        """Check if user has all of the specified permissions."""
-        return all(p in self.permissions for p in permissions)
+    def is_admin(self) -> bool:
+        return self.user_role in ("admin", "super_admin")
 
 

@@ -5,7 +5,7 @@ from typing import List
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db, require_permission
+from app.core.dependencies import get_current_user, get_db, require_role
 from app.schemas.auth import CurrentUser
 from app.schemas.request.role import (
     CreateRoleRequest,
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/roles", tags=["Roles"])
 @router.get(
     "",
     response_model=List[RoleResponse],
-    dependencies=[Depends(require_permission("roles:read"))],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 async def list_roles(
     db: AsyncSession = Depends(get_db),
@@ -38,7 +38,7 @@ async def list_roles(
     "",
     response_model=RoleResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_permission("roles:create"))],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 async def create_role(
     role_data: CreateRoleRequest,
@@ -64,7 +64,7 @@ async def create_role(
 @router.get(
     "/{role_id}",
     response_model=RoleWithPermissionsResponse,
-    dependencies=[Depends(require_permission("roles:read"))],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 async def get_role(
     role_id: str,
@@ -87,7 +87,7 @@ async def get_role(
 @router.patch(
     "/{role_id}",
     response_model=RoleResponse,
-    dependencies=[Depends(require_permission("roles:update"))],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 async def update_role(
     role_id: str,
@@ -114,7 +114,7 @@ async def update_role(
 @router.delete(
     "/{role_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_permission("roles:delete"))],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 async def delete_role(
     role_id: str,
@@ -140,7 +140,7 @@ async def delete_role(
 @router.get(
     "/{role_id}/permissions",
     response_model=List[PermissionResponse],
-    dependencies=[Depends(require_permission("roles:read"))],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 async def get_role_permissions(
     role_id: str,
@@ -158,7 +158,7 @@ async def get_role_permissions(
 @router.put(
     "/{role_id}/permissions",
     response_model=List[PermissionResponse],
-    dependencies=[Depends(require_permission("roles:update"))],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 async def update_role_permissions(
     role_id: str,

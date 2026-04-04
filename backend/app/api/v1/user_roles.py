@@ -5,8 +5,8 @@ from typing import List
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db, require_permission
-from app.core.exceptions import PermissionDeniedError
+from app.core.dependencies import get_current_user, get_db, require_role
+from app.core.exceptions import RoleDeniedError
 from app.core.rate_limit import limiter
 from app.schemas.auth import CurrentUser
 from app.schemas.request.user_role import AssignUserRoleRequest
@@ -31,8 +31,8 @@ async def list_user_roles(
 
     Users can view their own roles. Viewing other users' roles requires users:read_all.
     """
-    if user_id != current_user.user_id and not current_user.has_permission("users:read_all"):
-        raise PermissionDeniedError("users:read_all")
+    if user_id != current_user.user_id and not current_user.is_admin():
+        raise RoleDeniedError("admin, super_admin")
 
     service = UserRoleService(db)
     user_roles = await service.list_user_roles(user_id)
@@ -44,7 +44,7 @@ async def list_user_roles(
     "/{user_id}/roles",
     response_model=UserRoleResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_permission("users:assign_roles"))],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 @limiter.limit("30/minute")
 async def assign_role_to_user(
@@ -76,7 +76,7 @@ async def assign_role_to_user(
 @router.delete(
     "/{user_id}/roles/{role_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_permission("users:assign_roles"))],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 @limiter.limit("30/minute")
 async def remove_role_from_user(

@@ -10,7 +10,7 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import InvalidTokenError, PermissionDeniedError
+from app.core.exceptions import InvalidTokenError, RoleDeniedError
 from app.core.security import extract_user_claims, verify_token
 from app.db.session import get_session_manager
 from app.schemas.auth import CurrentUser
@@ -187,33 +187,27 @@ async def get_current_user(
     return CurrentUser(**claims)
 
 
-def require_permission(required_permission: str) -> Callable:
+def require_role(*allowed_roles: str) -> Callable:
     """
-    Factory function to create permission guard dependency.
+    Factory function to create role guard dependency.
 
     Args:
-        required_permission: Permission string (e.g., "users:read_all")
+        *allowed_roles: Role names that are allowed (e.g., "admin", "super_admin")
 
     Returns:
-        Dependency function that checks permission
+        Dependency function that checks role
 
     Raises:
-        HTTPException: 403 if user lacks required permission
+        HTTPException: 403 if user lacks required role
 
     Example:
-        @router.post(
-            "/roles",
-            dependencies=[Depends(require_permission("roles:create"))]
-        )
-        async def create_role(...):
-            ...
+        @router.get("/stats", dependencies=[Depends(require_role("admin", "super_admin"))])
     """
-
-    async def permission_checker(
+    async def role_checker(
         current_user: CurrentUser = Depends(get_current_user),
     ) -> CurrentUser:
-        if not current_user.has_permission(required_permission):
-            raise PermissionDeniedError(required_permission)
+        if current_user.user_role not in allowed_roles:
+            raise RoleDeniedError(", ".join(allowed_roles))
         return current_user
 
-    return permission_checker
+    return role_checker

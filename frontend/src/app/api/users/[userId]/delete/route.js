@@ -9,7 +9,7 @@ import { authorizeAdminAction } from '@/lib/utils/admin-auth';
 export async function DELETE(request, { params }) {
   try {
     const { userId } = await params;
-    const auth = await authorizeAdminAction(request, userId, 'users:delete_all');
+    const auth = await authorizeAdminAction(request, userId);
     if (auth instanceof NextResponse) return auth;
 
     // Revoke all sessions before deletion so user is immediately logged out

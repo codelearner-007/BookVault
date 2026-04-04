@@ -40,6 +40,15 @@ class PermissionDeniedError(AppException):
         )
 
 
+class RoleDeniedError(AppException):
+    def __init__(self, required_role: str) -> None:
+        super().__init__(
+            message=f"You do not have the required role: {required_role}",
+            status_code=403,
+            details={"required_role": required_role},
+        )
+
+
 class InvalidTokenError(AppException):
     """Raised when JWT token is invalid or expired."""
 

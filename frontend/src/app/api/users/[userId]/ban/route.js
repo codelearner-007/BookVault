@@ -9,7 +9,7 @@ import { authorizeAdminAction } from '@/lib/utils/admin-auth';
 export async function POST(request, { params }) {
   try {
     const { userId } = await params;
-    const auth = await authorizeAdminAction(request, userId, 'users:update_all');
+    const auth = await authorizeAdminAction(request, userId);
     if (auth instanceof NextResponse) return auth;
 
     const { duration = '8760h' } = await request.json();

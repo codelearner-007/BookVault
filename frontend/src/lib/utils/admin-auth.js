@@ -9,13 +9,13 @@ import { enforceSameOrigin } from '@/lib/utils/origin';
  * Performs, in order:
  * 1. CSRF origin check (`enforceSameOrigin`)
  * 2. Session authentication
- * 3. JWT-claims permission check
+ * 3. Role check via JWT claims
  * 4. Live superadmin protection (fetches target user from auth.admin)
  *
  * Returns a `NextResponse` error if any check fails, or an object
  * containing the admin Supabase client and the validated target userId.
  */
-export async function authorizeAdminAction(request, targetUserId, requiredPermission) {
+export async function authorizeAdminAction(request, targetUserId) {
   // 1. CSRF check
   const originError = enforceSameOrigin(request);
   if (originError) return originError;
@@ -30,11 +30,10 @@ export async function authorizeAdminAction(request, targetUserId, requiredPermis
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // 3. Permission check via JWT claims (not stale app_metadata)
+  // 3. Role check via JWT claims
   const { data: claimsData } = await supabase.auth.getClaims();
-  const permissions =
-    (claimsData?.claims?.permissions) || [];
-  if (!permissions.includes(requiredPermission)) {
+  const userRole = claimsData?.claims?.user_role;
+  if (userRole !== 'admin' && userRole !== 'super_admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
