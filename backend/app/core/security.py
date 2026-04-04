@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # Cache for JWKS keys with TTL
 _jwks_cache: Dict[str, Any] = {}
 _jwks_cache_timestamp: Optional[float] = None
-_jwks_cache_ttl: int = 3600  # 1 hour TTL for JWKS cache
+_jwks_cache_ttl: int = 900  # 15 minute TTL for JWKS cache
 
 
 async def fetch_jwks() -> Dict[str, Any]:
@@ -104,7 +104,18 @@ async def verify_token_jwks(token: str) -> Dict[str, Any]:
         )
 
         if not signing_key:
-            raise InvalidTokenError(f"No matching key found for kid: {kid}")
+            # Cache may be stale due to a Supabase key rotation — force a refresh and retry once.
+            logger.warning("JWKS cache miss for kid, forcing cache refresh...")
+            global _jwks_cache, _jwks_cache_timestamp
+            _jwks_cache = {}
+            _jwks_cache_timestamp = None
+            jwks_data = await fetch_jwks()
+            signing_key = next(
+                (key for key in jwks_data.get("keys", []) if key.get("kid") == kid),
+                None,
+            )
+            if not signing_key:
+                raise InvalidTokenError(f"No matching key found for kid: {kid}")
 
         # Verify token with public key
         payload = jwt.decode(

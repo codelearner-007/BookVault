@@ -13,16 +13,16 @@ export const ADMIN_MODULES = [
     description: 'Admin dashboard overview',
   },
   {
-    key: 'users',
-    name: 'User Management',
-    description: 'View and manage users',
-  },
-  {
     key: 'audit',
     name: 'Audit Logs',
     description: 'View system audit trail',
   },
 ];
+
+/**
+ * Modules restricted to super_admin role only
+ */
+export const SUPER_ADMIN_ONLY_MODULES = ['users'];
 
 /**
  * Check if user can see the Admin nav entry

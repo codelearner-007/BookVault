@@ -1,17 +1,21 @@
 """Application configuration using Pydantic Settings."""
 
 import json
+from pathlib import Path
 from typing import List
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Resolve .env path relative to this file so it loads regardless of cwd
+_ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

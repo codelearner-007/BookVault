@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { Providers } from '@/components/common/Providers';
 import AdminShellLayout from '@/components/admin/AdminShellLayout';
-import { getMe } from '@/lib/server/me';
+import { AdminClaimsProvider } from '@/components/admin/AdminClaimsContext';
+import { getMe, getUserClaims } from '@/lib/server/me';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,8 @@ export default async function Layout({ children }) {
   if (!user) {
     redirect('/auth/login?returnTo=/admin');
   }
+
+  const claims = getUserClaims(user);
 
   return (
     <Providers
@@ -25,7 +28,9 @@ export default async function Layout({ children }) {
         mfaRequired: user.requiresMFA,
       }}
     >
-      <AdminShellLayout>{children}</AdminShellLayout>
+      <AdminClaimsProvider claims={claims}>
+        <AdminShellLayout>{children}</AdminShellLayout>
+      </AdminClaimsProvider>
     </Providers>
   );
 }

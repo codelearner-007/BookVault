@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
-  listRoles,
   getUserStats,
   listUsersWithRoles,
   banUser,
@@ -11,8 +10,6 @@ import {
   deleteUser,
   resendVerificationEmail,
   sendPasswordResetEmail,
-  assignRoleToUser,
-  removeRoleFromUser,
 } from '@/lib/services/rbac.service';
 import { UserStatsCards } from '@/components/admin/modules/users/UserStatsCards';
 import { UserFiltersPanel } from '@/components/admin/modules/users/UserFilters';
@@ -33,7 +30,6 @@ function useDebounce(value, delay = 300) {
 export default function SuperAdminUsersPage() {
   // Core data state
   const [users, setUsers] = useState([]);
-  const [roles, setRoles] = useState([]);
   const [stats, setStats] = useState(null);
 
   // Pagination state
@@ -48,17 +44,14 @@ export default function SuperAdminUsersPage() {
   // Loading state
   const [loading, setLoading] = useState(true);
   const [loadingStats, setLoadingStats] = useState(true);
-  const [loadingRoles, setLoadingRoles] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
   const [error, setError] = useState(null);
 
   // Dialog state
-  const [assignRoleDialog, setAssignRoleDialog] = useState({ user: null, roleId: '' });
   const [deleteDialog, setDeleteDialog] = useState(null);
   const [banDialog, setBanDialog] = useState(null);
 
   // Super admin always has all permissions
-  const canAssignRoles = true;
   const canUpdateAll = true;
   const canDeleteAll = true;
   const hasAnyAction = true;
@@ -92,23 +85,6 @@ export default function SuperAdminUsersPage() {
       }
     }
     loadStats();
-  }, []);
-
-  // Load roles (include all roles for super admin)
-  useEffect(() => {
-    async function loadRoles() {
-      try {
-        setLoadingRoles(true);
-        const data = await listRoles();
-        setRoles(data);
-      } catch (err) {
-        toast.error('Failed to load roles');
-        console.error('Failed to load roles:', err);
-      } finally {
-        setLoadingRoles(false);
-      }
-    }
-    loadRoles();
   }, []);
 
   // Load users
@@ -272,41 +248,6 @@ export default function SuperAdminUsersPage() {
     }
   }, []);
 
-  const handleAssignRole = useCallback(async () => {
-    if (!assignRoleDialog.user || !assignRoleDialog.roleId) return;
-    try {
-      setActionLoading(assignRoleDialog.user.id);
-      await assignRoleToUser(assignRoleDialog.user.id, assignRoleDialog.roleId);
-      toast.success('Role assigned', { description: 'Role assigned successfully.' });
-      reloadUsers();
-      setAssignRoleDialog({ user: null, roleId: '' });
-    } catch (err) {
-      toast.error('Failed to assign role', {
-        description: err instanceof Error ? err.message : 'Please try again.',
-      });
-    } finally {
-      setActionLoading(null);
-    }
-  }, [assignRoleDialog, reloadUsers]);
-
-  const handleRemoveRole = useCallback(
-    async (user, roleId) => {
-      try {
-        setActionLoading(user.id);
-        await removeRoleFromUser(user.id, roleId);
-        toast.success('Role removed', { description: 'Role removed successfully.' });
-        reloadUsers();
-      } catch (err) {
-        toast.error('Failed to remove role', {
-          description: err instanceof Error ? err.message : 'Please try again.',
-        });
-      } finally {
-        setActionLoading(null);
-      }
-    },
-    [reloadUsers]
-  );
-
   return (
     <div className="space-y-8 max-w-[1600px]">
       {/* Header */}
@@ -324,8 +265,8 @@ export default function SuperAdminUsersPage() {
       <UserFiltersPanel
         filters={filters}
         searchQuery={searchQuery}
-        roles={roles}
-        loadingRoles={loadingRoles}
+        roles={[]}
+        loadingRoles={false}
         activeFilters={activeFilters}
         hasActiveFilters={hasActiveFilters}
         onFilterChange={handleFilterChange}
@@ -344,7 +285,7 @@ export default function SuperAdminUsersPage() {
         actionLoading={actionLoading}
         hasActiveFilters={hasActiveFilters}
         hasAnyAction={hasAnyAction}
-        canAssignRoles={canAssignRoles}
+        canAssignRoles={false}
         canUpdateAll={canUpdateAll}
         canDeleteAll={canDeleteAll}
         isSuperAdmin={isSuperAdmin}
@@ -354,16 +295,16 @@ export default function SuperAdminUsersPage() {
         onDeleteUser={(user) => setDeleteDialog(user)}
         onResendVerification={handleResendVerification}
         onResetPassword={handleResetPassword}
-        onAssignRole={(user) => setAssignRoleDialog({ user, roleId: '' })}
-        onRemoveRole={handleRemoveRole}
+        onAssignRole={null}
+        onRemoveRole={null}
       />
 
       {/* Action Dialogs */}
       <UserActionDialogs
-        assignRoleDialog={assignRoleDialog}
-        onAssignRoleDialogChange={setAssignRoleDialog}
-        onAssignRole={handleAssignRole}
-        roles={roles}
+        assignRoleDialog={{ user: null, roleId: '' }}
+        onAssignRoleDialogChange={null}
+        onAssignRole={null}
+        roles={[]}
         banDialog={banDialog}
         onBanDialogChange={setBanDialog}
         onBanUser={handleBanUser}

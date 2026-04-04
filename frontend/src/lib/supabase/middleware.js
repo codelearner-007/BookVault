@@ -37,6 +37,14 @@ export async function updateSession(request) {
     const {data: user} = await supabase.auth.getUser()
 
     const pathname = request.nextUrl.pathname
+
+    // Check if user is banned — redirect to banned page
+    const isBanned = user?.user?.banned_until && new Date(user.user.banned_until) > new Date()
+    if (isBanned && pathname !== '/auth/banned' && !pathname.startsWith('/api/auth/logout')) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/auth/banned'
+        return NextResponse.redirect(url)
+    }
     const isProtectedArea =
         pathname.startsWith('/app') ||
         pathname.startsWith('/admin') ||

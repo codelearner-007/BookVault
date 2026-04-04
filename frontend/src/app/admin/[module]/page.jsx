@@ -1,8 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import AdminRBACPage from '@/components/admin/modules/rbac/AdminRBACPage';
-import AdminUsersPage from '@/components/admin/modules/users/AdminUsersPage';
 import AdminAuditPage from '@/components/admin/modules/audit/AdminAuditPage';
-import { canAccessAdminModule } from '@/lib/rbac/access';
+import { canAccessAdminModule, SUPER_ADMIN_ONLY_MODULES } from '@/lib/rbac/access';
 import { getMe, getUserClaims } from '@/lib/server/me';
 import AccessDenied from '@/components/common/AccessDenied';
 
@@ -10,12 +9,17 @@ export const dynamic = 'force-dynamic';
 
 const MODULE_COMPONENTS = {
   rbac: AdminRBACPage,
-  users: AdminUsersPage,
   audit: AdminAuditPage,
 };
 
 export default async function AdminModulePage({ params }) {
   const { module } = await params;
+
+  // Defense-in-depth: super_admin-only modules are not accessible via /admin/*
+  if (SUPER_ADMIN_ONLY_MODULES.includes(module)) {
+    redirect(`/super-admin/${module}`);
+  }
+
   const Component = MODULE_COMPONENTS[module];
 
   if (!Component) {

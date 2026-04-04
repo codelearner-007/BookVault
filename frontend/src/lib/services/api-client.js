@@ -1,13 +1,28 @@
 import { toErrorMessage } from '@/lib/utils/api-errors';
+import { createSPAClient } from '@/lib/supabase/client';
+
+async function getAccessToken() {
+  try {
+    const supabase = createSPAClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
 
 class APIClient {
   baseUrl = '/api';
 
   async request(path, options) {
+    const token = await getAccessToken();
+
     const response = await fetch(`${this.baseUrl}${path}`, {
+      credentials: 'include',
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options?.headers,
       },
     });
