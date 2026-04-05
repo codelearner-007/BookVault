@@ -16,5 +16,6 @@ class AuditLogResponse(BaseModel):
     module: str
     resource_id: Optional[str]
     details: Optional[dict]
+    performed_by: Optional[str] = None
 
     model_config = {"from_attributes": True}

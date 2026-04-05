@@ -6,13 +6,21 @@
 - `frontend/src/app/api/users/[userId]/resend-verification/route.ts` - type error: missing `password` in `generateLink`
 - These are NOT related to frontend page/component changes.
 
-## Admin Dashboard (New - 2026-04-04)
+## Admin Dashboard (Updated 2026-04-05)
 - `/admin` is for every authenticated user (no RBAC guard). Layout: `AdminShellLayout.jsx`.
-- Nav: Dashboard (`/admin`), Audit Logs (`/admin/audit`), Profile (`/admin/profile`).
-- Components: `AdminDashboardPage.jsx` (account info via `authService.getCurrentUser()`), `AdminAuditPage.jsx` (own logs: passes `user.id` from `useGlobal()` as `user_id` param to `listAuditLogs()`), `AdminProfilePage.jsx` (shadcn `Tabs` wrapping `ProfileSection`/`PasswordSection`/`SecuritySection`).
-- Static `/admin/audit` and `/admin/profile` routes take priority over `[module]` dynamic route (Next.js routing rule).
+- Nav: Dashboard (`/admin`), Businesses (`/admin/businesses`), Audit Logs (`/admin/audit`), Profile (`/admin/profile`).
+- Components: `AdminDashboardPage.jsx` (account info + Quick Actions section linking to /admin/businesses), `AdminAuditPage.jsx`, `AdminProfilePage.jsx`.
+- Static `/admin/audit`, `/admin/profile`, `/admin/businesses` routes take priority over `[module]` dynamic route (Next.js routing rule).
 - Old RBAC modules (`/admin/rbac`, `/admin/users`, `/admin/audit` via `[module]`) still work unchanged.
 - Legacy `AdminHomePage.jsx` and `AdminLayout.jsx` in `components/admin/` — not used by new dashboard; leave in place.
+
+## Businesses Feature (2026-04-05)
+- Service: `frontend/src/lib/services/business.service.js` — exports `listBusinesses`, `createBusiness`, `deleteBusiness` using apiClient at `/v1/businesses`.
+- Page component: `frontend/src/components/admin/modules/businesses/BusinessesPage.jsx` — client component with list, add dialog, remove mode with checkboxes + confirm AlertDialog.
+- Route: `frontend/src/app/admin/businesses/page.jsx` — thin page wrapper with `force-dynamic`.
+- BusinessAvatar pattern: `h-9 w-9 rounded-full bg-primary/10 border border-border` with first letter of business name.
+- Remove mode: toggle checkbox selection per row, trash icon triggers AlertDialog for batch deletion.
+- Version footer: reads from `process.env.NEXT_PUBLIC_APP_VERSION`.
 
 ## Project Structure Notes
 - Landing page: `frontend/src/app/page.tsx` (server component)

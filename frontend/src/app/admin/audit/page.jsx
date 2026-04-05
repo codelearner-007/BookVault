@@ -1,4 +1,4 @@
-import AdminAuditPage from '@/components/admin/AdminAuditPage';
+import AdminAuditPage from '@/components/admin/modules/audit/AdminAuditPage';
 
 export const metadata = {
   title: 'My Activity | Admin',

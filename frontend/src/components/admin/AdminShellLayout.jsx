@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, ClipboardList, User, LogOut, Menu, X, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, User, Building2, LogOut, Menu, X, ChevronDown } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { useGlobal } from '@/lib/context/GlobalContext';
@@ -19,6 +19,7 @@ import {
 
 const navItems = [
   { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
+  { label: 'Businesses', href: '/admin/businesses', icon: Building2 },
   { label: 'Audit Logs', href: '/admin/audit', icon: ClipboardList },
   { label: 'Profile', href: '/admin/profile', icon: User },
 ];

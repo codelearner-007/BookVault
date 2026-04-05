@@ -1,6 +1,8 @@
 # CLAUDE.md
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **`backend-ref/` folder:** Contains reference notes, ideas, and specs for future work. This folder is gitignored (local only). **Always check `backend-ref/` for context and ideas before implementing any new feature.**
+
 ---
 
 ## 🚨 CRITICAL: Agent Usage Rules
@@ -198,6 +200,23 @@ Add bulk user import endpoint...
 - **Always use UUID v7** for primary keys: `DEFAULT uuid_generate_v7()`
 - Never use `uuid_generate_v4()` or `gen_random_uuid()`
 - UUID v7 provides 2-5x better insert performance and time-ordered IDs
+
+### Database Rules - Normalization (REQUIRED)
+**All tables MUST follow normalization up to 3NF (minimum), targeting BCNF where practical.**
+
+- **1NF:** Every column holds atomic (indivisible) values. No arrays of values in a single column, no repeating groups. Use junction/child tables instead.
+- **2NF:** Every non-key column depends on the WHOLE primary key. No partial dependencies — if a column only depends on part of a composite key, move it to a separate table.
+- **3NF:** Every non-key column depends ONLY on the primary key, not on other non-key columns. Eliminate transitive dependencies — derived or redundant data goes in a separate table.
+- **BCNF:** Every determinant is a candidate key. Prefer BCNF for any table with multiple overlapping candidate keys.
+
+**Practical rules:**
+- No storing comma-separated lists or JSON arrays of IDs in a column — use a junction table
+- No duplicating data across tables (e.g., storing `user_email` in every table) — join instead
+- No computed/derived columns that can be calculated from other columns in the same row
+- Lookup/enum-like data (e.g., status, category, type) → separate reference table with FK, unless values are truly static and few
+- Avoid storing redundant aggregate data; compute it at query time or use a materialized view
+
+**When reviewing or creating migrations, SQLAlchemy models, or Pydantic schemas — always verify the design is normalized. Reject or refactor any schema that violates these rules.**
 
 ---
 
@@ -430,6 +449,39 @@ supabase/
 - **Semantic Tailwind tokens:** Check `globals.css` for available theme classes
 - **Use tokens, not hardcoded colors:** `bg-primary`, `text-foreground`, `bg-muted`, `border-border`
 - **shadcn/ui for interactive elements:** Use `<Button>`, `<Input>`, `<Dialog>` (layout primitives like `<div>`, `<form>` are fine)
+
+## Page Loading Skeletons (REQUIRED)
+
+**Every new page MUST have a skeleton loader that mirrors the page's actual layout.**
+
+- Use `frontend/src/components/ui/skeleton.jsx` (shadcn/ui `<Skeleton />`) for all skeleton elements
+- The skeleton must match the real page structure: same number of cards, rows, headings, buttons
+- Show the skeleton while data is loading (`isLoading` state), then swap to real content
+- **Never use a generic spinner** as the only loading state for a full page — always use a layout-accurate skeleton
+
+**Pattern (client component):**
+```jsx
+if (isLoading) {
+  return (
+    <div className="p-6 space-y-4">
+      <Skeleton className="h-8 w-48" />          {/* page title */}
+      <div className="grid grid-cols-3 gap-4">
+        <Skeleton className="h-32 rounded-lg" />  {/* card 1 */}
+        <Skeleton className="h-32 rounded-lg" />  {/* card 2 */}
+        <Skeleton className="h-32 rounded-lg" />  {/* card 3 */}
+      </div>
+      <Skeleton className="h-64 rounded-lg" />    {/* table/list */}
+    </div>
+  );
+}
+```
+
+**Rules:**
+- Skeleton dimensions/layout must visually approximate the real content
+- Use `bg-muted` or let `<Skeleton />` handle its own color (do not hardcode colors)
+- For table pages: skeleton rows should match the real column count
+- For card pages: skeleton cards should match the real card grid
+- Delegate skeleton implementation to `frontend-next-dev` agent alongside the page itself
 
 ---
 

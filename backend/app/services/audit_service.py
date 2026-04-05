@@ -34,14 +34,28 @@ class AuditService:
         offset = (page - 1) * page_size
         total_pages = (total + page_size - 1) // page_size
 
-        logs = await self.repository.list_filtered(
+        rows = await self.repository.list_filtered(
             offset=offset, limit=page_size,
             module=module, action=action, user_id=user_id,
             start_date=start_date, end_date=end_date,
         )
 
+        items = []
+        for row in rows:
+            audit_log, full_name = row[0], row[1]
+            items.append(AuditLogResponse(
+                id=str(audit_log.id),
+                created_at=audit_log.created_at,
+                user_id=str(audit_log.user_id) if audit_log.user_id else None,
+                action=audit_log.action,
+                module=audit_log.module,
+                resource_id=audit_log.resource_id,
+                details=audit_log.details,
+                performed_by=full_name,
+            ))
+
         return PaginatedResponse(
-            items=[AuditLogResponse.model_validate(log) for log in logs],
+            items=items,
             total=total,
             page=page,
             page_size=page_size,

@@ -5,9 +5,12 @@
 import { handleResponse } from './api-utils';
 
 /**
- * List audit logs with pagination and filtering
+ * List the current user's own audit logs with pagination and filtering.
+ * The backend derives the user identity from the JWT token — never pass user_id here.
+ *
+ * Supported params: page, page_size, module, action, start_date, end_date
  */
-export async function listAuditLogs(params) {
+export async function listMyAuditLogs(params) {
   const queryString = new URLSearchParams(
     Object.entries(params)
       .filter(([, v]) => v !== undefined && v !== '')

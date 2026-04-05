@@ -1,14 +1,24 @@
 # DB Migration Manager - Agent Memory
 
-## Project Schema (as of 2026-02-13)
+## Project Schema (as of 2026-04-05)
 
-### Tables (6 total, all with UUID v7 PKs)
+### RBAC Tables (6, migration 20260201000001)
 - `user_profiles` - user_id (FK auth.users), full_name, avatar_url, department
 - `roles` - name (UNIQUE), description, hierarchy_level, is_system — system roles: `super_admin` (10000), `admin` (100; renamed from `user` on 2026-04-04)
 - `permissions` - module + action (UNIQUE together), description
 - `user_roles` - user_id + role_id junction (UNIQUE together)
 - `role_permissions` - role_id + permission_id junction (UNIQUE together)
 - `audit_logs` - user_id, action, module, resource_id, details (JSONB), ip_address, user_agent
+
+### Business System Tables (7, migration 20260405000000)
+- `businesses` - name, country, owner_id (FK auth.users CASCADE), **deleted_at TIMESTAMPTZ NULL** (soft-delete, migration 20260405000001); idx on owner_id, partial idx on deleted_at WHERE NULL
+- `business_details` - 1:1 with businesses (UNIQUE business_id); name, address, country, image_url
+- `business_format` - 1:1 with businesses (UNIQUE business_id); date_format, time_format, first_day_of_week, number_format
+- `business_tabs` - per-business tabs; UNIQUE(business_id, key); idx on business_id
+- `admin_tabs` - global tabs; key UNIQUE; seeded with: summary(0), journal-entries(1), reports(2), settings(3)
+- `coa_groups` - COA groups, self-referential parent_group_id (SET NULL); type='balance_sheet'|'pl'; idx on business_id
+- `coa_accounts` - COA accounts; group_id FK coa_groups (SET NULL); idx on business_id
+- All 7 business tables: RLS enabled, single `<table>_service_role_all` policy (service_role FOR ALL), GRANT ALL to service_role only
 
 ### Key Functions
 - `uuid_generate_v7()` - in migration 20260201000000
@@ -26,7 +36,7 @@
 - `i_have_permission('module', 'action')` used in most policies
 - `auth.uid() = user_id` for own-record access
 - Roles and permissions tables allow SELECT to anyone (`USING (true)`)
-- Audit logs: SELECT requires `audit:read`, INSERT for service_role and authenticated (own)
+- Audit logs: SELECT uses `auth.uid() = user_id` only (migration 20260406000000 removed the admin-sees-all policy); INSERT for service_role and authenticated (own)
 
 ### Grant Strategy (Security-hardened 2026-02-13)
 - `authenticated`: SELECT on all tables, INSERT on audit_logs, USAGE on sequences
@@ -51,7 +61,7 @@
 - **Solution**: Two INSERT policies - one for `service_role` (unrestricted), one for `authenticated` (own user_id only)
 
 ## File Locations
-- Migrations: `supabase/migrations/` (3 files: uuid_v7, rbac_system, jwt_claims_hook)
+- Migrations: `supabase/migrations/` (6 files: uuid_v7, rbac_system, jwt_claims_hook, business_system, businesses_soft_delete, fix_audit_logs_rls)
 - Seeds: `supabase/seeds/rbac_seed.sql`
 - Backend models: `backend/app/models/`
 - Backend schemas: `backend/app/schemas/`

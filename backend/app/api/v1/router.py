@@ -2,7 +2,18 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import audit, auth, dashboard, modules, permissions, profile, roles, user_roles, users
+from app.api.v1 import (
+    audit,
+    auth,
+    businesses,
+    dashboard,
+    modules,
+    permissions,
+    profile,
+    roles,
+    user_roles,
+    users,
+)
 
 # Create v1 router
 api_router = APIRouter(prefix="/v1")
@@ -17,3 +28,4 @@ api_router.include_router(users.router)
 api_router.include_router(audit.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(modules.router)
+api_router.include_router(businesses.router)

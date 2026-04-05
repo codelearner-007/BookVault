@@ -31,3 +31,6 @@ venv/
 Thumbs.db
 
 .claude/agent-memory-local/
+
+# Reference notes (local only)
+backend-ref/

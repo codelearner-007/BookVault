@@ -7,6 +7,7 @@ from sqlalchemy import func, select, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import AuditLog
+from app.models.user_profile import UserProfile
 from app.repositories.base_repository import BaseRepository
 
 
@@ -61,14 +62,16 @@ class AuditRepository(BaseRepository[AuditLog]):
         user_id: Optional[str] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
-    ) -> List[AuditLog]:
+    ) -> List[tuple]:
         query = self._apply_filters(
-            select(AuditLog),
+            select(AuditLog, UserProfile.full_name).outerjoin(
+                UserProfile, UserProfile.user_id == AuditLog.user_id
+            ),
             module, action, user_id, start_date, end_date,
         )
         query = query.order_by(AuditLog.created_at.desc()).limit(limit).offset(offset)
         result = await self.session.execute(query)
-        return list(result.scalars().all())
+        return list(result.all())
 
     async def list_distinct_modules(self) -> List[str]:
         query = select(distinct(AuditLog.module)).order_by(AuditLog.module)

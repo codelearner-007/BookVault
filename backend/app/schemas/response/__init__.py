@@ -2,6 +2,7 @@
 
 from app.schemas.response.audit import AuditLogResponse
 from app.schemas.response.auth import CurrentUserResponse
+from app.schemas.response.business import BusinessListResponse, BusinessResponse
 from app.schemas.response.dashboard import DashboardStatsResponse
 from app.schemas.response.permission import (
     PermissionResponse,
@@ -14,6 +15,8 @@ from app.schemas.response.user_role import UserRoleResponse
 
 __all__ = [
     "AuditLogResponse",
+    "BusinessListResponse",
+    "BusinessResponse",
     "CurrentUserResponse",
     "DashboardStatsResponse",
     "PermissionResponse",

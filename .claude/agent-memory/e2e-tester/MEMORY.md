@@ -63,9 +63,22 @@
 
 ## BookVault (2026-04-04) — New project, distinct from BasicSass template above
 - [Full state](project_bookvault_state.md) — routing, architecture, issues, build status
-- .env.local has PLACEHOLDERS — must configure before live browser testing
+- Connected to CLOUD Supabase (oakcwujixfakldsuryqx.supabase.co), NOT local Docker
+- Two real users: officialfarhan1996@gmail.com (super_admin), farhanahmad0819@gmail.com (admin)
+- Test credentials from BasicSass memory DO NOT apply here
 - Build: passes clean (npx next build), 28 routes, JS not TypeScript
 - middleware.js deprecation warning (Next.js 16): rename to proxy.js
 - Hardcoded emerald/amber colors in: SuperAdminHomePage, AdminRBACPage, UserStatsCards, UserStatusBadge
 - Super Admin sidebar: Dashboard, Users, Profile | Admin sidebar: Dashboard, Audit Logs, Profile
 - /app → middleware redirects to /super-admin or /admin based on role
+
+## Businesses Feature (2026-04-05)
+- Migration file: supabase/migrations/20260405000000_business_system.sql (NOT YET APPLIED to cloud DB)
+- businesses table does NOT exist in cloud Supabase — feature will 500 on any API call
+- Backend: businesses.py router, BusinessService, BusinessRepository — all correctly wired
+- Frontend: BusinessesPage.jsx at /admin/businesses — correct component, no Supabase client
+- Sidebar: "Businesses" nav item present in AdminShellLayout navItems array
+- Dashboard: "Businesses" Quick Actions card present in AdminDashboardPage
+- Critical bug: owner_id is REQUIRED in CreateBusinessRequest (Pydantic), but frontend only sends it conditionally (`if user?.id`). If GlobalContext user is null at submit time, API call will fail with 422.
+- Service layer: business.service.js calls /v1/businesses (correct path, goes through rewrite)
+- No CSRF issue: businesses API goes through FastAPI (no Next.js route), not subject to enforceSameOrigin

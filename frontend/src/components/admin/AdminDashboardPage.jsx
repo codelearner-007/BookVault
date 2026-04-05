@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { User, ShieldCheck, Calendar } from 'lucide-react';
+import Link from 'next/link';
+import { User, ShieldCheck, Calendar, Building2, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -74,7 +75,7 @@ export default function AdminDashboardPage() {
     <div className="space-y-8 max-w-3xl">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-foreground tracking-tight">Dashboard</h1>
         {loading ? (
           <Skeleton className="h-4 w-56 mt-1" />
         ) : (
@@ -90,7 +91,7 @@ export default function AdminDashboardPage() {
       )}
 
       {/* Info cards */}
-      <div className="grid gap-5 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3">
         {/* Account Status */}
         <InfoCard icon={ShieldCheck} title="Account Status">
           {loading ? (
@@ -128,6 +129,35 @@ export default function AdminDashboardPage() {
             <p className="text-sm font-medium text-foreground">{formatDate(createdAt)}</p>
           )}
         </InfoCard>
+      </div>
+
+      {/* Quick Actions */}
+      <div>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          Quick Actions
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Link href="/admin/businesses" className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl">
+            <Card className="border-border shadow-sm group-hover:border-primary/30 group-hover:bg-muted/40 transition-all duration-200 cursor-pointer">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/15 transition-colors duration-200">
+                      <Building2 className="h-4 w-4 text-primary" />
+                    </div>
+                    <CardTitle className="text-sm font-medium text-foreground">Businesses</CardTitle>
+                  </div>
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Create and manage your businesses, configure settings and chart of accounts.
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
+        </div>
       </div>
     </div>
   );

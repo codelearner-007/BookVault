@@ -19,9 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import {
-  listAuditLogs,
-} from '@/lib/services/audit.service';
+import { listMyAuditLogs } from '@/lib/services/audit.service';
 import { getModules } from '@/lib/services/modules.service';
 
 export default function AdminAuditPage() {
@@ -62,7 +60,7 @@ export default function AdminAuditPage() {
         setLoading(true);
         setError(null);
 
-        const response = await listAuditLogs(filters);
+        const response = await listMyAuditLogs(filters);
 
         setLogs(response.items);
         setTotalPages(response.total_pages);
@@ -81,21 +79,42 @@ export default function AdminAuditPage() {
     loadLogs();
   }, [filters]);
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    }).format(date);
+  const ACTION_LABELS = {
+    // Businesses
+    business_created: 'Created Business',
+    business_deleted: 'Deleted Business',
+    business_restored: 'Restored Business',
+    // Roles
+    role_created: 'Created Role',
+    role_updated: 'Updated Role',
+    role_deleted: 'Deleted Role',
+    role_permissions_updated: 'Updated Role Permissions',
+    // User Roles
+    user_role_assigned: 'Assigned Role',
+    user_role_removed: 'Removed Role',
+    // Permissions
+    permission_created: 'Created Permission',
+    permission_deleted: 'Deleted Permission',
   };
 
-  const formatUserId = (userId) => {
-    if (!userId) return 'System';
-    return userId.slice(0, 8);
+  const formatAction = (action) =>
+    ACTION_LABELS[action] ||
+    action.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const formatDateParts = (dateString) => {
+    const date = new Date(dateString);
+    return {
+      date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      time: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    };
+  };
+
+  const getDetailsSummary = (log) => {
+    if (!log.details) return null;
+    if (log.details.name) return log.details.name;
+    if (log.details.role_name) return log.details.role_name;
+    if (log.details.permission_name) return log.details.permission_name;
+    return null;
   };
 
   const handleDateRangeChange = (range) => {
@@ -174,9 +193,9 @@ export default function AdminAuditPage() {
     <div className="space-y-6 max-w-[1600px]">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Audit Logs</h1>
+        <h1 className="text-2xl font-bold text-foreground">My Activity</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Track all system actions and security events
+          A log of all actions you have performed
         </p>
       </div>
 
@@ -338,11 +357,11 @@ export default function AdminAuditPage() {
             </div>
           ) : logs.length === 0 ? (
             <div className="p-12 text-center">
-              <p className="text-sm font-medium text-muted-foreground">No audit logs found</p>
+              <p className="text-sm font-medium text-foreground">No audit records found</p>
               <p className="text-xs text-muted-foreground mt-1">
                 {hasActiveFilters
                   ? 'Try adjusting your filters'
-                  : 'No events have been recorded yet'}
+                  : 'Actions you perform will appear here.'}
               </p>
             </div>
           ) : (
@@ -351,42 +370,54 @@ export default function AdminAuditPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/40">
-                      <TableHead className="font-semibold">Timestamp</TableHead>
                       <TableHead className="font-semibold">Module</TableHead>
                       <TableHead className="font-semibold">Action</TableHead>
-                      <TableHead className="font-semibold">User</TableHead>
-                      <TableHead className="font-semibold">Resource</TableHead>
+                      <TableHead className="font-semibold">Details</TableHead>
+                      <TableHead className="font-semibold">Resource ID</TableHead>
+                      <TableHead className="font-semibold">When</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {logs.map((log) => (
-                      <TableRow key={log.id} className="hover:bg-muted/30">
-                        <TableCell className="text-sm text-muted-foreground font-mono">
-                          {formatDate(log.created_at)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="secondary"
-                            className="bg-primary/10 text-primary border-primary/20 font-medium"
-                          >
-                            {log.module}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-medium text-sm">{log.action}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground font-mono">
-                          {formatUserId(log.user_id)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {log.resource_id ? (
-                            <code className="bg-muted px-2 py-1 rounded text-xs">
-                              {log.resource_id.slice(0, 12)}
-                            </code>
-                          ) : (
-                            <span className="text-muted-foreground/60">—</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {logs.map((log) => {
+                      const { date, time } = formatDateParts(log.created_at);
+                      const detailsSummary = getDetailsSummary(log);
+                      return (
+                        <TableRow key={log.id} className="hover:bg-muted/30">
+                          <TableCell>
+                            <Badge
+                              variant="secondary"
+                              className="bg-primary/10 text-primary border-primary/20 font-medium"
+                            >
+                              {log.module.charAt(0).toUpperCase() + log.module.slice(1)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-medium text-sm">
+                            {formatAction(log.action)}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {detailsSummary ? (
+                              <span className="text-muted-foreground">{detailsSummary}</span>
+                            ) : (
+                              <span className="text-muted-foreground/60">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {log.resource_id ? (
+                              <code className="bg-muted px-2 py-1 rounded text-xs">
+                                {log.resource_id.slice(0, 12)}
+                              </code>
+                            ) : (
+                              <span className="text-muted-foreground/60">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm whitespace-nowrap">
+                            <span className="font-medium text-foreground">{date}</span>
+                            <br />
+                            <span className="text-xs text-muted-foreground font-mono">{time}</span>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
