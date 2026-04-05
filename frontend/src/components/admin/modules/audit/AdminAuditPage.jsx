@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Filter } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -68,7 +69,7 @@ export default function AdminAuditPage() {
       } catch (err) {
         console.error('Error loading audit logs:', err);
         setError(err instanceof Error ? err.message : 'Failed to load audit logs');
-        toast('Failed to load audit logs', {
+        toast.error('Failed to load audit logs', {
           description: 'Please try again.',
         });
       } finally {
@@ -346,10 +347,13 @@ export default function AdminAuditPage() {
       <Card className="border-border shadow-sm">
         <CardContent className="p-0">
           {loading ? (
-            <div className="p-8 space-y-4">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="h-12 rounded bg-muted animate-pulse" />
-              ))}
+            <div className="p-6 space-y-4">
+              <Skeleton className="h-8 w-48" />
+              <div className="space-y-2">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <Skeleton key={i} className="h-12 w-full rounded" />
+                ))}
+              </div>
             </div>
           ) : error ? (
             <div className="p-8 text-center">

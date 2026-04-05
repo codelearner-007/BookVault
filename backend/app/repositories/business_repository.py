@@ -13,34 +13,12 @@ class BusinessRepository(BaseRepository[Business]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(Business, session)
 
-    async def list_all(self, skip: int = 0, limit: int = 100) -> list[Business]:
-        """Return all active (non-deleted) businesses ordered by creation date descending."""
-        result = await self.session.execute(
-            select(Business)
-            .where(Business.deleted_at.is_(None))
-            .order_by(Business.created_at.desc())
-            .offset(skip)
-            .limit(limit)
-        )
-        return list(result.scalars().all())
-
     async def list_by_owner(self, owner_id: str) -> list[Business]:
         """Return all active businesses owned by the given auth user."""
         result = await self.session.execute(
             select(Business)
             .where(Business.owner_id == owner_id, Business.deleted_at.is_(None))
             .order_by(Business.created_at.desc())
-        )
-        return list(result.scalars().all())
-
-    async def list_deleted(self, skip: int = 0, limit: int = 100) -> list[Business]:
-        """Return all soft-deleted businesses ordered by deleted_at descending."""
-        result = await self.session.execute(
-            select(Business)
-            .where(Business.deleted_at.is_not(None))
-            .order_by(Business.deleted_at.desc())
-            .offset(skip)
-            .limit(limit)
         )
         return list(result.scalars().all())
 
@@ -70,3 +48,12 @@ class BusinessRepository(BaseRepository[Business]):
             )
         )
         return result.scalar_one()
+
+    async def hard_delete(self, business_id: str) -> None:
+        """Permanently delete a business from the database (including soft-deleted rows)."""
+        result = await self.session.execute(
+            select(Business).where(Business.id == business_id)
+        )
+        business = result.scalar_one_or_none()
+        if business:
+            await self.delete(business)

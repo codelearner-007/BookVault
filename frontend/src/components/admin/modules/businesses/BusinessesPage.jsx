@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Building2, HelpCircle, Trash2, Plus, RotateCcw } from 'lucide-react';
+import { Building2, HelpCircle, Trash2, Plus, RotateCcw, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -33,14 +33,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   listBusinesses,
   createBusiness,
   deleteBusiness,
   listDeletedBusinesses,
   restoreBusiness,
+  permanentDeleteBusiness,
 } from '@/lib/services/business.service';
-import { useGlobal } from '@/lib/context/GlobalContext';
-
 function formatDate(dateString) {
   if (!dateString) return '';
   return new Intl.DateTimeFormat('en-US', {
@@ -82,7 +87,6 @@ function SkeletonRow() {
 }
 
 export default function BusinessesPage() {
-  const { user } = useGlobal();
 
   // Active businesses list
   const [businesses, setBusinesses] = useState([]);
@@ -108,12 +112,18 @@ export default function BusinessesPage() {
   const [trashLoading, setTrashLoading] = useState(false);
   const [restoreLoadingId, setRestoreLoadingId] = useState(null);
 
+  // Permanent delete (from trash dialog)
+  const [permanentDeleteId, setPermanentDeleteId] = useState(null);
+  const [permanentDeleteName, setPermanentDeleteName] = useState('');
+  const [permanentDeleteLoading, setPermanentDeleteLoading] = useState(false);
+  const [permanentDeleteOpen, setPermanentDeleteOpen] = useState(false);
+
   const loadBusinesses = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       const data = await listBusinesses();
-      setBusinesses(Array.isArray(data) ? data : (data?.items ?? data?.businesses ?? []));
+      setBusinesses(Array.isArray(data) ? data : (data?.items ?? []));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load businesses');
     } finally {
@@ -137,10 +147,6 @@ export default function BusinessesPage() {
   async function handleCreateBusiness() {
     if (!addName.trim()) {
       setAddError('Business name is required');
-      return;
-    }
-    if (!user?.id) {
-      setAddError('Unable to identify current user. Please refresh and try again.');
       return;
     }
     try {
@@ -193,11 +199,32 @@ export default function BusinessesPage() {
     try {
       setTrashLoading(true);
       const data = await listDeletedBusinesses();
-      setDeletedBusinesses(Array.isArray(data) ? data : (data?.items ?? data?.businesses ?? []));
+      setDeletedBusinesses(Array.isArray(data) ? data : (data?.items ?? []));
     } catch {
       setDeletedBusinesses([]);
     } finally {
       setTrashLoading(false);
+    }
+  }
+
+  async function handlePermanentDelete() {
+    try {
+      setPermanentDeleteLoading(true);
+      await permanentDeleteBusiness(permanentDeleteId);
+      setPermanentDeleteOpen(false);
+      setPermanentDeleteId(null);
+      setPermanentDeleteName('');
+      const deletedData = await listDeletedBusinesses();
+      setDeletedBusinesses(
+        Array.isArray(deletedData)
+          ? deletedData
+          : (deletedData?.items ?? deletedData?.businesses ?? [])
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to permanently delete business');
+      setPermanentDeleteOpen(false);
+    } finally {
+      setPermanentDeleteLoading(false);
     }
   }
 
@@ -213,12 +240,12 @@ export default function BusinessesPage() {
       setBusinesses(
         Array.isArray(activeData)
           ? activeData
-          : (activeData?.items ?? activeData?.businesses ?? [])
+          : (activeData?.items ?? [])
       );
       setDeletedBusinesses(
         Array.isArray(deletedData)
           ? deletedData
-          : (deletedData?.items ?? deletedData?.businesses ?? [])
+          : (deletedData?.items ?? [])
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to restore business');
@@ -235,13 +262,15 @@ export default function BusinessesPage() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Businesses</h1>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             aria-label="Help: What are businesses?"
-            className="h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
           >
             <HelpCircle className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         {/* Action toolbar */}
@@ -496,7 +525,7 @@ export default function BusinessesPage() {
               Delete &quot;{removeSelectedBiz?.name ?? 'this business'}&quot;?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This cannot be undone. The business and all associated data will be permanently removed.
+              This business will be moved to Trash. You can restore it later from the Trash panel.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -548,7 +577,6 @@ export default function BusinessesPage() {
               <div className="space-y-0.5">
                 {deletedBusinesses.map((biz) => {
                   const id = biz.id ?? biz._id;
-                  const isRestoring = restoreLoadingId === id;
                   return (
                     <div
                       key={id}
@@ -565,26 +593,33 @@ export default function BusinessesPage() {
                           </p>
                         )}
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleRestore(id)}
-                        disabled={isRestoring || restoreLoadingId !== null}
-                        className="flex-shrink-0 cursor-pointer gap-1.5"
-                        aria-label={`Restore ${biz.name}`}
-                      >
-                        {isRestoring ? (
-                          <>
-                            <Spinner className="h-3 w-3" />
-                            Restoring…
-                          </>
-                        ) : (
-                          <>
-                            <RotateCcw className="h-3 w-3" />
-                            Restore
-                          </>
-                        )}
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0 cursor-pointer">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => handleRestore(id)}
+                            disabled={restoreLoadingId === id}
+                          >
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            {restoreLoadingId === id ? 'Restoring...' : 'Restore'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => {
+                              setPermanentDeleteId(id);
+                              setPermanentDeleteName(biz.name);
+                              setPermanentDeleteOpen(true);
+                            }}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   );
                 })}
@@ -603,6 +638,29 @@ export default function BusinessesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Permanent Delete AlertDialog ───────────────────────────────────── */}
+      <AlertDialog open={permanentDeleteOpen} onOpenChange={setPermanentDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">Permanently Delete Business?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-semibold text-foreground">{permanentDeleteName}</span> will be{' '}
+              <span className="font-semibold text-destructive">permanently deleted</span> and cannot be recovered. This action is irreversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={permanentDeleteLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handlePermanentDelete}
+              disabled={permanentDeleteLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {permanentDeleteLoading ? 'Deleting...' : 'Delete Permanently'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

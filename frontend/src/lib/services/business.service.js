@@ -19,3 +19,7 @@ export async function listDeletedBusinesses() {
 export async function restoreBusiness(id) {
   return apiClient.post(`/v1/businesses/${id}/restore`, {});
 }
+
+export async function permanentDeleteBusiness(id) {
+  return apiClient.delete(`/v1/businesses/${id}/permanent`);
+}

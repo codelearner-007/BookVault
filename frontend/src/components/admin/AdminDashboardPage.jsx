@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { User, ShieldCheck, Calendar, Building2, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { authService } from '@/lib/services/auth.service';
+import { useGlobal } from '@/lib/context/GlobalContext';
 
 function formatDate(dateString) {
   if (!dateString) return 'N/A';
@@ -46,30 +45,12 @@ function InfoCard({ icon: Icon, title, children }) {
 }
 
 export default function AdminDashboardPage() {
-  const [userData, setUserData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { user, loading } = useGlobal();
 
-  useEffect(() => {
-    async function loadUser() {
-      try {
-        setLoading(true);
-        const data = await authService.getCurrentUser();
-        setUserData(data?.user ?? data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load account info');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadUser();
-  }, []);
-
-  const status = getStatusBadge(userData);
-  const roleName = userData?.app_metadata?.user_role || 'user';
-  const createdAt = userData?.created_at;
-  const email = userData?.email;
+  const status = getStatusBadge(user);
+  const roleName = user?.app_metadata?.user_role || 'user';
+  const createdAt = user?.registered_at;
+  const email = user?.email;
 
   return (
     <div className="space-y-8 max-w-3xl">
@@ -85,10 +66,6 @@ export default function AdminDashboardPage() {
           </p>
         )}
       </div>
-
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
 
       {/* Info cards */}
       <div className="grid gap-4 sm:grid-cols-3">

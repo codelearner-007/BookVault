@@ -88,7 +88,7 @@ After ANY implementation:
 ### Execution Examples
 
 **❌ WRONG - You doing the work:**
-```typescript
+```javascript
 // User: "Add a new role creation form"
 // You: *edits frontend/src/components/admin/modules/rbac/CreateRoleDialog.tsx*
 // You: *edits backend/app/api/v1/roles.py*
@@ -96,7 +96,7 @@ After ANY implementation:
 ```
 
 **✅ CORRECT - Delegating to agents:**
-```typescript
+```javascript
 // User: "Add a new role creation form"
 // You: Analyzing this request, I need to:
 // 1. Update the frontend form component
@@ -131,7 +131,7 @@ Test: Login as admin, navigate to RBAC, create new role, verify it appears in li
 ### Parallel vs Sequential
 
 **Parallel (default for independent work):**
-```typescript
+```javascript
 // User: "Add user profile page with API"
 // One message, multiple Task calls:
 
@@ -147,7 +147,7 @@ Verify profile page loads and displays user data...
 ```
 
 **Sequential (for dependencies):**
-```typescript
+```javascript
 // User: "Add notifications system"
 
 // Step 1: Research
@@ -174,7 +174,7 @@ Test notification creation and display...
 
 Use background execution for slow tasks when you have other work:
 
-```typescript
+```javascript
 // User: "Analyze the entire RBAC system and add user bulk import"
 
 Task: researcher (background)
@@ -225,10 +225,12 @@ Add bulk user import endpoint...
 **Architecture:** Next.js 16 (Frontend + Auth) + FastAPI (Backend + Database) + Supabase (PostgreSQL + Auth)
 
 **Tech Stack:**
-- Frontend: Next.js 16.1, React 19.2, Tailwind CSS v4, shadcn/ui
-- Backend: FastAPI 0.115+, SQLAlchemy, Pydantic
+- Frontend: Next.js 16.1, React 19.2, **JavaScript (JSX — NOT TypeScript)**, Tailwind CSS v4, shadcn/ui
+- Backend: FastAPI 0.115+, SQLAlchemy, Pydantic, **Python (NOT TypeScript)**
 - Database: Supabase PostgreSQL with RLS, UUID v7
 - Ports: Next.js (3000), FastAPI (8000), Supabase (55321-55327)
+
+> **No TypeScript anywhere.** Frontend uses `.js`/`.jsx` files only. Never create `.ts` or `.tsx` files.
 
 **Admin Modules:** Dashboard, Users, RBAC, Audit Logs  
 **Permissions:** 13 total across 4 modules (users, roles, permissions, audit)
@@ -241,7 +243,7 @@ Add bulk user import endpoint...
 ### Request Routing
 
 **Next.js rewrites `/api/v1/*` to FastAPI automatically:**
-```typescript
+```javascript
 // next.config.ts
 source: "/api/v1/:path*" → destination: "http://127.0.0.1:8000/api/v1/:path*"
 ```
@@ -283,7 +285,7 @@ source: "/api/v1/:path*" → destination: "http://127.0.0.1:8000/api/v1/:path*"
 
 ### Quick Reference
 
-```typescript
+```javascript
 // ✅ Auth → Next.js
 fetch('/api/auth/login', { method: 'POST', ... });
 
@@ -343,7 +345,7 @@ async def list_roles(db: AsyncSession = Depends()):
 - audit (1): read
 
 **Permission Check (Client - Admin):**
-```typescript
+```javascript
 import { useAdminClaims } from '@/components/admin/AdminClaimsContext';
 import { hasPermission } from '@/lib/utils/rbac';
 
@@ -354,7 +356,7 @@ if (!hasPermission(claims.permissions, 'users:update_all')) {
 ```
 
 **Superadmin Protection (API Routes):**
-```typescript
+```javascript
 // ALWAYS fetch LIVE data for the target user, never trust stale app_metadata
 const { data: targetUser } = await adminClient.auth.admin.getUserById(userId);
 if (targetUser?.user?.app_metadata?.user_role === 'super_admin') {
@@ -363,7 +365,7 @@ if (targetUser?.user?.app_metadata?.user_role === 'super_admin') {
 ```
 
 **Admin Route Auth Helper (DRY pattern):**
-```typescript
+```javascript
 // Use authorizeAdminAction() from lib/utils/admin-auth.ts for all admin mutation routes
 const auth = await authorizeAdminAction(request, userId, 'users:update_all');
 if (auth instanceof NextResponse) return auth;
@@ -490,7 +492,7 @@ if (isLoading) {
 **Two patterns - choose based on requirements:**
 
 **1. Server Actions (Preferred):**
-```typescript
+```javascript
 // app/actions/user.ts
 'use server';
 export async function createUser(formData: FormData) {
@@ -506,7 +508,7 @@ export async function createUser(formData: FormData) {
 ```
 
 **2. Client-Side (Complex UX):**
-```typescript
+```javascript
 // For conditional fields, instant feedback, multi-step
 const form = useForm({ resolver: zodResolver(schema) });
 
@@ -546,6 +548,58 @@ Component → Service → API Route (Next.js or FastAPI)
 
 ---
 
+## Code Quality: Clean, Simple & Fast (REQUIRED)
+
+**Every file written or modified MUST follow these rules — no exceptions.**
+
+### Cleanliness
+- **No dead code.** Remove unused imports, variables, functions, commented-out blocks, and console logs before finishing any task.
+- **No redundant logic.** If two code paths do the same thing, merge them. Never duplicate business logic across files.
+- **No over-abstraction.** Three similar lines of code is better than a premature utility function. Only extract when a pattern appears 3+ times and extraction makes it _simpler_, not just shorter.
+- **One responsibility per file.** If a file is doing multiple unrelated things, split it.
+
+### Simplicity
+- **Write for a reader, not a compiler.** Choose the most obvious, direct implementation over the clever one.
+- **Short functions.** If a function exceeds ~40 lines, it is doing too much — split it.
+- **Flat is better than nested.** Use early returns to reduce nesting depth. Max 3 levels of nesting.
+- **Naming must be self-documenting.** Avoid `data`, `res`, `temp`, `item`. Name things for what they actually represent.
+- **No magic numbers/strings.** Extract to named constants.
+
+### Performance (Frontend)
+- **Minimize client bundle size.** Prefer Server Components (RSC) by default; only add `'use client'` when interactivity or browser APIs are genuinely needed.
+- **Never fetch data in client components when a Server Component can do it.** Data fetching belongs in Server Components or server actions.
+- **Avoid `useEffect` for data fetching.** Use Server Components, SWR, or React Query instead.
+- **Lazy-load heavy components.** Use `next/dynamic` with `ssr: false` for components only needed on interaction (modals, charts, editors).
+- **Memoize only when measured.** Do not add `useMemo`/`useCallback` speculatively — only after profiling shows a real problem.
+- **Paginate all lists.** Never fetch unbounded lists from the API; always use limit/offset or cursor pagination.
+
+### Performance (Backend)
+- **Use `async` everywhere.** All DB calls, HTTP calls, and I/O must be `async`/`await`. No blocking calls.
+- **Avoid N+1 queries.** Use `joinedload`/`selectinload` in SQLAlchemy or batch queries. Never query inside a loop.
+- **Add DB indexes for every FK and every column used in WHERE/ORDER BY.** Declare them in migrations.
+- **Select only needed columns.** Never `SELECT *` — specify columns in SQLAlchemy queries.
+- **Return early on validation failures.** Don't proceed with expensive operations if basic validation fails.
+
+### Performance (Database / Migrations)
+- **Index every foreign key column.**
+- **Index every column that appears in a filter, sort, or join condition.**
+- **Use `NOT NULL` by default.** Only allow NULL when absence is a meaningful business state.
+- **Each migration must be atomic and reversible** (include a rollback plan in a comment).
+
+### Code Review Checklist (run mentally before finishing any task)
+- [ ] No unused imports or variables
+- [ ] No commented-out code
+- [ ] No magic numbers/strings
+- [ ] All lists are paginated
+- [ ] No N+1 queries
+- [ ] No `SELECT *`
+- [ ] Server Components used where possible (frontend)
+- [ ] Every new table/FK has an index in the migration
+- [ ] Functions are ≤ 40 lines
+- [ ] Max nesting depth ≤ 3
+
+---
+
 ## Remember
 
 1. **YOU ARE THE ORCHESTRATOR, NOT THE IMPLEMENTER** - delegate to agents
@@ -563,3 +617,4 @@ Component → Service → API Route (Next.js or FastAPI)
 13. **13 permissions across 4 modules** (users, roles, permissions, audit)
 14. **Next.js 16: params/searchParams are Promise types**
 15. **Rate limiting via slowapi on sensitive endpoints**
+16. **Clean, simple & fast** - every file must pass the Code Quality checklist above

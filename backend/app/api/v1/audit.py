@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db
+from app.core.dependencies import get_current_user, get_db, require_role
 from app.schemas.auth import CurrentUser
 from app.schemas.common import PaginatedResponse
 from app.schemas.response.audit import AuditLogResponse
@@ -18,6 +18,7 @@ router = APIRouter(prefix="/audit", tags=["Audit"])
 @router.get(
     "/logs",
     response_model=PaginatedResponse[AuditLogResponse],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 async def list_audit_logs(
     page: int = Query(1, ge=1),

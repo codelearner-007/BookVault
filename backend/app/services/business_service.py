@@ -55,17 +55,35 @@ class BusinessService:
             )
         return BusinessResponse.model_validate(business)
 
-    async def delete(self, business_id: str) -> None:
-        """Soft-delete a business by setting deleted_at, raising 404 if absent."""
+    async def delete(self, business_id: str) -> str:
+        """Soft-delete a business by setting deleted_at, raising 404 if absent. Returns the business name."""
         business = await self.repo.get(business_id)
         if not business:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Business not found",
             )
+        name = business.name
         business.deleted_at = datetime.now(timezone.utc)
         await self.repo.session.flush()
-        await self.repo.session.refresh(business)
+        return name
+
+    async def hard_delete(self, business_id: str) -> str:
+        """Permanently delete a soft-deleted business. Raises 404 if not found, 400 if not soft-deleted."""
+        business = await self.repo.get(business_id)
+        if not business:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Business not found",
+            )
+        if business.deleted_at is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Business must be soft-deleted before it can be permanently deleted",
+            )
+        name = business.name
+        await self.repo.hard_delete(business_id)
+        return name
 
     async def restore(self, business_id: str) -> BusinessResponse:
         """Restore a soft-deleted business by clearing deleted_at, raising 404 if absent."""

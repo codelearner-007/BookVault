@@ -98,8 +98,7 @@ async def delete_business(
 ) -> dict:
     """Soft-delete a business by ID. Requires admin or super_admin role."""
     service = BusinessService(db)
-    deleted_business = await service.get(business_id)
-    await service.delete(business_id)
+    deleted_name = await service.delete(business_id)
 
     audit_service = AuditService(db)
     await audit_service.log_action(
@@ -107,7 +106,33 @@ async def delete_business(
         action="business_deleted",
         module="businesses",
         resource_id=str(business_id),
-        details={"name": deleted_business.name},
+        details={"name": deleted_name},
+    )
+
+    return {"ok": True}
+
+
+@router.delete(
+    "/{business_id}/permanent",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_role("admin", "super_admin"))],
+)
+async def permanently_delete_business(
+    business_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Permanently delete a soft-deleted business. This action is irreversible. Requires admin or super_admin role."""
+    service = BusinessService(db)
+    name = await service.hard_delete(business_id)
+
+    audit_service = AuditService(db)
+    await audit_service.log_action(
+        user_id=current_user.user_id,
+        action="business_permanently_deleted",
+        module="businesses",
+        resource_id=str(business_id),
+        details={"name": name},
     )
 
     return {"ok": True}
