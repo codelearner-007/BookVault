@@ -26,9 +26,7 @@ class BusinessDetails(Base):
         nullable=False,
         index=True,
     )
-    name: Mapped[str | None] = mapped_column(Text, nullable=True)
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
-    country: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

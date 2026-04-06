@@ -12,7 +12,7 @@
 
 ### Business System Tables (7, migration 20260405000000)
 - `businesses` - name, country, owner_id (FK auth.users CASCADE), **deleted_at TIMESTAMPTZ NULL** (soft-delete, migration 20260405000001); idx on owner_id, partial idx on deleted_at WHERE NULL
-- `business_details` - 1:1 with businesses (UNIQUE business_id); name, address, country, image_url
+- `business_details` - 1:1 with businesses (UNIQUE business_id); address, image_url (name + country dropped in 20260405000002 — 3NF violation)
 - `business_format` - 1:1 with businesses (UNIQUE business_id); date_format, time_format, first_day_of_week, number_format
 - `business_tabs` - per-business tabs; UNIQUE(business_id, key); idx on business_id
 - `admin_tabs` - global tabs; key UNIQUE; seeded with: summary(0), journal-entries(1), reports(2), settings(3)
@@ -61,7 +61,7 @@
 - **Solution**: Two INSERT policies - one for `service_role` (unrestricted), one for `authenticated` (own user_id only)
 
 ## File Locations
-- Migrations: `supabase/migrations/` (6 files: uuid_v7, rbac_system, jwt_claims_hook, business_system, businesses_soft_delete, fix_audit_logs_rls)
+- Migrations: `supabase/migrations/` (7 files: uuid_v7, rbac_system, jwt_claims_hook, business_system, businesses_soft_delete, fix_audit_logs_rls, drop_business_details_redundant_columns)
 - Seeds: `supabase/seeds/rbac_seed.sql`
 - Backend models: `backend/app/models/`
 - Backend schemas: `backend/app/schemas/`

@@ -131,11 +131,15 @@ class BusinessService:
         await self.repo.session.flush()
         return await self.list_admin_tabs()
 
+    # Tabs that are ON by default for every new business.
+    DEFAULT_ENABLED_TABS = frozenset({"summary", "settings"})
+
     async def list_business_tabs(self, business_id: str, owner_id: str) -> BusinessTabListResponse:
         """Return tabs for a business owned by owner, merged from global admin tabs and per-business overrides.
 
         All globally-enabled admin tabs are shown. If the business has a saved row for
-        a tab, its enabled state is used; otherwise the tab defaults to disabled.
+        a tab, its enabled state is used; otherwise summary and settings default to
+        enabled, all other tabs default to disabled.
         """
         business = await self.repo.get_by_owner(business_id, owner_id)
         if not business:
@@ -162,7 +166,7 @@ class BusinessService:
                     business_id=business_id,
                     key=admin_tab.key,
                     label=admin_tab.label,
-                    enabled=False,
+                    enabled=admin_tab.key in self.DEFAULT_ENABLED_TABS,
                     order_index=fallback_idx,
                 )))
         items.sort(key=lambda x: x[0])
