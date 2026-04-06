@@ -8,14 +8,24 @@ from app.schemas.request.role import (
     UpdateRolePermissionsRequest,
     UpdateRoleRequest,
 )
+from app.schemas.request.tab import (
+    AdminTabUpsertItem,
+    BusinessTabUpdateItem,
+    UpsertAdminTabsRequest,
+    UpsertBusinessTabsRequest,
+)
 from app.schemas.request.user_role import AssignUserRoleRequest
 
 __all__ = [
+    "AdminTabUpsertItem",
+    "AssignUserRoleRequest",
+    "BusinessTabUpdateItem",
     "CreateBusinessRequest",
     "CreatePermissionRequest",
     "CreateRoleRequest",
-    "UpdateRoleRequest",
-    "UpdateRolePermissionsRequest",
-    "AssignUserRoleRequest",
     "UpdateProfileRequest",
+    "UpdateRolePermissionsRequest",
+    "UpdateRoleRequest",
+    "UpsertAdminTabsRequest",
+    "UpsertBusinessTabsRequest",
 ]

@@ -177,7 +177,9 @@ export default function AdminShellLayout({ children }) {
         </div>
 
         <main id="main-content" className="flex-1 p-6 lg:p-8 overflow-auto">
-          {children}
+          <div className="max-w-5xl mx-auto">
+            {children}
+          </div>
         </main>
       </div>
     </div>

@@ -94,38 +94,27 @@ export default function SuperAdminHomePage() {
   const [usersError, setUsersError] = useState(null);
 
   useEffect(() => {
-    async function loadStats() {
-      try {
-        setLoadingStats(true);
-        const data = await getUserStats();
-        setStats(data);
-      } catch (err) {
-        console.error('Failed to load user stats:', err);
-      } finally {
-        setLoadingStats(false);
+    async function load() {
+      const [statsResult, usersResult] = await Promise.allSettled([
+        getUserStats(),
+        listUsersWithRoles({ page: 1, page_size: 10 }),
+      ]);
+
+      if (statsResult.status === 'fulfilled') {
+        setStats(statsResult.value);
       }
+      setLoadingStats(false);
+
+      if (usersResult.status === 'fulfilled') {
+        setRecentUsers(usersResult.value.items);
+      } else {
+        const err = usersResult.reason;
+        setUsersError(err instanceof Error ? err.message : 'Failed to load recent admins');
+      }
+      setLoadingUsers(false);
     }
 
-    loadStats();
-  }, []);
-
-  useEffect(() => {
-    async function loadRecentUsers() {
-      try {
-        setLoadingUsers(true);
-        setUsersError(null);
-        const response = await listUsersWithRoles({ page: 1, page_size: 10 });
-        setRecentUsers(response.items);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to load recent admins';
-        setUsersError(message);
-        console.error('Failed to load recent users:', err);
-      } finally {
-        setLoadingUsers(false);
-      }
-    }
-
-    loadRecentUsers();
+    load();
   }, []);
 
   return (

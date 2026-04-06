@@ -1,12 +1,25 @@
 'use client';
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { User, Key, Shield } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ProfileSection } from '@/components/app/user-settings/ProfileSection';
 import { PasswordSection } from '@/components/app/user-settings/PasswordSection';
 import { SecuritySection } from '@/components/app/user-settings/SecuritySection';
 
+const VALID_TABS = ['profile', 'password', 'security'];
+
 export default function AdminProfilePage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const tabParam = searchParams.get('tab');
+  const activeTab = VALID_TABS.includes(tabParam) ? tabParam : 'profile';
+
+  const handleTabChange = (tab) => {
+    router.push(`/admin/profile?tab=${tab}`, { scroll: false });
+  };
+
   return (
     <div className="space-y-6 max-w-3xl">
       {/* Header */}
@@ -17,7 +30,7 @@ export default function AdminProfilePage() {
         </p>
       </div>
 
-      <Tabs defaultValue="profile">
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="w-full sm:w-auto">
           <TabsTrigger value="profile" className="gap-2">
             <User className="h-4 w-4" />

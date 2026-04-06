@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
+  LayoutGrid,
   Users,
   User,
   Crown,
@@ -30,6 +31,7 @@ import {
 const navItems = [
   { label: 'Dashboard', href: '/super-admin', icon: LayoutDashboard },
   { label: 'Users', href: '/super-admin/users', icon: Users },
+  { label: 'Features', href: '/super-admin/features', icon: LayoutGrid },
   { label: 'Profile', href: '/super-admin/profile', icon: User },
 ];
 

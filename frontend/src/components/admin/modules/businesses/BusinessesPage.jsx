@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Building2, HelpCircle, Trash2, Plus, RotateCcw, MoreHorizontal } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Building2, HelpCircle, Trash2, Plus, RotateCcw, MoreHorizontal, ArchiveRestore } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -87,6 +88,7 @@ function SkeletonRow() {
 }
 
 export default function BusinessesPage() {
+  const router = useRouter();
 
   // Active businesses list
   const [businesses, setBusinesses] = useState([]);
@@ -123,13 +125,14 @@ export default function BusinessesPage() {
       setLoading(true);
       setError(null);
       const data = await listBusinesses();
-      setBusinesses(Array.isArray(data) ? data : (data?.items ?? []));
+      const items = Array.isArray(data) ? data : (data?.items ?? []);
+      setBusinesses(items);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load businesses');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     loadBusinesses();
@@ -256,6 +259,11 @@ export default function BusinessesPage() {
 
   const removeSelectedBiz = businesses.find((b) => (b.id ?? b._id) === removeSelectedId);
 
+  function handleSelectBusiness(biz) {
+    const id = biz.id ?? biz._id;
+    router.push(`/admin/businesses/${id}`);
+  }
+
   return (
     <div className="space-y-6 max-w-3xl">
       {/* Page header */}
@@ -274,7 +282,7 @@ export default function BusinessesPage() {
         </div>
 
         {/* Action toolbar */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <Button
             size="sm"
             className="gap-1.5 cursor-pointer"
@@ -285,24 +293,34 @@ export default function BusinessesPage() {
             Add Business
           </Button>
 
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={handleOpenRemoveDialog}
-            className="cursor-pointer"
-          >
-            Remove Business
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors duration-150 cursor-pointer"
-            onClick={handleOpenTrashDialog}
-            aria-label="View deleted businesses"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
+                aria-label="More actions"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem
+                onClick={handleOpenRemoveDialog}
+                className="gap-2 text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Remove Business
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleOpenTrashDialog}
+                className="gap-2 cursor-pointer"
+              >
+                <ArchiveRestore className="h-3.5 w-3.5" />
+                Deleted Businesses
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -353,8 +371,12 @@ export default function BusinessesPage() {
               return (
                 <div
                   key={id}
-                  role="listitem"
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors duration-150"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleSelectBusiness(biz)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSelectBusiness(biz)}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors duration-150 cursor-pointer"
+                  aria-label={`Open ${biz.name}`}
                 >
                   <BusinessAvatar name={biz.name} />
                   <div className="flex-1 min-w-0">
@@ -593,33 +615,35 @@ export default function BusinessesPage() {
                           </p>
                         )}
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0 cursor-pointer">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => handleRestore(id)}
-                            disabled={restoreLoadingId === id}
-                          >
-                            <RotateCcw className="mr-2 h-4 w-4" />
-                            {restoreLoadingId === id ? 'Restoring...' : 'Restore'}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => {
-                              setPermanentDeleteId(id);
-                              setPermanentDeleteName(biz.name);
-                              setPermanentDeleteOpen(true);
-                            }}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
+                          onClick={() => handleRestore(id)}
+                          disabled={restoreLoadingId === id}
+                          aria-label="Restore business"
+                        >
+                          {restoreLoadingId === id ? (
+                            <Spinner />
+                          ) : (
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer"
+                          onClick={() => {
+                            setPermanentDeleteId(id);
+                            setPermanentDeleteName(biz.name);
+                            setPermanentDeleteOpen(true);
+                          }}
+                          aria-label="Permanently delete business"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}

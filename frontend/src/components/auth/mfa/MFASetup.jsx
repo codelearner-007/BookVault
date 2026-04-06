@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Key, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -96,8 +97,16 @@ export function MFASetup({ onStatusChange }) {
   if (initialLoading) {
     return (
       <Card>
-        <CardContent className="flex justify-center items-center p-6">
-          <Loader2 className="h-6 w-6 animate-spin" />
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-5 w-5 rounded" />
+            <Skeleton className="h-5 w-48" />
+          </div>
+          <Skeleton className="h-4 w-64 mt-1" />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Skeleton className="h-16 w-full rounded-lg" />
+          <Skeleton className="h-9 w-full rounded-md" />
         </CardContent>
       </Card>
     );

@@ -12,6 +12,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useGlobal } from '@/lib/context/GlobalContext';
 import { useUser } from '@/lib/hooks/useUser';
 import { ProfileForm } from '@/components/forms/user/ProfileForm';
@@ -56,6 +57,8 @@ export function ProfileSection() {
 
   const roleName = user?.app_metadata?.user_role;
 
+  const isProfileLoading = loading && !profile;
+
   return (
     <div className="space-y-6">
       {success && (
@@ -71,7 +74,9 @@ export function ProfileSection() {
         <CardHeader className="pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              {profile?.avatar_url ? (
+              {isProfileLoading ? (
+                <Skeleton className="w-20 h-20 rounded-full flex-shrink-0" />
+              ) : profile?.avatar_url ? (
                 <Image
                   src={profile.avatar_url}
                   alt="Profile"
@@ -81,25 +86,35 @@ export function ProfileSection() {
                   className="w-20 h-20 rounded-full object-cover border-2 border-border"
                 />
               ) : (
-                <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center border-2 border-border">
+                <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center border-2 border-border flex-shrink-0">
                   <span className="text-2xl text-primary font-semibold">
                     {user?.email ? user.email.charAt(0).toUpperCase() : '?'}
                   </span>
                 </div>
               )}
-              <div>
-                <CardTitle className="text-xl">{profile?.full_name || 'Unnamed User'}</CardTitle>
-                <CardDescription className="mt-1">{user?.email}</CardDescription>
-                <div className="flex items-center gap-2 mt-2">
-                  {roleName && (
-                    <Badge variant="secondary" className="text-xs capitalize font-normal">
-                      {roleName.replace('_', ' ')}
-                    </Badge>
-                  )}
-                </div>
+              <div className="space-y-1">
+                {isProfileLoading ? (
+                  <>
+                    <Skeleton className="h-6 w-40" />
+                    <Skeleton className="h-4 w-52 mt-1" />
+                    <Skeleton className="h-5 w-16 mt-2 rounded-full" />
+                  </>
+                ) : (
+                  <>
+                    <CardTitle className="text-xl">{profile?.full_name || 'Unnamed User'}</CardTitle>
+                    <CardDescription className="mt-1">{user?.email}</CardDescription>
+                    <div className="flex items-center gap-2 mt-2">
+                      {roleName && (
+                        <Badge variant="secondary" className="text-xs capitalize font-normal">
+                          {roleName.replace('_', ' ')}
+                        </Badge>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
-            {!isEditing && (
+            {!isEditing && !isProfileLoading && (
               <Button
                 variant="outline"
                 size="sm"
@@ -113,7 +128,30 @@ export function ProfileSection() {
           </div>
         </CardHeader>
         <CardContent>
-          {isEditing ? (
+          {isProfileLoading ? (
+            <div className="grid gap-6 sm:grid-cols-2 pt-2">
+              <div className="space-y-1.5">
+                <Skeleton className="h-3.5 w-20" />
+                <Skeleton className="h-4 w-36" />
+              </div>
+              <div className="space-y-1.5">
+                <Skeleton className="h-3.5 w-24" />
+                <Skeleton className="h-4 w-48" />
+              </div>
+              <div className="space-y-1.5">
+                <Skeleton className="h-3.5 w-20" />
+                <Skeleton className="h-4 w-28" />
+              </div>
+              <div className="space-y-1.5">
+                <Skeleton className="h-3.5 w-24" />
+                <Skeleton className="h-4 w-32" />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Skeleton className="h-3.5 w-14" />
+                <Skeleton className="h-8 w-72 rounded" />
+              </div>
+            </div>
+          ) : isEditing ? (
             <div className="pt-4 border-t border-border/50">
               <ProfileForm
                 defaultValues={{

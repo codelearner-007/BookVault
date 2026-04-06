@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import get_current_user, get_db, require_role
 from app.schemas.auth import CurrentUser
 from app.schemas.request.business import CreateBusinessRequest
+from app.schemas.request.tab import UpsertBusinessTabsRequest
 from app.schemas.response.business import BusinessListResponse, BusinessResponse
+from app.schemas.response.tab import BusinessTabListResponse
 from app.services.audit_service import AuditService
 from app.services.business_service import BusinessService
 
@@ -80,10 +82,11 @@ async def list_deleted_businesses(
 async def get_business(
     business_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> BusinessResponse:
-    """Get a single business by ID. Requires admin or super_admin role."""
+    """Get a single business by ID owned by the requesting user."""
     service = BusinessService(db)
-    return await service.get(business_id)
+    return await service.get(business_id, str(current_user.user_id))
 
 
 @router.delete(
@@ -98,7 +101,7 @@ async def delete_business(
 ) -> dict:
     """Soft-delete a business by ID. Requires admin or super_admin role."""
     service = BusinessService(db)
-    deleted_name = await service.delete(business_id)
+    deleted_name = await service.delete(business_id, str(current_user.user_id))
 
     audit_service = AuditService(db)
     await audit_service.log_action(
@@ -124,7 +127,7 @@ async def permanently_delete_business(
 ) -> dict:
     """Permanently delete a soft-deleted business. This action is irreversible. Requires admin or super_admin role."""
     service = BusinessService(db)
-    name = await service.hard_delete(business_id)
+    name = await service.hard_delete(business_id, str(current_user.user_id))
 
     audit_service = AuditService(db)
     await audit_service.log_action(
@@ -151,7 +154,7 @@ async def restore_business(
 ) -> BusinessResponse:
     """Restore a soft-deleted business by ID. Requires admin or super_admin role."""
     service = BusinessService(db)
-    restored_business = await service.restore(business_id)
+    restored_business = await service.restore(business_id, str(current_user.user_id))
 
     audit_service = AuditService(db)
     await audit_service.log_action(
@@ -163,3 +166,34 @@ async def restore_business(
     )
 
     return restored_business
+
+
+@router.get(
+    "/{business_id}/tabs",
+    response_model=BusinessTabListResponse,
+    dependencies=[Depends(require_role("admin", "super_admin"))],
+)
+async def list_business_tabs(
+    business_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> BusinessTabListResponse:
+    """List tabs for a specific business owned by the requesting user, filtered by globally-enabled admin tabs."""
+    service = BusinessService(db)
+    return await service.list_business_tabs(business_id, str(current_user.user_id))
+
+
+@router.put(
+    "/{business_id}/tabs",
+    response_model=BusinessTabListResponse,
+    dependencies=[Depends(require_role("admin", "super_admin"))],
+)
+async def upsert_business_tabs(
+    business_id: str,
+    body: UpsertBusinessTabsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> BusinessTabListResponse:
+    """Update tab enabled/order configuration for a specific business owned by the requesting user."""
+    service = BusinessService(db)
+    return await service.upsert_business_tabs(business_id, str(current_user.user_id), body.items)

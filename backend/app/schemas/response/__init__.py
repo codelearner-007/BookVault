@@ -10,13 +10,23 @@ from app.schemas.response.permission import (
 )
 from app.schemas.response.profile import ProfileResponse
 from app.schemas.response.role import RoleResponse, RoleWithPermissionsResponse
+from app.schemas.response.tab import (
+    AdminTabListResponse,
+    AdminTabResponse,
+    BusinessTabListResponse,
+    BusinessTabResponse,
+)
 from app.schemas.response.user import UserStatsResponse, UserWithRolesResponse
 from app.schemas.response.user_role import UserRoleResponse
 
 __all__ = [
+    "AdminTabListResponse",
+    "AdminTabResponse",
     "AuditLogResponse",
     "BusinessListResponse",
     "BusinessResponse",
+    "BusinessTabListResponse",
+    "BusinessTabResponse",
     "CurrentUserResponse",
     "DashboardStatsResponse",
     "PermissionResponse",

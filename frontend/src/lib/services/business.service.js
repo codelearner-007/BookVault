@@ -23,3 +23,23 @@ export async function restoreBusiness(id) {
 export async function permanentDeleteBusiness(id) {
   return apiClient.delete(`/v1/businesses/${id}/permanent`);
 }
+
+export async function getBusiness(id) {
+  return apiClient.get(`/v1/businesses/${id}`);
+}
+
+export async function listBusinessTabs(businessId) {
+  return apiClient.get(`/v1/businesses/${businessId}/tabs`);
+}
+
+export async function updateBusinessTabs(businessId, items) {
+  return apiClient.put(`/v1/businesses/${businessId}/tabs`, { items });
+}
+
+export async function listAdminTabs() {
+  return apiClient.get('/v1/admin-tabs');
+}
+
+export async function updateAdminTabs(items) {
+  return apiClient.put('/v1/admin-tabs', { items });
+}

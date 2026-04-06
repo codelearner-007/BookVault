@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
@@ -13,17 +12,11 @@ const VALID_TABS = ['profile', 'password', 'security'];
 export default function SuperAdminProfilePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState('profile');
 
-  useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab && VALID_TABS.includes(tab)) {
-      setActiveTab(tab);
-    }
-  }, [searchParams]);
+  const tabParam = searchParams.get('tab');
+  const activeTab = VALID_TABS.includes(tabParam) ? tabParam : 'profile';
 
   const handleTabChange = (tab) => {
-    setActiveTab(tab);
     router.push(`/super-admin/profile?tab=${tab}`, { scroll: false });
   };
 
