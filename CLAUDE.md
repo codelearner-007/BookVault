@@ -589,6 +589,28 @@ Component → Service → API Route (Next.js or FastAPI)
 - **Use `NOT NULL` by default.** Only allow NULL when absence is a meaningful business state.
 - **Each migration must be atomic and reversible** (include a rollback plan in a comment).
 
+### Migration Naming Convention (REQUIRED)
+Migration filenames follow the pattern: `YYYYMMDDNNNNNN_description.sql`
+- `YYYYMMDD` = today's date (e.g. `20260407`)
+- `NNNNNN` = 6-digit zero-padded sequence (000000, 000001, 000002, …)
+- **Sequence must be continuous** — always check existing files first with `ls supabase/migrations/` and pick the next number
+
+**Before creating any migration file:**
+1. List all files in `supabase/migrations/`
+2. Find the highest sequence number for today's date
+3. Increment by 1 — never skip, never reuse
+
+**Example (today = 2026-04-07, last file is `20260407000003_bank_accounts.sql`):**
+- Next file → `20260407000004_your_description.sql`
+
+**If the date changes (new day), reset sequence to 000000:**
+- `20260408000000_first_migration_today.sql`
+
+**Never:**
+- ❌ Guess or hardcode a sequence number without checking existing files
+- ❌ Reuse or duplicate a sequence number
+- ❌ Use a different date format
+
 ### Code Review Checklist (run mentally before finishing any task)
 - [ ] No unused imports or variables
 - [ ] No commented-out code
