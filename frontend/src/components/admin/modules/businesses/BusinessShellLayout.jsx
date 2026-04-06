@@ -35,6 +35,7 @@ import BusinessCustomize from './tabs/BusinessCustomize';
 import BusinessDetails from './tabs/BusinessDetails';
 import BusinessChartOfAccounts from './tabs/BusinessChartOfAccounts';
 import BusinessBankAndCashAccounts from './tabs/BusinessBankAndCashAccounts';
+import BusinessCustomers from './tabs/BusinessCustomers';
 
 const TAB_ICONS = {
   summary: LayoutDashboard,
@@ -44,6 +45,7 @@ const TAB_ICONS = {
   receipt: Receipt,
   payments: CreditCard,
   'chart-of-accounts': ListTree,
+  customers: Users,
   settings: Settings,
   members: Users,
   overview: LayoutDashboard,
@@ -56,6 +58,7 @@ const TAB_COMPONENTS = {
   members: BusinessMembers,
   settings: BusinessSettings,
   'bank-and-cash-accounts': BusinessBankAndCashAccounts,
+  customers: BusinessCustomers,
 };
 
 // Sub-pages rendered under the Settings tab via ?tab=settings&page=<key>

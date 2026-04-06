@@ -10,10 +10,14 @@
 - `role_permissions` - role_id + permission_id junction (UNIQUE together)
 - `audit_logs` - user_id, action, module, resource_id, details (JSONB), ip_address, user_agent
 
-### Bank Accounts Table (migration 20260407000003)
-- `bank_accounts` - business_id (FK businesses CASCADE), coa_account_id (FK coa_accounts RESTRICT), name, account_type CHECK IN ('bank','cash'), opening_balance NUMERIC(15,2), current_balance NUMERIC(15,2), description (nullable); RLS + service_role_all + GRANT ALL to service_role
-- Indexes: idx on business_id, idx on coa_account_id, composite idx on (business_id, coa_account_id)
-- RESTRICT on coa_account_id: prevents deleting a COA account while bank accounts reference it
+### Bank Accounts Table (migration 20260407000003; account_type + coa_fk dropped in 000004/000005)
+- `bank_accounts` - business_id (FK businesses CASCADE), name, opening_balance NUMERIC(15,2), current_balance NUMERIC(15,2), description (nullable); RLS + service_role_all + GRANT ALL to service_role
+- Indexes: idx on business_id
+
+### Customers Table (migration 20260407000006)
+- `customers` - business_id (FK businesses CASCADE), name NOT NULL, code (nullable), billing_address (nullable), delivery_address (nullable), email (nullable); RLS + service_role_all + GRANT ALL to service_role
+- Indexes: idx on business_id, idx on email
+- No unique constraint on email (same customer could appear with multiple records)
 
 ### Business System Tables (7, migration 20260405000000)
 - `businesses` - name, country, owner_id (FK auth.users CASCADE), **deleted_at TIMESTAMPTZ NULL** (soft-delete, migration 20260405000001); idx on owner_id, partial idx on deleted_at WHERE NULL
@@ -66,7 +70,7 @@
 - **Solution**: Two INSERT policies - one for `service_role` (unrestricted), one for `authenticated` (own user_id only)
 
 ## File Locations
-- Migrations: `supabase/migrations/` (9 files through 20260407000003: uuid_v7, rbac_system, jwt_claims_hook, business_system, businesses_soft_delete, fix_audit_logs_rls, drop_business_details_redundant_columns, add_chart_of_accounts_tab, bank_accounts)
+- Migrations: `supabase/migrations/` (12 files through 20260407000006: uuid_v7, rbac_system, jwt_claims_hook, business_system, businesses_soft_delete, fix_audit_logs_rls, drop_business_details_redundant_columns, coa_accounts_type_is_total, backfill_coa_fixed, add_chart_of_accounts_tab, bank_accounts (+ 000004/000005 drop patches), customers)
 - Seeds: `supabase/seeds/rbac_seed.sql`
 - Backend models: `backend/app/models/`
 - Backend schemas: `backend/app/schemas/`
