@@ -171,6 +171,15 @@ class BusinessService:
         await self.repo.session.flush()
         return await self.list_admin_tabs()
 
+    async def delete_admin_tab(self, key: str) -> None:
+        """Delete a global admin tab by key, raising 404 if not found."""
+        deleted = await self.repo.delete_admin_tab_by_key(key)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tab not found",
+            )
+
     # Tabs that are ON by default for every new business.
     DEFAULT_ENABLED_TABS = frozenset({"summary", "settings"})
 

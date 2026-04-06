@@ -109,6 +109,15 @@ class BusinessRepository(BaseRepository[Business]):
         )
         return result.scalar_one_or_none()
 
+    async def delete_admin_tab_by_key(self, key: str) -> bool:
+        """Delete an admin tab by key. Returns True if deleted, False if not found."""
+        row = await self.get_admin_tab_by_key(key)
+        if row is None:
+            return False
+        await self.session.delete(row)
+        await self.session.flush()
+        return True
+
     async def list_business_tabs(self, business_id: str) -> list[BusinessTab]:
         """Return all tabs for a specific business ordered by order_index then id."""
         result = await self.session.execute(

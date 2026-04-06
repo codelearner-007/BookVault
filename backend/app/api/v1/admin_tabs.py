@@ -1,6 +1,6 @@
 """Admin tabs endpoints — super_admin only."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db, require_role
@@ -34,3 +34,13 @@ async def upsert_admin_tabs(
     """Create or update global admin tabs. Super admin only."""
     service = BusinessService(db)
     return await service.upsert_admin_tabs(body.items)
+
+
+@router.delete(
+    "/{key}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_role("super_admin"))],
+)
+async def delete_admin_tab(key: str, db: AsyncSession = Depends(get_db)) -> None:
+    """Delete a global admin tab by key. Super admin only."""
+    await BusinessService(db).delete_admin_tab(key)

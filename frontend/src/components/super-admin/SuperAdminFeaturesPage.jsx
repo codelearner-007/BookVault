@@ -15,12 +15,12 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { LayoutGrid, Plus, X, GripVertical, Loader2, Pencil, Check, ArrowUpDown } from 'lucide-react';
+import { LayoutGrid, Plus, X, GripVertical, Loader2, Pencil, Check, ArrowUpDown, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { listAdminTabs, updateAdminTabs } from '@/lib/services/business.service';
+import { listAdminTabs, updateAdminTabs, deleteAdminTab } from '@/lib/services/business.service';
 
 /* ── Toggle ─────────────────────────────────────────────── */
 function Toggle({ enabled, onChange, label, disabled }) {
@@ -149,9 +149,10 @@ function ReorderModal({ tabs, onSave, onClose, saving }) {
 }
 
 /* ── Tab row ─────────────────────────────────────────────── */
-function TabRow({ tab, onToggle, onLabelSave, disabled }) {
+function TabRow({ tab, onToggle, onLabelSave, onDelete, disabled }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(tab.label);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const inputRef = useRef(null);
 
   function startEdit() {
@@ -172,6 +173,32 @@ function TabRow({ tab, onToggle, onLabelSave, disabled }) {
     if (e.key === 'Escape') { setEditing(false); setDraft(tab.label); }
   }
 
+  if (confirmDelete) {
+    return (
+      <li className="flex items-center gap-3 px-4 py-3 bg-destructive/5 border-l-2 border-destructive">
+        <span className="text-sm text-destructive flex-1 truncate">
+          Delete <span className="font-medium">{tab.label}</span>?
+        </span>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => onDelete()}
+            className="text-xs font-medium text-destructive hover:text-destructive/80 cursor-pointer"
+          >
+            Delete
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(false)}
+            className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+          >
+            Cancel
+          </button>
+        </div>
+      </li>
+    );
+  }
+
   return (
     <li className="flex items-center gap-3 px-4 py-3.5 group/row">
       <div className="flex-1 min-w-0 flex items-center gap-2">
@@ -188,14 +215,24 @@ function TabRow({ tab, onToggle, onLabelSave, disabled }) {
           <span className="text-sm text-foreground truncate">{tab.label}</span>
         )}
         {!editing && !disabled && (
-          <button
-            type="button"
-            onClick={startEdit}
-            aria-label="Edit label"
-            className="opacity-0 group-hover/row:opacity-100 transition-opacity duration-150 flex-shrink-0 text-muted-foreground hover:text-foreground cursor-pointer"
-          >
-            <Pencil className="h-3 w-3" />
-          </button>
+          <div className="flex items-center gap-2 opacity-0 group-hover/row:opacity-100 transition-opacity duration-150">
+            <button
+              type="button"
+              onClick={startEdit}
+              aria-label="Edit label"
+              className="text-muted-foreground hover:text-primary cursor-pointer"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              aria-label="Delete tab"
+              className="text-muted-foreground hover:text-destructive cursor-pointer"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
         )}
         {editing && (
           <button
@@ -209,12 +246,14 @@ function TabRow({ tab, onToggle, onLabelSave, disabled }) {
         )}
       </div>
 
-      <Toggle
-        enabled={tab.enabled}
-        onChange={onToggle}
-        label={`Enable ${tab.label}`}
-        disabled={disabled}
-      />
+      <div className="flex items-center gap-3 flex-shrink-0">
+        <Toggle
+          enabled={tab.enabled}
+          onChange={onToggle}
+          label={`Enable ${tab.label}`}
+          disabled={disabled}
+        />
+      </div>
     </li>
   );
 }
@@ -310,6 +349,16 @@ export default function SuperAdminFeaturesPage() {
       setError('Failed to add tab.');
     } finally {
       setAdding(false);
+    }
+  }
+
+  /* Delete tab */
+  async function handleDeleteTab(key) {
+    try {
+      await deleteAdminTab(key);
+      setTabs(prev => prev.filter(t => t.key !== key));
+    } catch {
+      setError('Failed to delete tab.');
     }
   }
 
@@ -441,6 +490,7 @@ export default function SuperAdminFeaturesPage() {
                   idx={idx}
                   onToggle={() => toggleEnabled(idx)}
                   onLabelSave={val => saveLabel(idx, val)}
+                  onDelete={() => handleDeleteTab(tab.key)}
                   disabled={toggling}
                 />
               ))}
