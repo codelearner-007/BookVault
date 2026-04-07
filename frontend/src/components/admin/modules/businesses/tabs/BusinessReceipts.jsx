@@ -206,7 +206,7 @@ function SortableColRow({ col, onToggle, isLast }) {
 
 /* ── Receipt form (create / edit) ────────────────────────────────────────── */
 
-function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial }) {
+function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial, bankAccounts, coaAccounts, customers, suppliers }) {
   const isEdit = !!initial;
 
   // Core fields
@@ -223,8 +223,6 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial }) {
     : initial?.paid_by_other ? 'other'
     : 'other'
   );
-  const [customers, setCustomers] = useState([]);
-  const [suppliers, setSuppliers] = useState([]);
   const [receivedInAccountId, setReceivedInAccountId] = useState(
     initial?.received_in_account_id ?? ''
   );
@@ -235,44 +233,15 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial }) {
   const [imageUrl, setImageUrl] = useState(initial?.image_url ?? '');
   const [uploading, setUploading] = useState(false);
 
-  // Column visibility flags
-  const [showLineNumber, setShowLineNumber] = useState(false);
-  const [showLineDescription, setShowLineDescription] = useState(false);
-  const [showQty, setShowQty] = useState(false);
-  const [showDiscount, setShowDiscount] = useState(false);
-
+  // Column visibility flags — initialized from existing receipt when editing
+  const [showLineNumber, setShowLineNumber] = useState(initial?.show_line_number ?? false);
+  const [showLineDescription, setShowLineDescription] = useState(initial?.show_description ?? false);
+  const [showQty, setShowQty] = useState(initial?.show_qty ?? false);
+  const [showDiscount, setShowDiscount] = useState(initial?.show_discount ?? false);
 
   // Remote state
-  const [bankAccounts, setBankAccounts] = useState([]);
-  const [coaAccounts, setCoaAccounts] = useState([]);
-  const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-
-  useEffect(() => {
-    let active = true;
-    async function load() {
-      setLoadingAccounts(true);
-      try {
-        const [bankRes, coaRes, custRes, suppRes] = await Promise.all([
-          apiClient.get(`/v1/businesses/${businessId}/bank-accounts`).catch(() => null),
-          apiClient.get(`/v1/businesses/${businessId}/chart-of-accounts/accounts`).catch(() => null),
-          apiClient.get(`/v1/businesses/${businessId}/customers`).catch(() => null),
-          apiClient.get(`/v1/businesses/${businessId}/suppliers`).catch(() => null),
-        ]);
-        if (!active) return;
-        setBankAccounts(bankRes?.items ?? (Array.isArray(bankRes) ? bankRes : []));
-        const coaItems = (coaRes?.items ?? (Array.isArray(coaRes) ? coaRes : [])).filter((a) => a.type === 'pl' && !a.is_total);
-        setCoaAccounts(coaItems);
-        setCustomers(custRes?.items ?? []);
-        setSuppliers(suppRes?.items ?? []);
-      } finally {
-        if (active) setLoadingAccounts(false);
-      }
-    }
-    load();
-    return () => { active = false; };
-  }, [businessId]);
 
   /* ── Line management ─────────────────────────────────────────────────── */
 
@@ -331,6 +300,10 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial }) {
       received_in_account_id: receivedInAccountId || null,
       description: description.trim() || null,
       image_url: imageUrl.trim() || null,
+      show_line_number: showLineNumber,
+      show_description: showLineDescription,
+      show_qty: showQty,
+      show_discount: showDiscount,
       lines: lines
         .filter((l) => l.account_id || parseFloat(l.amount))
         .map(({ id: _id, ...rest }) => ({
@@ -355,8 +328,6 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial }) {
       setSaving(false);
     }
   }
-
-  if (loadingAccounts) return <FormSkeleton />;
 
   const grandTotal = sumLines(lines);
 
@@ -1163,6 +1134,42 @@ export default function BusinessReceipts({ business }) {
 
   const colSensors = useSensors(useSensor(PointerSensor));
 
+  // Cached form data shared across all ReceiptForm instances — fetched once
+  const [formData, setFormData] = useState({
+    bankAccounts: [],
+    coaAccounts: [],
+    customers: [],
+    suppliers: [],
+    loaded: false,
+  });
+
+  const fetchFormData = useCallback(async () => {
+    if (formData.loaded) return;
+    try {
+      const [bankRes, coaRes, custRes, suppRes] = await Promise.all([
+        apiClient.get(`/v1/businesses/${business.id}/bank-accounts`).catch(() => null),
+        apiClient.get(`/v1/businesses/${business.id}/chart-of-accounts/accounts`).catch(() => null),
+        apiClient.get(`/v1/businesses/${business.id}/customers`).catch(() => null),
+        apiClient.get(`/v1/businesses/${business.id}/suppliers`).catch(() => null),
+      ]);
+      setFormData({
+        bankAccounts: bankRes?.items ?? (Array.isArray(bankRes) ? bankRes : []),
+        coaAccounts: (coaRes?.items ?? (Array.isArray(coaRes) ? coaRes : [])).filter(
+          (a) => a.type === 'pl' && !a.is_total
+        ),
+        customers: custRes?.items ?? [],
+        suppliers: suppRes?.items ?? [],
+        loaded: true,
+      });
+    } catch (e) {
+      console.error('Failed to load form data', e);
+    }
+  }, [business.id, formData.loaded]);
+
+  useEffect(() => {
+    fetchFormData();
+  }, [fetchFormData]);
+
   /* ── Navigation helpers ─────────────────────────────────────────────── */
   const goList   = useCallback(() => router.push('?tab=receipt'), [router]);
   const goCreate = useCallback(() => router.push('?tab=receipt&page=create'), [router]);
@@ -1295,6 +1302,10 @@ export default function BusinessReceipts({ business }) {
           onCancel={() => goView(receipt.id)}
           onDelete={() => setDeleteTarget(receipt)}
           initial={receipt}
+          bankAccounts={formData.bankAccounts}
+          coaAccounts={formData.coaAccounts}
+          customers={formData.customers}
+          suppliers={formData.suppliers}
         />
       </>
     );
@@ -1308,6 +1319,10 @@ export default function BusinessReceipts({ business }) {
         businessId={business.id}
         onSaved={() => { fetchReceipts(); goList(); }}
         onCancel={goList}
+        bankAccounts={formData.bankAccounts}
+        coaAccounts={formData.coaAccounts}
+        customers={formData.customers}
+        suppliers={formData.suppliers}
       />
     );
   }
@@ -1436,14 +1451,14 @@ export default function BusinessReceipts({ business }) {
                       if (col.key === 'paid_by') {
                         return (
                           <td key="paid_by" className="px-4 py-2.5 text-muted-foreground border-r border-border whitespace-nowrap">
-                            {receipt.paid_by_other || (receipt.paid_by_contact_id ? 'Contact' : '—')}
+                            {receipt.paid_by_other || receipt.paid_by_name || '—'}
                           </td>
                         );
                       }
                       if (col.key === 'received_in') {
                         return (
                           <td key="received_in" className="px-4 py-2.5 text-muted-foreground border-r border-border whitespace-nowrap">
-                            {receipt.received_in_account_id || '—'}
+                            {receipt.received_in_account_name || '—'}
                           </td>
                         );
                       }

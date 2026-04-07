@@ -61,7 +61,8 @@ class ReceiptService:
         await self._require_business(business_id)
         receipt = await self.repo.create(business_id=business_id, **fields)
         await self._refresh_suspense()
-        return ReceiptResponse.model_validate(receipt)
+        enriched = await self.repo.get_with_names(business_id, receipt.id)
+        return ReceiptResponse.model_validate(enriched)
 
     async def update_receipt(
         self,
@@ -78,7 +79,8 @@ class ReceiptService:
                 detail="Receipt not found",
             )
         await self._refresh_suspense()
-        return ReceiptResponse.model_validate(updated)
+        enriched = await self.repo.get_with_names(business_id, receipt_id)
+        return ReceiptResponse.model_validate(enriched)
 
     async def delete_receipt(self, business_id: str, receipt_id: str) -> None:
         """Delete a receipt, raising 404 if not found."""

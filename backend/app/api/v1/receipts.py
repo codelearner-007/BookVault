@@ -90,7 +90,6 @@ async def delete_receipt(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> None:
-    await ReceiptService(db).get_receipt(business_id, receipt_id)
     await ReceiptService(db).delete_receipt(business_id, receipt_id)
     await AuditService(db).log_action(
         user_id=current_user.user_id,
