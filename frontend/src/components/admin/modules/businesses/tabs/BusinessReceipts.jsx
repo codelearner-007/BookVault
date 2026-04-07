@@ -1075,7 +1075,7 @@ function ReceiptView({ receipt, onBack, onEdit }) {
 
 /* ── Main component ──────────────────────────────────────────────────────── */
 
-export default function BusinessReceipts({ business }) {
+export default function BusinessReceipts({ business, onBankRefresh }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const activePage = searchParams.get('page') || null;
@@ -1223,7 +1223,7 @@ export default function BusinessReceipts({ business }) {
           onOpenChange={(v) => !v && setDeleteTarget(null)}
           businessId={business.id}
           receipt={deleteTarget}
-          onDeleted={() => { setDeleteTarget(null); fetchReceipts(); goList(); }}
+          onDeleted={() => { setDeleteTarget(null); fetchReceipts(); onBankRefresh?.(); goList(); }}
         />
         <ReceiptView
           receipt={receipt}
@@ -1245,12 +1245,12 @@ export default function BusinessReceipts({ business }) {
           onOpenChange={(v) => !v && setDeleteTarget(null)}
           businessId={business.id}
           receipt={deleteTarget}
-          onDeleted={() => { setDeleteTarget(null); fetchReceipts(); goList(); }}
+          onDeleted={() => { setDeleteTarget(null); fetchReceipts(); onBankRefresh?.(); goList(); }}
         />
         <ReceiptForm
           key={receipt.id}
           businessId={business.id}
-          onSaved={(updated) => { fetchReceipts(); goView(updated.id); }}
+          onSaved={(updated) => { fetchReceipts(); onBankRefresh?.(); goView(updated.id); }}
           onCancel={() => goView(receipt.id)}
           onDelete={() => setDeleteTarget(receipt)}
           initial={receipt}
@@ -1269,7 +1269,7 @@ export default function BusinessReceipts({ business }) {
       <ReceiptForm
         key="create"
         businessId={business.id}
-        onSaved={() => { fetchReceipts(); goList(); }}
+        onSaved={() => { fetchReceipts(); onBankRefresh?.(); goList(); }}
         onCancel={goList}
         bankAccounts={formData.bankAccounts}
         coaAccounts={formData.coaAccounts}

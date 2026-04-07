@@ -97,8 +97,15 @@
 - RLS: single policy `receipts_bucket_service_role_all` on `storage.objects` FOR ALL TO service_role WHERE bucket_id='receipts'
 - No access granted to anon or authenticated — FastAPI backend (service_role) proxies all file I/O
 
+### Bank Account Balance Trigger (migration 20260407000019)
+- `recalculate_bank_account_balance(p_account_id UUID)` - SECURITY DEFINER; sums `(elem->>'total')::NUMERIC` from `jsonb_array_elements(lines)` for all receipts with that account; sets `current_balance = opening_balance + sum`; NULL p_account_id is a no-op
+- `trg_fn_receipts_recalculate_balance()` - AFTER trigger dispatcher; INSERT→recalc NEW; DELETE→recalc OLD; UPDATE→recalc both if account changed, else recalc NEW
+- Trigger `trg_receipts_recalculate_balance` AFTER INSERT OR UPDATE OR DELETE ON receipts FOR EACH ROW
+- Backfill: single UPDATE...FROM (SELECT...GROUP BY) pattern to recalc all existing accounts at migration time
+- Pattern note: COALESCE to 0 ensures accounts with no receipts still equal opening_balance
+
 ## File Locations
-- Migrations: `supabase/migrations/` (24 files through 20260407000018: uuid_v7, rbac_system, jwt_claims_hook, business_system, businesses_soft_delete, fix_audit_logs_rls, drop_business_details_redundant_columns, coa_accounts_type_is_total, backfill_coa_fixed, add_chart_of_accounts_tab, bank_accounts (+ 000004/000005 drop patches), customers, add_customers_tab, suppliers, add_suppliers_tab, add_history_tab, remove_history_tab, receipts, add_receipts_tab, suspense_materialized_view, receipt_attachments_bucket, receipts_composite_index, business_ui_preferences, business_tab_columns)
+- Migrations: `supabase/migrations/` (25 files through 20260407000019: uuid_v7, rbac_system, jwt_claims_hook, business_system, businesses_soft_delete, fix_audit_logs_rls, drop_business_details_redundant_columns, coa_accounts_type_is_total, backfill_coa_fixed, add_chart_of_accounts_tab, bank_accounts (+ 000004/000005 drop patches), customers, add_customers_tab, suppliers, add_suppliers_tab, add_history_tab, remove_history_tab, receipts, add_receipts_tab, suspense_materialized_view, receipt_attachments_bucket, receipts_composite_index, business_ui_preferences, business_tab_columns, recalculate_bank_balance_trigger)
 - Seeds: `supabase/seeds/rbac_seed.sql`
 - Backend models: `backend/app/models/`
 - Backend schemas: `backend/app/schemas/`

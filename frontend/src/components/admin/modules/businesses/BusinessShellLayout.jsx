@@ -168,6 +168,7 @@ export default function BusinessShellLayout({ business: initialBusiness, initial
     return localStorage.getItem('business-sidebar-expanded') === 'true';
   });
   const [business, setBusiness] = useState(initialBusiness);
+  const [bankRefreshKey, setBankRefreshKey] = useState(0);
 
   const activeTab = searchParams.get('tab') || 'summary';
   const activePage = searchParams.get('page') || null;
@@ -223,6 +224,8 @@ export default function BusinessShellLayout({ business: initialBusiness, initial
     () => fetchTabs(activeTab, activePage, { silent: true }),
     [fetchTabs, activeTab, activePage]
   );
+
+  const handleBankRefresh = useCallback(() => setBankRefreshKey((k) => k + 1), []);
 
   const handleTabClick = (key) => {
     router.push(`?tab=${key}`);
@@ -280,6 +283,8 @@ export default function BusinessShellLayout({ business: initialBusiness, initial
                 business={business}
                 onBusinessUpdated={handleBusinessUpdated}
                 onTabsChanged={onTabsChanged}
+                bankRefreshKey={bankRefreshKey}
+                onBankRefresh={handleBankRefresh}
               />
             </div>
           );

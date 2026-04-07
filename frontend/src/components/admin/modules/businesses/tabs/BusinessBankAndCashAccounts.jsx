@@ -364,7 +364,7 @@ function ViewDialog({ open, onOpenChange, account }) {
 
 /* ── Main component ──────────────────────────────────────────────────────── */
 
-export default function BusinessBankAndCashAccounts({ business }) {
+export default function BusinessBankAndCashAccounts({ business, bankRefreshKey = 0 }) {
   const [accounts, setAccounts] = useState([]);
   const [coaTotal, setCoaTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -407,7 +407,7 @@ export default function BusinessBankAndCashAccounts({ business }) {
     } finally {
       setIsLoading(false);
     }
-  }, [business.id]);
+  }, [business.id, bankRefreshKey]);
 
   useEffect(() => {
     fetchAccounts();

@@ -4,7 +4,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { listCoaGroups, listCoaAccounts } from '@/lib/services/coa.service';
 import { getSuspenseBalance } from '@/lib/services/suspense.service';
+import { listBankAccounts } from '@/lib/services/bank-accounts.service';
 import BusinessSuspense from './BusinessSuspense';
+
+const CASH_GROUP_KEYWORDS = ['cash', 'bank', 'cash and cash equivalents', 'cash & cash equivalents'];
+
+function isCashGroup(groupName) {
+  const lower = (groupName ?? '').toLowerCase().trim();
+  return CASH_GROUP_KEYWORDS.some((kw) => lower === kw || lower.includes(kw));
+}
+
+function formatAmount(value) {
+  const num = typeof value === 'number' ? value : parseFloat(value ?? 0);
+  return isNaN(num) ? '—' : num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 function CoaSkeleton() {
   return (
@@ -25,14 +38,18 @@ function CoaSkeleton() {
   );
 }
 
-function GroupCard({ group, accounts }) {
+function GroupCard({ group, accounts, bankTotal }) {
   const groupAccounts = accounts.filter((a) => a.group_id === group.id);
+  const showBankTotal = bankTotal !== null && isCashGroup(group.name);
+  const groupTotal = showBankTotal ? bankTotal : null;
 
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
         <span className="text-sm font-bold text-foreground">{group.name}</span>
-        <span className="text-sm font-semibold text-foreground tabular-nums">—</span>
+        <span className="text-sm font-semibold text-foreground tabular-nums">
+          {groupTotal !== null ? formatAmount(groupTotal) : '—'}
+        </span>
       </div>
       {groupAccounts.length === 0 ? (
         <div className="px-4 py-3 text-xs text-muted-foreground">No accounts</div>
@@ -78,9 +95,10 @@ function NetProfitRow() {
   );
 }
 
-export default function BusinessFinancialSummary({ business }) {
+export default function BusinessFinancialSummary({ business, bankRefreshKey = 0 }) {
   const [groups, setGroups] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [bankTotal, setBankTotal] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [suspenseBalance, setSuspenseBalance] = useState(0);
   const [showSuspense, setShowSuspense] = useState(false);
@@ -88,21 +106,27 @@ export default function BusinessFinancialSummary({ business }) {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [groupsData, accountsData, suspenseData] = await Promise.all([
+      const [groupsData, accountsData, suspenseData, bankData] = await Promise.all([
         listCoaGroups(business.id),
         listCoaAccounts(business.id),
         getSuspenseBalance(business.id).catch(() => ({ suspense_balance: 0 })),
+        listBankAccounts(business.id).catch(() => null),
       ]);
       setGroups(groupsData.items || groupsData || []);
       setAccounts(accountsData.items || accountsData || []);
       setSuspenseBalance(parseFloat(suspenseData?.suspense_balance ?? 0));
+
+      const bankList = Array.isArray(bankData) ? bankData : (bankData?.items ?? []);
+      const total = bankList.reduce((sum, a) => sum + (parseFloat(a.current_balance) || 0), 0);
+      setBankTotal(bankList.length > 0 ? total : null);
     } catch {
       setGroups([]);
       setAccounts([]);
+      setBankTotal(null);
     } finally {
       setIsLoading(false);
     }
-  }, [business.id]);
+  }, [business.id, bankRefreshKey]);
 
   useEffect(() => {
     fetchData();
@@ -126,7 +150,7 @@ export default function BusinessFinancialSummary({ business }) {
             Balance Sheet
           </p>
           {bsGroups.map((group) => (
-            <GroupCard key={group.id} group={group} accounts={accounts} />
+            <GroupCard key={group.id} group={group} accounts={accounts} bankTotal={bankTotal} />
           ))}
           {suspenseBalance !== 0 && (
             <button

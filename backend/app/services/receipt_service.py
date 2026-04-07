@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.repositories.bank_account_repository import BankAccountRepository
 from app.repositories.business_repository import BusinessRepository
 from app.repositories.receipt_repository import ReceiptRepository
 from app.schemas.response.receipt import ReceiptListResponse, ReceiptResponse
@@ -16,6 +17,7 @@ class ReceiptService:
         self.session = session
         self.repo = ReceiptRepository(session)
         self.business_repo = BusinessRepository(session)
+        self.bank_account_repo = BankAccountRepository(session)
 
     async def _refresh_suspense(self) -> None:
         """Refresh the suspense balance materialized view."""
@@ -61,6 +63,9 @@ class ReceiptService:
         await self._require_business(business_id)
         receipt = await self.repo.create(business_id=business_id, **fields)
         await self._refresh_suspense()
+        account_id = receipt.received_in_account_id
+        if account_id:
+            await self.bank_account_repo.recalculate_balance(business_id, account_id)
         enriched = await self.repo.get_with_names(business_id, receipt.id)
         return ReceiptResponse.model_validate(enriched)
 
@@ -72,23 +77,33 @@ class ReceiptService:
     ) -> ReceiptResponse:
         """Update a receipt's fields, raising 404 if not found."""
         await self._require_business(business_id)
-        updated = await self.repo.update(business_id, receipt_id, **fields)
-        if not updated:
+        existing = await self.repo.get(business_id, receipt_id)
+        if not existing:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Receipt not found",
             )
+        old_account_id = existing.received_in_account_id
+        updated = await self.repo.update(business_id, receipt_id, **fields)
         await self._refresh_suspense()
+        new_account_id = updated.received_in_account_id
+        accounts_to_recalculate = {a for a in (old_account_id, new_account_id) if a}
+        for account_id in accounts_to_recalculate:
+            await self.bank_account_repo.recalculate_balance(business_id, account_id)
         enriched = await self.repo.get_with_names(business_id, receipt_id)
         return ReceiptResponse.model_validate(enriched)
 
     async def delete_receipt(self, business_id: str, receipt_id: str) -> None:
         """Delete a receipt, raising 404 if not found."""
         await self._require_business(business_id)
-        deleted = await self.repo.delete(business_id, receipt_id)
-        if not deleted:
+        existing = await self.repo.get(business_id, receipt_id)
+        if not existing:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Receipt not found",
             )
+        account_id = existing.received_in_account_id
+        await self.repo.delete(business_id, receipt_id)
         await self._refresh_suspense()
+        if account_id:
+            await self.bank_account_repo.recalculate_balance(business_id, account_id)

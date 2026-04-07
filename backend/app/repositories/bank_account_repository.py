@@ -2,7 +2,7 @@
 
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bank_account import BankAccount
@@ -89,3 +89,31 @@ class BankAccountRepository(BaseRepository[BankAccount]):
         await self.session.delete(account)
         await self.session.flush()
         return True
+
+    async def recalculate_balance(
+        self, business_id: str, bank_account_id: str
+    ) -> None:
+        """Recompute current_balance from opening_balance + sum of all receipt line totals.
+
+        Uses a raw SQL expression to aggregate the JSONB ``lines`` array totals from
+        the receipts table.  This mirrors the DB trigger as a belt-and-suspenders
+        safety net run after every receipt write.
+        """
+        await self.session.execute(
+            text(
+                """
+                UPDATE bank_accounts
+                SET current_balance = opening_balance + COALESCE((
+                    SELECT SUM((line->>'total')::numeric)
+                    FROM   receipts,
+                           LATERAL jsonb_array_elements(lines) AS line
+                    WHERE  receipts.received_in_account_id = :account_id
+                    AND    receipts.business_id            = :business_id
+                ), 0)
+                WHERE id          = :account_id
+                AND   business_id = :business_id
+                """
+            ),
+            {"account_id": bank_account_id, "business_id": business_id},
+        )
+        await self.session.flush()
