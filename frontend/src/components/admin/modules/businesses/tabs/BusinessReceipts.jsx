@@ -574,9 +574,8 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial, bankAcc
                   {showQty && (
                     <td className="px-2 py-1.5 border-r border-border">
                       <Input
-                        type="number"
-                        min="0"
-                        step="any"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="1"
                         value={line.qty ?? ''}
                         onChange={(e) => updateLine(line.id, 'qty', e.target.value)}
@@ -587,9 +586,8 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial, bankAcc
                   )}
                   <td className="px-2 py-1.5 border-r border-border">
                     <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.00"
                       value={line.amount}
                       onChange={(e) => updateLine(line.id, 'amount', e.target.value)}
@@ -600,9 +598,8 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial, bankAcc
                   {showDiscount && (
                     <td className="px-2 py-1.5 border-r border-border">
                       <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="0.00"
                         value={line.discount ?? ''}
                         onChange={(e) => updateLine(line.id, 'discount', e.target.value)}
@@ -1075,7 +1072,7 @@ function ReceiptView({ receipt, onBack, onEdit }) {
 
 /* ── Main component ──────────────────────────────────────────────────────── */
 
-export default function BusinessReceipts({ business, onBankRefresh }) {
+export default function BusinessReceipts({ business, onBankRefresh, bankRefreshKey = 0 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const activePage = searchParams.get('page') || null;
@@ -1131,6 +1128,14 @@ export default function BusinessReceipts({ business, onBankRefresh }) {
   useEffect(() => {
     fetchFormData();
   }, [fetchFormData]);
+
+  useEffect(() => {
+    if (bankRefreshKey === 0) return;
+    apiClient.get(`/v1/businesses/${business.id}/bank-accounts`).then((bankRes) => {
+      const accounts = bankRes?.items ?? (Array.isArray(bankRes) ? bankRes : []);
+      setFormData((prev) => ({ ...prev, bankAccounts: accounts }));
+    }).catch(() => {});
+  }, [bankRefreshKey, business.id]);
 
   /* ── Navigation helpers ─────────────────────────────────────────────── */
   const goList   = useCallback(() => router.push('?tab=receipt'), [router]);
