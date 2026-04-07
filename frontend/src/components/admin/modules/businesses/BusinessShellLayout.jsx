@@ -37,7 +37,7 @@ import BusinessChartOfAccounts from './tabs/BusinessChartOfAccounts';
 import BusinessBankAndCashAccounts from './tabs/BusinessBankAndCashAccounts';
 import BusinessCustomers from './tabs/BusinessCustomers';
 import BusinessSuppliers from './tabs/BusinessSuppliers';
-
+import BusinessHistory from './tabs/BusinessHistory';
 const TAB_ICONS = {
   summary: LayoutDashboard,
   'bank-and-cash-accounts': Landmark,
@@ -170,7 +170,7 @@ export default function BusinessShellLayout({ business: initialBusiness, onBack 
 
   const activeTab = searchParams.get('tab') || null;
   const activePage = searchParams.get('page') || null;
-  const isCustomizing = activeTab === 'customize';
+  const isCustomizing = activePage === 'customize';
 
   const fetchTabs = useCallback(async (currentTab) => {
     setTabsLoading(true);
@@ -181,7 +181,8 @@ export default function BusinessShellLayout({ business: initialBusiness, onBack 
       const enabledTabs = items.filter((t) => t.enabled);
       const currentTabValid =
         enabledTabs.some((t) => t.key === currentTab) ||
-        currentTab === 'customize';
+        activePage === 'customize' ||
+        activePage === 'history';
       if (!currentTabValid && enabledTabs.length > 0) {
         router.replace(`?tab=${enabledTabs[0].key}`);
       }
@@ -197,7 +198,6 @@ export default function BusinessShellLayout({ business: initialBusiness, onBack 
   }, [fetchTabs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTabClick = (key) => {
-    if (isCustomizing) return;
     router.push(`?tab=${key}`);
     setSidebarOpen(false);
   };
@@ -215,17 +215,20 @@ export default function BusinessShellLayout({ business: initialBusiness, onBack 
   const enabledTabs = tabs.filter((t) => t.enabled);
 
   let tabContent = null;
-  if (tabsLoading) {
-    tabContent = <TabContentSkeleton />;
-  } else if (activeTab === 'customize') {
+  if (activePage === 'history') {
+    tabContent = <BusinessHistory business={business} />;
+  } else if (activePage === 'customize') {
     tabContent = (
       <BusinessCustomize
         business={business}
         tabs={tabs}
         setTabs={setTabs}
         onSaved={handleTabsSaved}
+        isLoading={tabsLoading}
       />
     );
+  } else if (tabsLoading) {
+    tabContent = <TabContentSkeleton />;
   } else if (activeTab === 'settings' && activePage) {
     const PageComponent = SETTINGS_PAGE_COMPONENTS[activePage];
     tabContent = PageComponent ? (
@@ -294,9 +297,13 @@ export default function BusinessShellLayout({ business: initialBusiness, onBack 
           </Button>
 
           {/* Business name */}
-          <span className="text-base font-semibold text-foreground truncate min-w-0">
+          <button
+            type="button"
+            onClick={() => router.push('?tab=summary')}
+            className="text-base font-semibold text-foreground truncate min-w-0 hover:text-primary transition-colors cursor-pointer"
+          >
             {business.name}
-          </span>
+          </button>
 
           {/* Divider */}
           <span className="text-border text-lg select-none flex-shrink-0">|</span>
@@ -304,8 +311,10 @@ export default function BusinessShellLayout({ business: initialBusiness, onBack 
           {/* Active tab name + sidebar toggle */}
           <div className="flex items-center gap-1.5 flex-1 min-w-0">
             <span className="text-sm text-muted-foreground truncate">
-              {activeTab === 'customize'
+              {activePage === 'customize'
                 ? 'Customize'
+                : activePage === 'history'
+                ? 'History'
                 : enabledTabs.find((t) => t.key === activeTab)?.label || ''}
             </span>
             <Tooltip>
@@ -341,7 +350,7 @@ export default function BusinessShellLayout({ business: initialBusiness, onBack 
                 <Mail className="h-3.5 w-3.5" />
                 Emails
               </Button>
-              <Button variant="outline" size="sm" className="hidden sm:flex gap-1.5">
+              <Button variant="outline" size="sm" className="hidden sm:flex gap-1.5" onClick={() => router.push('?page=history')}>
                 <History className="h-3.5 w-3.5" />
                 History
               </Button>
@@ -353,7 +362,7 @@ export default function BusinessShellLayout({ business: initialBusiness, onBack 
               <Button variant="outline" size="icon" className="sm:hidden h-8 w-8" aria-label="Emails">
                 <Mail className="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="icon" className="sm:hidden h-8 w-8" aria-label="History">
+              <Button variant="outline" size="icon" className="sm:hidden h-8 w-8" aria-label="History" onClick={() => router.push('?page=history')}>
                 <History className="h-4 w-4" />
               </Button>
               <Button variant="outline" size="icon" className="sm:hidden h-8 w-8" aria-label="Backup">
@@ -433,7 +442,7 @@ export default function BusinessShellLayout({ business: initialBusiness, onBack 
                     isActive={isCustomizing}
                     isExpanded={sidebarExpanded}
                     onClick={() => {
-                      router.push('?tab=customize');
+                      router.push('?page=customize');
                       setSidebarOpen(false);
                     }}
                   />

@@ -18,7 +18,34 @@ import { CSS } from '@dnd-kit/utilities';
 import { Sliders, GripVertical, Loader2, ArrowUpDown, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { updateBusinessTabs } from '@/lib/services/business.service';
+
+function CustomizeSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-32" />
+          <Skeleton className="h-4 w-56" />
+        </div>
+        <Skeleton className="h-8 w-20" />
+      </div>
+      <Card className="border-border shadow-sm overflow-hidden">
+        <CardContent className="p-0">
+          <ul className="divide-y divide-border">
+            {[1, 2, 3, 4].map((i) => (
+              <li key={i} className="flex items-center justify-between gap-4 px-4 py-3.5">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-6 w-11 rounded-full" />
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 /* ── Toggle ─────────────────────────────────────────────── */
 function Toggle({ enabled, onChange, label, disabled }) {
@@ -146,7 +173,8 @@ function ReorderModal({ tabs, onSave, onClose, saving }) {
 }
 
 /* ── Page ────────────────────────────────────────────────── */
-export default function BusinessCustomize({ business, tabs, setTabs, onSaved }) {
+export default function BusinessCustomize({ business, tabs, setTabs, onSaved, isLoading }) {
+  if (isLoading) return <CustomizeSkeleton />;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [showReorder, setShowReorder] = useState(false);

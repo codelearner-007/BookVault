@@ -27,6 +27,7 @@ async def list_audit_logs(
     action: Optional[str] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
+    business_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> PaginatedResponse[AuditLogResponse]:
@@ -35,5 +36,5 @@ async def list_audit_logs(
     return await service.list_logs_paginated(
         page=page, page_size=page_size,
         module=module, action=action, user_id=current_user.user_id,
-        start_date=start_date, end_date=end_date,
+        start_date=start_date, end_date=end_date, business_id=business_id,
     )

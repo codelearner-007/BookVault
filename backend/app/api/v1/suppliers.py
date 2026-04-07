@@ -3,9 +3,11 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_db, require_role
+from app.core.dependencies import get_current_user, get_db, require_role
+from app.schemas.auth import CurrentUser
 from app.schemas.request.supplier import SupplierCreate, SupplierUpdate
 from app.schemas.response.supplier import SupplierListResponse, SupplierResponse
+from app.services.audit_service import AuditService
 from app.services.supplier_service import SupplierService
 
 router = APIRouter(
@@ -29,8 +31,9 @@ async def create_supplier(
     business_id: str,
     body: SupplierCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> SupplierResponse:
-    return await SupplierService(db).create_supplier(
+    result = await SupplierService(db).create_supplier(
         business_id=business_id,
         name=body.name,
         code=body.code,
@@ -38,6 +41,14 @@ async def create_supplier(
         delivery_address=body.delivery_address,
         email=body.email,
     )
+    await AuditService(db).log_action(
+        user_id=current_user.user_id,
+        action="Create",
+        module="Supplier",
+        resource_id=str(result.id),
+        details={"business_id": business_id, "name": result.name},
+    )
+    return result
 
 
 @router.get("/{supplier_id}", response_model=SupplierResponse, dependencies=_ROLE_DEP)
@@ -55,13 +66,22 @@ async def update_supplier(
     supplier_id: str,
     body: SupplierUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> SupplierResponse:
     fields = {k: v for k, v in body.model_dump().items() if k in body.model_fields_set}
-    return await SupplierService(db).update_supplier(
+    result = await SupplierService(db).update_supplier(
         business_id=business_id,
         supplier_id=supplier_id,
         fields=fields,
     )
+    await AuditService(db).log_action(
+        user_id=current_user.user_id,
+        action="Update",
+        module="Supplier",
+        resource_id=str(result.id),
+        details={"business_id": business_id, "name": result.name},
+    )
+    return result
 
 
 @router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=_ROLE_DEP)
@@ -69,5 +89,14 @@ async def delete_supplier(
     business_id: str,
     supplier_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> None:
+    supplier = await SupplierService(db).get_supplier(business_id, supplier_id)
     await SupplierService(db).delete_supplier(business_id, supplier_id)
+    await AuditService(db).log_action(
+        user_id=current_user.user_id,
+        action="Delete",
+        module="Supplier",
+        resource_id=supplier_id,
+        details={"business_id": business_id, "name": supplier.name},
+    )

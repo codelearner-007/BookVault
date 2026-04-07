@@ -26,10 +26,11 @@ class AuditService:
         user_id: Optional[str] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
+        business_id: Optional[str] = None,
     ) -> PaginatedResponse[AuditLogResponse]:
         total = await self.repository.count_filtered(
             module=module, action=action, user_id=user_id,
-            start_date=start_date, end_date=end_date,
+            start_date=start_date, end_date=end_date, business_id=business_id,
         )
         offset = (page - 1) * page_size
         total_pages = (total + page_size - 1) // page_size
@@ -37,7 +38,7 @@ class AuditService:
         rows = await self.repository.list_filtered(
             offset=offset, limit=page_size,
             module=module, action=action, user_id=user_id,
-            start_date=start_date, end_date=end_date,
+            start_date=start_date, end_date=end_date, business_id=business_id,
         )
 
         items = []

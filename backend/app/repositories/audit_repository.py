@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import func, select, distinct
+from sqlalchemy import func, or_, select, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import AuditLog
@@ -25,6 +25,7 @@ class AuditRepository(BaseRepository[AuditLog]):
         user_id: Optional[str] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
+        business_id: Optional[str] = None,
     ):
         if module:
             query = query.where(AuditLog.module == module)
@@ -36,6 +37,13 @@ class AuditRepository(BaseRepository[AuditLog]):
             query = query.where(AuditLog.created_at >= start_date)
         if end_date:
             query = query.where(AuditLog.created_at <= end_date)
+        if business_id:
+            query = query.where(
+                or_(
+                    AuditLog.resource_id == business_id,
+                    AuditLog.details["business_id"].as_string() == business_id,
+                )
+            )
         return query
 
     async def count_filtered(
@@ -45,10 +53,11 @@ class AuditRepository(BaseRepository[AuditLog]):
         user_id: Optional[str] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
+        business_id: Optional[str] = None,
     ) -> int:
         query = self._apply_filters(
             select(func.count()).select_from(AuditLog),
-            module, action, user_id, start_date, end_date,
+            module, action, user_id, start_date, end_date, business_id,
         )
         result = await self.session.execute(query)
         return result.scalar() or 0
@@ -62,12 +71,13 @@ class AuditRepository(BaseRepository[AuditLog]):
         user_id: Optional[str] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
+        business_id: Optional[str] = None,
     ) -> List[tuple]:
         query = self._apply_filters(
             select(AuditLog, UserProfile.full_name).outerjoin(
                 UserProfile, UserProfile.user_id == AuditLog.user_id
             ),
-            module, action, user_id, start_date, end_date,
+            module, action, user_id, start_date, end_date, business_id,
         )
         query = query.order_by(AuditLog.created_at.desc()).limit(limit).offset(offset)
         result = await self.session.execute(query)
