@@ -9,6 +9,10 @@ class ReceiptLineItem(BaseModel):
     """A single line item within a receipt response."""
 
     account_id: str
+    account_name: str | None = None
+    line_description: str | None = None
+    qty: float | None = None
+    discount: float | None = None
     amount: float
     total: float
 
@@ -25,6 +29,8 @@ class ReceiptResponse(BaseModel):
     paid_by_contact_type: str | None
     paid_by_other: str | None
     received_in_account_id: str | None
+    received_in_account_name: str | None = None
+    paid_by_name: str | None = None
     description: str | None
     lines: list[ReceiptLineItem]
     show_line_number: bool

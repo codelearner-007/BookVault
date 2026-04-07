@@ -33,18 +33,18 @@ class ReceiptService:
             )
 
     async def list_receipts(self, business_id: str) -> ReceiptListResponse:
-        """Return all receipts for the business."""
+        """Return all receipts for the business with resolved name fields."""
         await self._require_business(business_id)
-        items = await self.repo.list_by_business(business_id)
+        items = await self.repo.list_with_names(business_id)
         return ReceiptListResponse(
             items=[ReceiptResponse.model_validate(r) for r in items],
             total=len(items),
         )
 
     async def get_receipt(self, business_id: str, receipt_id: str) -> ReceiptResponse:
-        """Return a single receipt, raising 404 if not found."""
+        """Return a single receipt with resolved name fields, raising 404 if not found."""
         await self._require_business(business_id)
-        receipt = await self.repo.get(business_id, receipt_id)
+        receipt = await self.repo.get_with_names(business_id, receipt_id)
         if not receipt:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

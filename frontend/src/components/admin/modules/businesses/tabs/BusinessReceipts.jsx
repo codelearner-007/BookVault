@@ -974,7 +974,7 @@ function ReceiptViewInfo({ receipt }) {
           <p className="text-xs font-medium text-muted-foreground">Received In</p>
         </div>
         <div className="px-4 py-3">
-          <p className="text-sm text-foreground">{receipt.received_in_account_id || '—'}</p>
+          <p className="text-sm text-foreground">{receipt.received_in_account_name || receipt.received_in_account_id || '—'}</p>
         </div>
       </div>
 
