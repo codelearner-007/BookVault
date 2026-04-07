@@ -307,7 +307,10 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial, bankAcc
       lines: lines
         .filter((l) => l.account_id || parseFloat(l.amount))
         .map(({ id: _id, ...rest }) => ({
-          ...rest,
+          account_id: rest.account_id,
+          line_description: rest.line_description?.trim() || null,
+          qty: rest.qty !== '' && rest.qty != null ? parseFloat(rest.qty) || null : null,
+          discount: rest.discount !== '' && rest.discount != null ? parseFloat(rest.discount) || null : null,
           amount: parseFloat(rest.amount) || 0,
           total: parseFloat(rest.total) || 0,
         })),

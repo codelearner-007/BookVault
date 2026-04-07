@@ -10,6 +10,9 @@ class ReceiptLineItem(BaseModel):
     """A single line item within a receipt."""
 
     account_id: str
+    line_description: Optional[str] = None
+    qty: Optional[float] = None
+    discount: Optional[float] = None
     amount: float
     total: float
 
