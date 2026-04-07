@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Loader2, Trash2, AlertTriangle, Pencil, Eye } from 'lucide-react';
+import { Plus, Loader2, Trash2, AlertTriangle, Pencil, Eye, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -362,6 +362,7 @@ export default function BusinessBankAndCashAccounts({ business }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [viewTarget, setViewTarget] = useState(null);
@@ -383,7 +384,17 @@ export default function BusinessBankAndCashAccounts({ business }) {
     fetchAccounts();
   }, [fetchAccounts]);
 
-  const total = accounts.reduce((sum, a) => sum + (parseFloat(a.current_balance) || 0), 0);
+  const filtered = search.trim()
+    ? accounts.filter((a) => {
+        const q = search.toLowerCase();
+        return (
+          a.name.toLowerCase().includes(q) ||
+          formatBalance(a.current_balance).includes(q)
+        );
+      })
+    : accounts;
+
+  const total = filtered.reduce((sum, a) => sum + (parseFloat(a.current_balance) || 0), 0);
 
   if (isLoading) return <BankAccountsSkeleton />;
 
@@ -417,14 +428,25 @@ export default function BusinessBankAndCashAccounts({ business }) {
             {accounts.length}
           </span>
         </div>
-        <Button
-          size="sm"
-          className="gap-1.5 cursor-pointer"
-          onClick={() => setCreateOpen(true)}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          New Bank or Cash Account
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Search by name or amount…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 pl-8 text-sm w-56"
+            />
+          </div>
+          <Button
+            size="sm"
+            className="gap-1.5 cursor-pointer"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New Bank or Cash Account
+          </Button>
+        </div>
       </div>
 
       {/* Error state */}
@@ -454,14 +476,14 @@ export default function BusinessBankAndCashAccounts({ business }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {accounts.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr>
                 <td colSpan={4} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  Empty
+                  {search.trim() ? 'No accounts match your search.' : 'Empty'}
                 </td>
               </tr>
             ) : (
-              accounts.map((account) => (
+              filtered.map((account) => (
                 <tr key={account.id} className="hover:bg-muted/30 transition-colors duration-150">
                   <td className="px-3 py-2 w-20 border-r border-border text-center">
                     <Button

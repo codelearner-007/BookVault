@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Loader2, Trash2, AlertTriangle, Pencil, Eye } from 'lucide-react';
+import { Plus, Loader2, Trash2, AlertTriangle, Pencil, Eye, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -446,6 +446,7 @@ export default function BusinessSuppliers({ business }) {
   const [suppliers, setSuppliers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [search, setSearch] = useState('');
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
@@ -467,6 +468,16 @@ export default function BusinessSuppliers({ business }) {
   useEffect(() => {
     fetchSuppliers();
   }, [fetchSuppliers]);
+
+  const filtered = search.trim()
+    ? suppliers.filter((s) => {
+        const q = search.toLowerCase();
+        return (
+          s.name.toLowerCase().includes(q) ||
+          (s.email ?? '').toLowerCase().includes(q)
+        );
+      })
+    : suppliers;
 
   if (isLoading) return <SuppliersSkeleton />;
 
@@ -501,14 +512,25 @@ export default function BusinessSuppliers({ business }) {
             {suppliers.length}
           </span>
         </div>
-        <Button
-          size="sm"
-          className="gap-1.5 cursor-pointer"
-          onClick={() => setCreateOpen(true)}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          New Supplier
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Search by name or email…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 pl-8 text-sm w-56"
+            />
+          </div>
+          <Button
+            size="sm"
+            className="gap-1.5 cursor-pointer"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New Supplier
+          </Button>
+        </div>
       </div>
 
       {/* Error state */}
@@ -523,32 +545,32 @@ export default function BusinessSuppliers({ business }) {
         <table className="w-full text-sm min-w-[480px]">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              <th className="px-3 py-2 w-20 border-r border-border text-center text-xs font-semibold text-muted-foreground">
+              <th className="px-3 py-2 w-16 border-r border-border text-center text-xs font-semibold text-muted-foreground">
                 <span className="flex items-center justify-center">
                   <Pencil className="h-3 w-3" />
                 </span>
               </th>
-              <th className="px-3 py-2 w-20 border-r border-border text-center text-xs font-semibold text-muted-foreground">
+              <th className="px-3 py-2 w-16 border-r border-border text-center text-xs font-semibold text-muted-foreground">
                 <span className="flex items-center justify-center">
                   <Eye className="h-3 w-3" />
                 </span>
               </th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border-r border-border">Name</th>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border-r border-border">Code</th>
+              <th className="px-4 py-2 w-28 text-left text-xs font-semibold text-muted-foreground border-r border-border">Code</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">Email</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {suppliers.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  No suppliers yet
+                  {search.trim() ? 'No suppliers match your search.' : 'No suppliers yet'}
                 </td>
               </tr>
             ) : (
-              suppliers.map((supplier) => (
+              filtered.map((supplier) => (
                 <tr key={supplier.id} className="hover:bg-muted/30 transition-colors duration-150">
-                  <td className="px-3 py-2 w-20 border-r border-border text-center">
+                  <td className="px-3 py-2 w-16 border-r border-border text-center">
                     <Button
                       variant="outline"
                       size="sm"
@@ -558,7 +580,7 @@ export default function BusinessSuppliers({ business }) {
                       Edit
                     </Button>
                   </td>
-                  <td className="px-3 py-2 w-20 border-r border-border text-center">
+                  <td className="px-3 py-2 w-16 border-r border-border text-center">
                     <Button
                       variant="outline"
                       size="sm"
@@ -568,13 +590,13 @@ export default function BusinessSuppliers({ business }) {
                       View
                     </Button>
                   </td>
-                  <td className="px-4 py-2.5 text-foreground border-r border-border">
+                  <td className="px-4 py-2.5 text-foreground border-r border-border whitespace-nowrap">
                     {supplier.name}
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground border-r border-border">
+                  <td className="px-4 py-2.5 w-28 text-muted-foreground border-r border-border whitespace-nowrap">
                     {supplier.code || '—'}
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
+                  <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
                     {supplier.email || '—'}
                   </td>
                 </tr>
