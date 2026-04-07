@@ -21,7 +21,3 @@ export async function updateBankAccount(businessId, bankAccountId, data) {
 export async function deleteBankAccount(businessId, bankAccountId) {
   return apiClient.delete(`${base(businessId)}/${bankAccountId}`);
 }
-
-export async function getBankAccountTotal(businessId, coaAccountId) {
-  return apiClient.get(`${base(businessId)}/total?coa_account_id=${coaAccountId}`);
-}

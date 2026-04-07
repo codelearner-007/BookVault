@@ -2,7 +2,7 @@
 
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bank_account import BankAccount
@@ -89,16 +89,3 @@ class BankAccountRepository(BaseRepository[BankAccount]):
         await self.session.delete(account)
         await self.session.flush()
         return True
-
-    async def get_total(self, business_id: str) -> Decimal:
-        """Return SUM(current_balance) for all bank accounts in a business.
-
-        Returns Decimal('0') when no accounts exist or the sum is NULL.
-        """
-        result = await self.session.execute(
-            select(func.sum(BankAccount.current_balance)).where(
-                BankAccount.business_id == business_id,
-            )
-        )
-        total = result.scalar_one_or_none()
-        return Decimal(str(total)) if total is not None else Decimal("0")

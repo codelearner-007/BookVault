@@ -30,11 +30,11 @@ class BankAccountService:
         """Return all bank accounts for the business owned by owner_id."""
         await self._require_business(business_id)
         items = await self.repo.list_by_business(business_id)
-        total = await self.repo.get_total(business_id)
+        coa_total = sum((a.current_balance or Decimal("0")) for a in items)
         return BankAccountListResponse(
             items=[BankAccountResponse.model_validate(a) for a in items],
             total=len(items),
-            coa_total=total,
+            coa_total=coa_total,
         )
 
     async def get_account(
@@ -102,8 +102,3 @@ class BankAccountService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Bank account not found",
             )
-
-    async def get_total(self, business_id: str) -> Decimal:
-        """Return the SUM of current_balance for all bank accounts in the business."""
-        await self._require_business(business_id)
-        return await self.repo.get_total(business_id)

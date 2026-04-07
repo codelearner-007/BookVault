@@ -359,6 +359,7 @@ function ViewDialog({ open, onOpenChange, account }) {
 
 export default function BusinessBankAndCashAccounts({ business }) {
   const [accounts, setAccounts] = useState([]);
+  const [coaTotal, setCoaTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -373,6 +374,7 @@ export default function BusinessBankAndCashAccounts({ business }) {
     try {
       const data = await listBankAccounts(business.id);
       setAccounts(Array.isArray(data) ? data : (data?.items ?? []));
+      setCoaTotal(data?.coa_total ?? 0);
     } catch (err) {
       setError(err?.message ?? 'Failed to load accounts.');
     } finally {
@@ -393,8 +395,6 @@ export default function BusinessBankAndCashAccounts({ business }) {
         );
       })
     : accounts;
-
-  const total = filtered.reduce((sum, a) => sum + (parseFloat(a.current_balance) || 0), 0);
 
   if (isLoading) return <BankAccountsSkeleton />;
 
@@ -520,7 +520,7 @@ export default function BusinessBankAndCashAccounts({ business }) {
               <tr className="border-t border-border bg-muted/20">
                 <td colSpan={3} className="border-r border-border" />
                 <td className="px-4 py-2.5 text-right text-sm font-semibold text-foreground tabular-nums">
-                  {formatBalance(total)}
+                  {formatBalance(coaTotal)}
                 </td>
               </tr>
             </tfoot>

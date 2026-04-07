@@ -49,14 +49,6 @@ async def create_bank_account(
     return result
 
 
-@router.get("/total", dependencies=_ROLE_DEP)
-async def get_total(
-    business_id: str,
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    total = await BankAccountService(db).get_total(business_id)
-    return {"total": total}
-
 
 @router.get("/{bank_account_id}", response_model=BankAccountResponse, dependencies=_ROLE_DEP)
 async def get_bank_account(
@@ -99,8 +91,9 @@ async def delete_bank_account(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> None:
-    account = await BankAccountService(db).get_account(business_id, bank_account_id)
-    await BankAccountService(db).delete_account(business_id, bank_account_id)
+    service = BankAccountService(db)
+    account = await service.get_account(business_id, bank_account_id)
+    await service.delete_account(business_id, bank_account_id)
     await AuditService(db).log_action(
         user_id=current_user.user_id,
         action="Delete",
