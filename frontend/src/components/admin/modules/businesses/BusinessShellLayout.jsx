@@ -17,7 +17,6 @@ import {
   Database,
   Building2,
   Landmark,
-  FileText,
   Receipt,
   CreditCard,
   ListTree,
@@ -158,11 +157,11 @@ function CustomizeNavItem({ isActive, isExpanded, onClick }) {
   );
 }
 
-export default function BusinessShellLayout({ business: initialBusiness, onBack }) {
+export default function BusinessShellLayout({ business: initialBusiness, initialTabs = [], onBack }) {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [tabs, setTabs] = useState([]);
-  const [tabsLoading, setTabsLoading] = useState(true);
+  const [tabs, setTabs] = useState(initialTabs);
+  const [tabsLoading, setTabsLoading] = useState(initialTabs.length === 0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -170,14 +169,14 @@ export default function BusinessShellLayout({ business: initialBusiness, onBack 
   });
   const [business, setBusiness] = useState(initialBusiness);
 
-  const activeTab = searchParams.get('tab') || null;
+  const activeTab = searchParams.get('tab') || 'summary';
   const activePage = searchParams.get('page') || null;
 
   const [mountedTabs, setMountedTabs] = useState(() => new Set([activeTab].filter(Boolean)));
   const isCustomizing = activePage === 'customize';
 
-  const fetchTabs = useCallback(async (currentTab, currentPage) => {
-    setTabsLoading(true);
+  const fetchTabs = useCallback(async (currentTab, currentPage, { silent = false } = {}) => {
+    if (!silent) setTabsLoading(true);
     try {
       const data = await listBusinessTabs(business.id);
       const items = data.items || [];
@@ -195,11 +194,19 @@ export default function BusinessShellLayout({ business: initialBusiness, onBack 
     } finally {
       setTabsLoading(false);
     }
-  }, [business.id, router]);
+  }, [business.id, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (initialTabs.length > 0) return;
     fetchTabs(activeTab, activePage);
   }, [fetchTabs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync URL: if no ?tab= in URL, replace with the default so the URL always reflects the active tab
+  useEffect(() => {
+    if (!searchParams.get('tab')) {
+      router.replace(`?tab=summary`);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (activeTab) {
@@ -211,6 +218,11 @@ export default function BusinessShellLayout({ business: initialBusiness, onBack 
       });
     }
   }, [activeTab]);
+
+  const onTabsChanged = useCallback(
+    () => fetchTabs(activeTab, activePage, { silent: true }),
+    [fetchTabs, activeTab, activePage]
+  );
 
   const handleTabClick = (key) => {
     router.push(`?tab=${key}`);
@@ -267,7 +279,7 @@ export default function BusinessShellLayout({ business: initialBusiness, onBack 
               <Component
                 business={business}
                 onBusinessUpdated={handleBusinessUpdated}
-                onTabsChanged={() => fetchTabs(activeTab, activePage)}
+                onTabsChanged={onTabsChanged}
               />
             </div>
           );

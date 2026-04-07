@@ -512,7 +512,6 @@ export default function BusinessSuppliers({ business }) {
   const [viewTarget, setViewTarget] = useState(null);
 
   const fetchSuppliers = useCallback(async () => {
-    setIsLoading(true);
     setError(null);
     try {
       const data = await listSuppliers(business.id);

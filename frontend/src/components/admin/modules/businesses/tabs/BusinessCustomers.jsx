@@ -512,7 +512,6 @@ export default function BusinessCustomers({ business }) {
   const [viewTarget, setViewTarget] = useState(null);
 
   const fetchCustomers = useCallback(async () => {
-    setIsLoading(true);
     setError(null);
     try {
       const data = await listCustomers(business.id);

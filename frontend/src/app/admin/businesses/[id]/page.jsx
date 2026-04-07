@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getBusiness } from '@/lib/services/business.service';
+import { getBusiness, listBusinessTabs } from '@/lib/services/business.service';
 import BusinessShellLayout from '@/components/admin/modules/businesses/BusinessShellLayout';
 
 function BusinessPageSkeleton() {
@@ -59,14 +59,19 @@ export default function BusinessDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const [business, setBusiness] = useState(null);
+  const [initialTabs, setInitialTabs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
-        const data = await getBusiness(id);
-        if (data?.id) {
-          setBusiness(data);
+        const [businessData, tabsData] = await Promise.all([
+          getBusiness(id),
+          listBusinessTabs(id).catch(() => ({ items: [] })),
+        ]);
+        if (businessData?.id) {
+          setBusiness(businessData);
+          setInitialTabs(tabsData?.items ?? []);
         } else {
           router.replace('/admin/businesses');
         }
@@ -85,6 +90,7 @@ export default function BusinessDetailPage() {
   return (
     <BusinessShellLayout
       business={business}
+      initialTabs={initialTabs}
       onBack={() => router.push('/admin/businesses')}
     />
   );
