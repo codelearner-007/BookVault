@@ -31,6 +31,7 @@ import {
   ExternalLink,
   X,
   Columns,
+  Copy,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -169,7 +170,7 @@ const DEFAULT_COLS = [
 /* ── Receipt form (create / edit) ────────────────────────────────────────── */
 
 function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial, bankAccounts, coaAccounts, customers, suppliers }) {
-  const isEdit = !!initial;
+  const isEdit = !!initial?.id;
 
   // Core fields
   const [date, setDate] = useState(initial?.date ?? todayIso());
@@ -632,13 +633,13 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial, bankAcc
               <tr className="border-t border-border bg-muted/20">
                 <td
                   colSpan={
-                    2 +
+                    3 +
                     (showLineNumber ? 1 : 0) +
                     (showLineDescription ? 1 : 0) +
                     (showQty ? 1 : 0) +
                     (showDiscount ? 1 : 0)
                   }
-                  className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground"
+                  className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground"
                 >
                   Grand Total
                 </td>
@@ -1009,14 +1010,16 @@ function ReceiptViewLines({ lines, showLineNumber, showDescription, showQty, sho
           <tr className="border-t border-border bg-muted/30">
             <td
               colSpan={
-                1 +
+                2 +
                 (showLineNumber ? 1 : 0) +
                 (showDescription ? 1 : 0) +
                 (showQty ? 1 : 0) +
                 (showDiscount ? 1 : 0)
               }
-              className="border-r border-border"
-            />
+              className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border-r border-border"
+            >
+              Grand Total
+            </td>
             <td className="px-4 py-2 text-right">
               <span className="text-sm font-bold text-foreground tabular-nums">{grandTotal.toFixed(2)}</span>
             </td>
@@ -1027,7 +1030,7 @@ function ReceiptViewLines({ lines, showLineNumber, showDescription, showQty, sho
   );
 }
 
-function ReceiptView({ receipt, onBack, onEdit }) {
+function ReceiptView({ receipt, onBack, onEdit, onClone }) {
   if (!receipt) return null;
 
   return (
@@ -1046,15 +1049,26 @@ function ReceiptView({ receipt, onBack, onEdit }) {
           </Button>
           <h2 className="text-lg font-semibold text-foreground">Receipt</h2>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5 cursor-pointer"
-          onClick={onEdit}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-          Edit
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 cursor-pointer"
+            onClick={onClone}
+          >
+            <Copy className="h-3.5 w-3.5" />
+            Clone
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 cursor-pointer"
+            onClick={onEdit}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit
+          </Button>
+        </div>
       </div>
 
       <ReceiptViewInfo receipt={receipt} />
@@ -1088,6 +1102,9 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
   // Focused receipt: populated from the list or fetched individually on hard refresh
   const [focusedReceipt, setFocusedReceipt] = useState(null);
   const [focusedLoading, setFocusedLoading] = useState(false);
+
+  // Clone source: pre-fills create form when cloning a receipt
+  const [cloneSource, setCloneSource] = useState(null);
 
   // Column editor — persisted in DB via ui-preferences API
   const [cols, setCols] = useState(DEFAULT_COLS);
@@ -1142,6 +1159,25 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
   const goCreate = useCallback(() => router.push('?tab=receipt&page=create'), [router]);
   const goEdit   = useCallback((id) => router.push(`?tab=receipt&page=edit&id=${id}`), [router]);
   const goView   = useCallback((id) => router.push(`?tab=receipt&page=view&id=${id}`), [router]);
+
+  const goClone = useCallback((receiptData) => {
+    const {
+      id: _id,
+      created_at: _ca,
+      updated_at: _ua,
+      business_id: _bid,
+      paid_by_name: _pbn,
+      received_in_account_name: _rian,
+      ...cloneFields
+    } = receiptData;
+    setCloneSource({
+      ...cloneFields,
+      date: new Date().toISOString().split('T')[0],
+      reference: null,
+      image_url: null,
+    });
+    goCreate();
+  }, [goCreate]);
 
   /* ── Column editor ──────────────────────────────────────────────────── */
   function openColEditor() {
@@ -1234,6 +1270,7 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
           receipt={receipt}
           onBack={goList}
           onEdit={() => goEdit(receipt.id)}
+          onClone={() => goClone(receipt)}
         />
       </>
     );
@@ -1272,10 +1309,11 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
   if (activePage === 'create') {
     return (
       <ReceiptForm
-        key="create"
+        key={cloneSource ? 'clone' : 'create'}
         businessId={business.id}
-        onSaved={() => { fetchReceipts(); onBankRefresh?.(); goList(); }}
-        onCancel={goList}
+        initial={cloneSource || undefined}
+        onSaved={(saved) => { setCloneSource(null); fetchReceipts(); onBankRefresh?.(); goView(saved.id); }}
+        onCancel={() => { setCloneSource(null); goList(); }}
         bankAccounts={formData.bankAccounts}
         coaAccounts={formData.coaAccounts}
         customers={formData.customers}

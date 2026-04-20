@@ -30,7 +30,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export const metadata = {
-  title: 'Home',
+  title: 'BookVault',
   description: 'A production-ready SaaS starter template with authentication, RBAC, admin panel, and audit logs.',
 };
 
