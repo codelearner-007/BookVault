@@ -1,17 +1,13 @@
 import Link from 'next/link';
 import { ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { WORDMARK } from '@/lib/copy/auth-ui';
+import { LogoWordmark } from '@/components/common/logo';
+import { BRAND } from '@/lib/copy/brand';
 
 export function Wordmark() {
   return (
-    <Link
-      href="/"
-      aria-label={WORDMARK.home}
-      className="inline-flex min-h-control items-center text-md font-bold tracking-tight text-foreground no-underline"
-    >
-      {WORDMARK.start}
-      <b className="font-bold text-brand">{WORDMARK.end}</b>
+    <Link href="/" aria-label={BRAND.home} className="inline-flex min-h-control items-center rounded-control text-foreground">
+      <LogoWordmark className="h-6" />
     </Link>
   );
 }

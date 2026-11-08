@@ -1,24 +1,19 @@
 import React from 'react';
 import Link from 'next/link';
 import { Github, Linkedin } from 'lucide-react';
+import { LogoWordmark } from '@/components/common/logo';
+import { BRAND } from '@/lib/copy/brand';
 
 export function SiteFooter() {
-  const productName = process.env.NEXT_PUBLIC_PRODUCTNAME || 'SaaS Starter';
-
   return (
     <footer className="border-t border-border bg-muted/30">
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
-            <Link href="/">
-              <span className="text-xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                {productName}
-              </span>
+            <Link href="/" aria-label={BRAND.home} className="inline-flex text-foreground">
+              <LogoWordmark className="h-6" />
             </Link>
-            <p className="mt-3 text-sm text-muted-foreground max-w-xs">
-              A production-ready SaaS starter template built with Next.js,
-              FastAPI, and Supabase.
-            </p>
+            <p className="mt-3 text-sm text-muted-foreground max-w-xs">{BRAND.description}</p>
           </div>
           <div>
             <h4 className="text-sm font-semibold text-foreground">Product</h4>
@@ -73,7 +68,7 @@ export function SiteFooter() {
         </div>
         <div className="mt-8 pt-8 border-t border-border flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground">
-            &copy; {new Date().getFullYear()} {productName}. All rights
+            &copy; {new Date().getFullYear()} {BRAND.name}. All rights
             reserved.
           </p>
           <div className="flex items-center space-x-4">

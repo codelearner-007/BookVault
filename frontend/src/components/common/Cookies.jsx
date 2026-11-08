@@ -1,28 +1,51 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Shield, X } from 'lucide-react';
 import { setCookie, getCookie } from 'cookies-next/client';
 import { Button } from '@/components/ui/button';
+import { COOKIE_COPY as COPY } from '@/lib/copy/cookies';
 
 const COOKIE_CONSENT_KEY = 'cookie-accept';
 const COOKIE_EXPIRY_DAYS = 365;
+const SHOW_DELAY_MS = 1000;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+// The page reserves the banner's height at its bottom (globals.css), so the banner never hides a form's
+// last field or button on a phone.
+const SPACE_VAR = '--cookie-banner-space';
+
+function useReservedSpace(ref, visible) {
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!visible || !ref.current) {
+      root.style.removeProperty(SPACE_VAR);
+      return undefined;
+    }
+    const observer = new ResizeObserver(([entry]) => {
+      root.style.setProperty(SPACE_VAR, `${Math.ceil(entry.borderBoxSize[0].blockSize)}px`);
+    });
+    observer.observe(ref.current);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty(SPACE_VAR);
+    };
+  }, [ref, visible]);
+}
 
 export default function CookieConsent() {
   const [isVisible, setIsVisible] = useState(false);
+  const banner = useRef(null);
+  useReservedSpace(banner, isVisible);
 
   useEffect(() => {
-    const consent = getCookie(COOKIE_CONSENT_KEY);
-    if (consent) return;
-
-    const timer = setTimeout(() => setIsVisible(true), 1000);
+    if (getCookie(COOKIE_CONSENT_KEY)) return undefined;
+    const timer = setTimeout(() => setIsVisible(true), SHOW_DELAY_MS);
     return () => clearTimeout(timer);
   }, []);
 
   const setConsent = (value) => {
     setCookie(COOKIE_CONSENT_KEY, value, {
-      expires: new Date(Date.now() + COOKIE_EXPIRY_DAYS * 24 * 60 * 60 * 1000),
+      expires: new Date(Date.now() + COOKIE_EXPIRY_DAYS * MS_PER_DAY),
       sameSite: 'strict',
       secure: process.env.NODE_ENV === 'production',
       path: '/',
@@ -33,48 +56,20 @@ export default function CookieConsent() {
   if (!isVisible) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border shadow-lg z-50">
-      <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <Shield className="h-5 w-5 text-primary mt-0.5" />
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">
-                We use cookies to enhance your browsing experience and analyze our traffic.
-                By clicking &quot;Accept&quot;, you consent to our use of cookies.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Read our{' '}
-                <Link href="/privacy" className="text-primary hover:text-primary/90 underline">
-                  Privacy Policy
-                </Link>{' '}
-                and{' '}
-                <Link href="/terms" className="text-primary hover:text-primary/90 underline">
-                  Terms of Service
-                </Link>{' '}
-                for more information.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setConsent('declined')}>
-              Decline
-            </Button>
-            <Button size="sm" onClick={() => setConsent('accepted')}>
-              Accept
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setConsent('declined')}
-              aria-label="Close"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+    <div ref={banner} className="pointer-events-none fixed inset-x-0 bottom-0 z-50 p-3">
+      <section
+        aria-label={COPY.label}
+        className="pointer-events-auto mx-auto flex max-w-2xl flex-col gap-3 rounded-card border border-popover-border bg-popover p-4 text-sm text-popover-foreground shadow-pop sm:flex-row sm:items-center"
+      >
+        <p className="flex-1 text-muted-foreground">
+          {COPY.body}{' '}
+          <Link href="/privacy" className="font-medium text-link underline-offset-4 hover:underline">{COPY.privacy}</Link>
+        </p>
+        <div className="flex shrink-0 gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setConsent('declined')}>{COPY.decline}</Button>
+          <Button variant="secondary" size="sm" onClick={() => setConsent('accepted')}>{COPY.accept}</Button>
         </div>
-      </div>
+      </section>
     </div>
   );
 }

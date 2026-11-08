@@ -4,6 +4,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { History, SlidersHorizontal, UserCog } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LogoMark, LogoWordmark } from '@/components/common/logo';
 import { SHELL_COPY } from '@/lib/copy/shell';
 import { AREA, can } from '@/lib/navigation/access';
 import { BUSINESS_PAGES, businessRoute, groupTabs, tabMeta } from '@/lib/navigation/business-tabs';
@@ -12,8 +13,6 @@ import { NavGroup, NavItem } from './NavItem';
 import { BusinessSwitcher } from './BusinessSwitcher';
 import { useShell } from './ShellContext';
 import { workspaceLinks } from './nav-links';
-
-const PRODUCT_NAME = process.env.NEXT_PUBLIC_PRODUCTNAME || 'BookVault';
 
 function isActivePath(pathname, { href, exact }) {
   return exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
@@ -117,8 +116,9 @@ export function Sidebar({ state, drawerOpen, inert, onNavigate }) {
       )}
     >
       <div className={cn('grid gap-3 p-3', iconsOnly && 'lg:px-2')}>
-        <div className={cn('flex h-9 items-center px-3 text-md font-bold tracking-title', iconsOnly && 'lg:hidden')}>
-          {PRODUCT_NAME}
+        <div className={cn('flex h-9 items-center px-3 text-foreground', iconsOnly && 'lg:justify-center lg:px-0')}>
+          <LogoWordmark className={cn(iconsOnly && 'lg:hidden')} />
+          {iconsOnly && <LogoMark className="max-lg:hidden" />}
         </div>
         <BusinessSwitcher iconsOnly={iconsOnly} onNavigate={onNavigate} />
       </div>

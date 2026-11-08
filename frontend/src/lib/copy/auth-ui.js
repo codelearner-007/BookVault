@@ -1,8 +1,6 @@
 // User-facing text of the auth pages and Account -> Security (one place, ready for i18n).
 // Server answers (generic by design, AC-37) live in lib/copy/auth.js and are shown as sent.
 
-export const WORDMARK = { start: 'Book', end: 'Vault', home: 'BookVault home' };
-
 export const AUTH_UI_COPY = {
   common: {
     email: 'Email',

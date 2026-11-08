@@ -2,18 +2,16 @@ import Link from 'next/link';
 import AuthAwareButtons from '@/components/common/AuthAwareButtons';
 import { MobileNavToggle } from '@/components/common/MobileNavToggle';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { LogoWordmark } from '@/components/common/logo';
+import { BRAND } from '@/lib/copy/brand';
 
 export function SiteNav() {
-  const productName = process.env.NEXT_PUBLIC_PRODUCTNAME || 'SaaS Starter';
-
   return (
     <nav className="fixed top-0 w-full bg-background/80 backdrop-blur-md z-50 border-b border-border/50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
-          <Link href="/" className="flex-shrink-0">
-            <span className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-              {productName}
-            </span>
+          <Link href="/" aria-label={BRAND.home} className="flex-shrink-0 text-foreground">
+            <LogoWordmark className="h-6" />
           </Link>
           <div className="hidden md:flex items-center space-x-8">
             <Link

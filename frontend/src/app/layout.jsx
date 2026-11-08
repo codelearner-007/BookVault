@@ -5,6 +5,7 @@ import { Analytics } from '@vercel/analytics/next';
 import CookieConsent from "@/components/common/Cookies";
 import { GoogleAnalytics } from '@next/third-parties/google';
 import ToastMount from '@/components/common/ToastMount';
+import { BRAND } from '@/lib/copy/brand';
 
 // Self-hosted at build time by next/font; only the weights the design system uses.
 const manrope = Manrope({
@@ -14,14 +15,13 @@ const manrope = Manrope({
   variable: '--font-manrope',
 });
 
-const productName = process.env.NEXT_PUBLIC_PRODUCTNAME || 'Bookvault';
-
+// Icons come from app/icon.svg, app/apple-icon.png and app/favicon.ico (the logo mark).
 export const metadata = {
   title: {
-    default: productName,
-    template: `%s | ${productName}`,
+    default: BRAND.name,
+    template: `%s | ${BRAND.name}`,
   },
-  description: "A production-ready SaaS starter with authentication, RBAC, admin panel, and audit logs.",
+  description: BRAND.description,
 };
 
 export default function RootLayout({ children }) {
