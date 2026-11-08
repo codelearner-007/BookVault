@@ -4,7 +4,6 @@ import { Card } from '@/components/ui/card';
 import { withholdingTaxReceiptsService } from '@/lib/services/withholding-tax.service';
 import { FormattedDate } from '@/components/common/business-format';
 import { Money } from '@/components/common/money';
-import TransactionJournal from '../ledger/TransactionJournal';
 import { ErrorAlert, JE_STATUS, StatusBadge, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from '../banking/AttachmentsPanel';
 import { DocumentSkeleton, useLoad } from '../banking/banking-parts';
@@ -52,7 +51,6 @@ export default function WhtReceiptView({ business, receiptId, rights }) {
         </dl>
         {receipt.description && <p className="mt-6 whitespace-pre-wrap">{receipt.description}</p>}
       </Card>
-      <TransactionJournal businessId={business.id} documentId={receipt.id} version={receipt.version} />
       <AttachmentsPanel businessId={business.id} documentId={receipt.id} canEdit={rights.edit && !receipt.is_locked} />
     </DocumentViewFrame>
   );
