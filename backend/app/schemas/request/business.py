@@ -14,3 +14,10 @@ class UpdateBusinessRequest(VersionedRequest):
     name: ShortText
     country: OptionalName = None
     address: OptionalText = None
+
+
+class PurgeBusinessRequest(RequestModel):
+    """Permanent delete of a business in Trash (B0.8): typed name + export offered first."""
+
+    confirmation: ShortText
+    export_offered: bool

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
@@ -199,19 +199,23 @@ export default function BusinessShellLayout({ business: initialBusiness, initial
     } finally {
       setTabsLoading(false);
     }
-  }, [business.id, router]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [business.id, router]);
 
+  // Tabs are fetched once per business; the route at mount is passed explicitly (CLAUDE.md rule 19).
+  const hasInitialTabs = initialTabs.length > 0;
+  const mountRoute = useRef({ tab: activeTab, page: activePage });
   useEffect(() => {
-    if (initialTabs.length > 0) return;
-    fetchTabs(activeTab, activePage);
-  }, [fetchTabs]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (hasInitialTabs) return;
+    fetchTabs(mountRoute.current.tab, mountRoute.current.page);
+  }, [fetchTabs, hasInitialTabs]);
 
   // Sync URL: if no ?tab= in URL, replace with the default so the URL always reflects the active tab
+  const hasTabParam = rawTab !== null;
   useEffect(() => {
-    if (!searchParams.get('tab')) {
+    if (!hasTabParam) {
       router.replace(`?tab=summary`);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hasTabParam, router]);
 
   useEffect(() => {
     const renamed = RENAMED_TABS[rawTab];

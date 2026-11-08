@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # Idempotency-Key replay window (AC-19)
     IDEMPOTENCY_TTL_HOURS: int = 24
 
+    # Permanent purge (B0.8): the password (and TOTP, when enrolled) sign-in must be this recent
+    REAUTH_MAX_AGE_SECONDS: int = 300
+
     # CSRF (AC-28): mutating requests need an allowed Origin or this header
     CSRF_HEADER: str = "X-BookVault-Client"
 

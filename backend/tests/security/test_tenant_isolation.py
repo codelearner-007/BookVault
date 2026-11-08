@@ -40,10 +40,14 @@ async def test_malformed_business_id_gets_404(client, users, business_route):
     assert response.status_code == 404, response.text
 
 
+# Trash routes: restore, the export offered before a purge, and the purge itself (B0.8).
+TRASH_SUFFIXES = ("/permanent", "/restore", "/export")
+
+
 @pytest.mark.parametrize(
     "business_route",
-    [r for r in BUSINESS_ROUTES if not r.path.endswith(("/permanent", "/restore"))],
-    ids=[r.id for r in BUSINESS_ROUTES if not r.path.endswith(("/permanent", "/restore"))],
+    [r for r in BUSINESS_ROUTES if not r.path.endswith(TRASH_SUFFIXES)],
+    ids=[r.id for r in BUSINESS_ROUTES if not r.path.endswith(TRASH_SUFFIXES)],
 )
 async def test_deleted_business_returns_404_on_all_routes(client, users, business_route):
     owner = await users.create()

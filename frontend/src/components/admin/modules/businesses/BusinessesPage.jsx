@@ -46,6 +46,7 @@ import {
   listDeletedBusinesses,
   restoreBusiness,
   permanentDeleteBusiness,
+  exportBusiness,
 } from '@/lib/services/business.service';
 function formatDate(dateString) {
   if (!dateString) return '';
@@ -119,6 +120,8 @@ export default function BusinessesPage() {
   const [permanentDeleteName, setPermanentDeleteName] = useState('');
   const [permanentDeleteLoading, setPermanentDeleteLoading] = useState(false);
   const [permanentDeleteOpen, setPermanentDeleteOpen] = useState(false);
+  const [permanentDeleteTyped, setPermanentDeleteTyped] = useState('');
+  const [exportLoading, setExportLoading] = useState(false);
 
   const loadBusinesses = useCallback(async () => {
     try {
@@ -212,7 +215,7 @@ export default function BusinessesPage() {
   async function handlePermanentDelete() {
     try {
       setPermanentDeleteLoading(true);
-      await permanentDeleteBusiness(permanentDeleteId);
+      await permanentDeleteBusiness(permanentDeleteId, permanentDeleteTyped);
       setPermanentDeleteOpen(false);
       setPermanentDeleteId(null);
       setPermanentDeleteName('');
@@ -223,6 +226,25 @@ export default function BusinessesPage() {
       setPermanentDeleteOpen(false);
     } finally {
       setPermanentDeleteLoading(false);
+    }
+  }
+
+  async function handleExportBackup() {
+    try {
+      setExportLoading(true);
+      const backup = await exportBusiness(permanentDeleteId);
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
+      );
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${permanentDeleteName}-backup.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export business');
+    } finally {
+      setExportLoading(false);
     }
   }
 
@@ -624,6 +646,7 @@ export default function BusinessesPage() {
                           onClick={() => {
                             setPermanentDeleteId(id);
                             setPermanentDeleteName(biz.name);
+                            setPermanentDeleteTyped('');
                             setPermanentDeleteOpen(true);
                           }}
                           aria-label="Permanently delete business"
@@ -658,13 +681,34 @@ export default function BusinessesPage() {
             <AlertDialogDescription>
               <span className="font-semibold text-foreground">{permanentDeleteName}</span> will be{' '}
               <span className="font-semibold text-destructive">permanently deleted</span> and cannot be recovered. This action is irreversible.
+              {' '}You may be asked to sign in again first.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-3">
+            <Button
+              variant="outline"
+              onClick={handleExportBackup}
+              disabled={exportLoading}
+              className="w-full cursor-pointer"
+            >
+              {exportLoading ? 'Preparing backup...' : 'Download a full backup'}
+            </Button>
+            <div className="space-y-1.5">
+              <Label htmlFor="permanent-delete-confirmation">Type the business name to confirm</Label>
+              <Input
+                id="permanent-delete-confirmation"
+                value={permanentDeleteTyped}
+                onChange={(e) => setPermanentDeleteTyped(e.target.value)}
+                placeholder={permanentDeleteName}
+                autoComplete="off"
+              />
+            </div>
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={permanentDeleteLoading}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handlePermanentDelete}
-              disabled={permanentDeleteLoading}
+              disabled={permanentDeleteLoading || permanentDeleteTyped.trim() !== permanentDeleteName}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {permanentDeleteLoading ? 'Deleting...' : 'Delete Permanently'}

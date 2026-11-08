@@ -15,9 +15,13 @@ from app.core.dependencies import (
 from app.core.pagination import PageParams, page_params
 from app.schemas.auth import CurrentUser
 from app.schemas.common import PaginatedResponse
-from app.schemas.request.business import CreateBusinessRequest, UpdateBusinessRequest
+from app.schemas.request.business import (
+    CreateBusinessRequest,
+    PurgeBusinessRequest,
+    UpdateBusinessRequest,
+)
 from app.schemas.request.tab import UpsertBusinessTabsRequest
-from app.schemas.response.business import BusinessResponse
+from app.schemas.response.business import BusinessExportResponse, BusinessResponse
 from app.schemas.response.member import MyBusinessListResponse
 from app.schemas.response.tab import BusinessTabResponse
 from app.services.access_service import BusinessContext
@@ -99,13 +103,24 @@ async def delete_business(
     await BusinessService(db).soft_delete(ctx)
 
 
-@router.delete("/{business_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
-async def permanently_delete_business(
+@router.get("/{business_id}/export", response_model=BusinessExportResponse)
+async def export_business(
     ctx: BusinessContext = Depends(_OWNER_ONLY_INCLUDING_DELETED),
     db: AsyncSession = Depends(get_db),
+) -> BusinessExportResponse:
+    """Full JSON backup of the business (owner only; offered before a permanent delete)."""
+    return await BusinessService(db).export(ctx)
+
+
+@router.delete("/{business_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
+async def permanently_delete_business(
+    body: PurgeBusinessRequest,
+    ctx: BusinessContext = Depends(_OWNER_ONLY_INCLUDING_DELETED),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Permanently delete a business in Trash (owner only, irreversible)."""
-    await BusinessService(db).hard_delete(ctx)
+    """Permanently delete a business in Trash (owner, recent re-auth, typed name, export offered)."""
+    await BusinessService(db).purge(ctx, current_user, body)
 
 
 @router.post("/{business_id}/restore", response_model=BusinessResponse)

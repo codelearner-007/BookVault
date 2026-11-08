@@ -102,8 +102,11 @@ class APIClient {
     });
   }
 
-  async delete(path) {
-    return this.request(path, { method: 'DELETE' });
+  async delete(path, data) {
+    return this.request(path, {
+      method: 'DELETE',
+      body: data ? JSON.stringify(data) : undefined,
+    });
   }
 }
 

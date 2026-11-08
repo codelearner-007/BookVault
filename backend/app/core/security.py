@@ -167,6 +167,11 @@ def extract_user_claims(payload: Dict[str, Any]) -> Dict[str, Any]:
         "user_role": payload.get("user_role", "user"),
         "hierarchy_level": payload.get("hierarchy_level", 100),
         "aal": payload.get("aal"),
+        "auth_methods": {
+            entry.get("method"): int(entry.get("timestamp") or 0)
+            for entry in payload.get("amr") or []
+            if isinstance(entry, dict) and entry.get("method")
+        },
         "must_change_password": bool(
             (payload.get("app_metadata") or {}).get("must_change_password", False)
         ),

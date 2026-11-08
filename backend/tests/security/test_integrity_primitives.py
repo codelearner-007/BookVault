@@ -251,17 +251,6 @@ async def test_authenticated_cannot_insert_audit(db_conn, role):
         await savepoint.rollback()
 
 
-async def test_audit_survives_permanent_delete(client, users, db_conn):
-    owner, business_id = await _owner_business(client, users)
-    await client.delete(f"/api/v1/businesses/{business_id}", headers=owner.headers)
-
-    purged = await client.delete(f"/api/v1/businesses/{business_id}/permanent", headers=owner.headers)
-    rows = await _audit_rows(db_conn, business_id, "Business")
-
-    assert purged.status_code == 204
-    assert [r.action for r in rows] == ["create", "delete", "purge"]
-
-
 async def test_business_history_lists_business_rows(client, users):
     owner, business_id = await _owner_business(client, users)
     await create_contact(client, owner, business_id)

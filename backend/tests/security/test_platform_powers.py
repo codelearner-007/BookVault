@@ -18,7 +18,6 @@ PLATFORM_ROUTES = [
     ("GET", "/api/v1/roles/{other}"),
     ("GET", "/api/v1/roles/{other}/permissions"),
     ("GET", "/api/v1/permissions"),
-    ("GET", "/api/v1/dashboard/stats"),
     ("GET", "/api/v1/admin-tabs"),
     ("PUT", "/api/v1/admin-tabs"),
     ("DELETE", "/api/v1/admin-tabs/{other}"),

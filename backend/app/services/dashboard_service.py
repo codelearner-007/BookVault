@@ -1,32 +1,25 @@
-"""Dashboard statistics service."""
+"""Dashboard statistics service: the caller's own businesses and actions."""
 
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories.dashboard_repository import DashboardRepository
+from app.repositories.audit_repository import AuditFilter, AuditRepository
+from app.repositories.member_repository import MemberRepository
 from app.schemas.response.dashboard import DashboardStatsResponse
+
+RECENT_ACTIVITY_WINDOW = timedelta(days=1)
 
 
 class DashboardService:
-    """Service for dashboard statistics."""
-
     def __init__(self, session: AsyncSession):
-        self.repository = DashboardRepository(session)
+        self.members = MemberRepository(session)
+        self.audit = AuditRepository(session)
 
-    async def get_stats(self) -> DashboardStatsResponse:
-        total_roles = await self.repository.count_roles()
-        total_permissions = await self.repository.count_permissions()
-        total_users = await self.repository.count_users_with_roles()
-        total_audit_logs = await self.repository.count_audit_logs()
-
-        yesterday = datetime.now(timezone.utc) - timedelta(days=1)
-        recent_activity_24h = await self.repository.count_audit_logs_since(yesterday)
-
+    async def get_stats(self, user_id: str) -> DashboardStatsResponse:
+        since = datetime.now(timezone.utc) - RECENT_ACTIVITY_WINDOW
         return DashboardStatsResponse(
-            total_roles=total_roles,
-            total_permissions=total_permissions,
-            total_users=total_users,
-            total_audit_logs=total_audit_logs,
-            recent_activity_24h=recent_activity_24h,
+            total_businesses=await self.members.count_user_businesses(user_id),
+            total_audit_logs=await self.audit.count(AuditFilter(user_id=user_id)),
+            recent_activity_24h=await self.audit.count(AuditFilter(user_id=user_id, start_date=since)),
         )

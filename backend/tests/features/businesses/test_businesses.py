@@ -1,4 +1,4 @@
-"""Baseline: businesses CRUD, soft delete, restore, reset, permanent delete (feature #9)."""
+"""Baseline: businesses CRUD, soft delete, restore, reset (feature #9; permanent delete: tests/security/test_purge_business.py)."""
 
 from tests.support.factories import create_business
 
@@ -46,20 +46,6 @@ async def test_businesses_soft_delete_restore(client, users):
     assert [b["id"] for b in deleted.json()["items"]] == [business["id"]]
     assert restored.status_code == 200, restored.text
     assert [b["id"] for b in active.json()["items"]] == [business["id"]]
-
-
-async def test_businesses_permanent_delete_requires_soft_delete(client, users):
-    owner = await users.create()
-    business = await create_business(client, owner)
-    url = f"{BASE}/{business['id']}/permanent"
-
-    refused = await client.delete(url, headers=owner.headers)
-    await client.delete(f"{BASE}/{business['id']}", headers=owner.headers)
-    removed = await client.delete(url, headers=owner.headers)
-
-    assert refused.status_code == 400
-    assert removed.status_code in {200, 204}, removed.text
-    assert (await client.get(f"{BASE}/deleted", headers=owner.headers)).json()["items"] == []
 
 
 async def test_businesses_list_only_own(client, users):

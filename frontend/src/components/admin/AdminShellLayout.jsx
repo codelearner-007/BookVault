@@ -3,11 +3,12 @@
 import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { LayoutDashboard, ClipboardList, User, Building2, LogOut, Menu, X, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, User, Building2, LogOut, Menu, X, ChevronDown, Crown } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { useGlobal } from '@/lib/context/GlobalContext';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useAdminClaims } from '@/components/admin/AdminClaimsContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +34,7 @@ function getInitials(email) {
 }
 
 const ADMIN_LAST_PATH_KEY = 'admin_last_path';
+const SUPER_ADMIN_ROLE = 'super_admin';
 
 function AdminPathTracker() {
   const pathname = usePathname();
@@ -54,6 +56,7 @@ export default function AdminShellLayout({ children }) {
   const pathname = usePathname();
   const { user, loading } = useGlobal();
   const { logout } = useAuth();
+  const isSuperAdmin = useAdminClaims()?.user_role === SUPER_ADMIN_ROLE;
 
   const productName = process.env.NEXT_PUBLIC_PRODUCTNAME || 'BookVault';
 
@@ -132,6 +135,21 @@ export default function AdminShellLayout({ children }) {
               );
             })}
           </div>
+          {isSuperAdmin && (
+            <>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-6 mb-3 px-2">
+                Platform
+              </p>
+              <Link
+                href="/super-admin"
+                onClick={closeSidebar}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-foreground hover:bg-muted"
+              >
+                <Crown className="h-4 w-4 flex-shrink-0" />
+                Super Admin
+              </Link>
+            </>
+          )}
         </nav>
 
         {/* Bottom: theme toggle + user dropdown */}

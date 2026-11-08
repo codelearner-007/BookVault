@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { User, ShieldCheck, Calendar, Building2, ArrowRight } from 'lucide-react';
+import { User, ShieldCheck, Calendar, Building2, ArrowRight, ClipboardList, Activity } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useGlobal } from '@/lib/context/GlobalContext';
+import { getDashboardStats } from '@/lib/services/dashboard.service';
 
 const ADMIN_LAST_PATH_KEY = 'admin_last_path';
 
@@ -45,6 +46,36 @@ function InfoCard({ icon: Icon, title, children }) {
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>
+  );
+}
+
+const STAT_CARDS = [
+  { key: 'total_businesses', title: 'My Businesses', icon: Building2 },
+  { key: 'total_audit_logs', title: 'My Actions', icon: ClipboardList },
+  { key: 'recent_activity_24h', title: 'Actions (24h)', icon: Activity },
+];
+
+function StatCards() {
+  const [stats, setStats] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    getDashboardStats().then(setStats).catch(() => setFailed(true));
+  }, []);
+
+  if (failed) return null;
+  return (
+    <div className="grid gap-4 sm:grid-cols-3">
+      {STAT_CARDS.map(({ key, title, icon }) => (
+        <InfoCard key={key} icon={icon} title={title}>
+          {stats ? (
+            <p className="text-2xl font-semibold text-foreground">{stats[key]}</p>
+          ) : (
+            <Skeleton className="h-8 w-12" />
+          )}
+        </InfoCard>
+      ))}
+    </div>
   );
 }
 
@@ -119,6 +150,8 @@ export default function AdminDashboardPage() {
           )}
         </InfoCard>
       </div>
+
+      <StatCards />
 
       {/* Quick Actions */}
       <div>

@@ -20,6 +20,9 @@ class CurrentUser(BaseModel):
     user_role: str
     hierarchy_level: int
     aal: str | None = None
+    auth_methods: dict[str, int] = Field(
+        default_factory=dict, description="Sign-in method -> unix time (JWT amr)"
+    )
     must_change_password: bool = False
 
     def has_role(self, role: str) -> bool:

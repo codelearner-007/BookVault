@@ -1,70 +1,9 @@
 /**
- * RBAC Service - API client for role and permission management
- *
- * Calls FastAPI backend via Next.js rewrites (/api/v1)
- * Uses frontend API routes only for auth operations (ban, delete, etc.)
+ * Platform user service (super admin): user stats/list via FastAPI (/api/v1),
+ * account actions via the Next.js user-admin routes (ban, delete, etc.)
  */
 
 import { apiClient } from './api-client';
-import { listAllPages } from './list-all-pages';
-
-/**
- * List all roles
- */
-export async function listRoles() {
-  return listAllPages('/v1/roles');
-}
-
-/**
- * Get role with permissions
- */
-export async function getRoleWithPermissions(roleId) {
-  return apiClient.get(`/v1/roles/${roleId}`);
-}
-
-/**
- * Get role permissions
- */
-export async function getRolePermissions(roleId) {
-  return listAllPages(`/v1/roles/${roleId}/permissions`);
-}
-
-/**
- * Update role permissions (bulk replace)
- */
-export async function updateRolePermissions(roleId, permissionIds) {
-  return apiClient.put(`/v1/roles/${roleId}/permissions`, {
-    permission_ids: permissionIds,
-  });
-}
-
-/**
- * List all permissions grouped by module
- */
-export async function listPermissionsGrouped() {
-  return listAllPages('/v1/permissions');
-}
-
-/**
- * Create a new role
- */
-export async function createRole(data) {
-  return apiClient.post('/v1/roles', data);
-}
-
-/**
- * Update a role
- */
-export async function updateRole(roleId, data) {
-  return apiClient.patch(`/v1/roles/${roleId}`, data);
-}
-
-/**
- * Delete a role
- */
-export async function deleteRole(roleId) {
-  return apiClient.delete(`/v1/roles/${roleId}`);
-}
 
 // ============================================================================
 // User Management
@@ -88,27 +27,6 @@ export async function listUsersWithRoles(filters) {
   ).toString();
 
   return apiClient.get(`/v1/users/with-roles?${queryString}`);
-}
-
-/**
- * Get user's assigned roles
- */
-export async function getUserRoles(userId) {
-  return listAllPages(`/v1/users/${userId}/roles`);
-}
-
-/**
- * Assign a role to a user
- */
-export async function assignRoleToUser(userId, roleId) {
-  return apiClient.post(`/v1/users/${userId}/roles`, { role_id: roleId });
-}
-
-/**
- * Remove a role from a user
- */
-export async function removeRoleFromUser(userId, roleId) {
-  return apiClient.delete(`/v1/users/${userId}/roles/${roleId}`);
 }
 
 /**

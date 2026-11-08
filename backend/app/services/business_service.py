@@ -1,4 +1,4 @@
-"""Business service: create (with default COA), update, soft delete, restore, purge, audit."""
+"""Business service: create (with default COA), update, soft delete, restore, export, purge, audit."""
 
 from datetime import datetime, timezone
 
@@ -6,14 +6,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppException, ResourceNotFoundError
 from app.core.pagination import PageParams
+from app.core.request_context import current_request_id
 from app.models.business import Business
 from app.repositories.business_repository import BusinessRepository
 from app.repositories.coa_repository import CoaRepository
 from app.schemas.common import PaginatedResponse
-from app.schemas.request.business import CreateBusinessRequest, UpdateBusinessRequest
-from app.schemas.response.business import BusinessResponse
+from app.schemas.auth import CurrentUser
+from app.schemas.request.business import (
+    CreateBusinessRequest,
+    PurgeBusinessRequest,
+    UpdateBusinessRequest,
+)
+from app.schemas.response.business import BusinessExportResponse, BusinessResponse
 from app.services.access_service import BusinessContext
 from app.services.audit_service import AuditService
+from app.services.reauth import assert_recent_reauth
 from app.services.versioning import check_version
 
 ENTITY = "Business"
@@ -97,11 +104,40 @@ class BusinessService:
                                 before=before, after=after)
         return after
 
-    async def hard_delete(self, ctx: BusinessContext) -> None:
-        """Permanently delete a business that is in Trash (audited first; the row outlives it)."""
+    async def export(self, ctx: BusinessContext) -> BusinessExportResponse:
+        """Every row of the business as JSON (owner only; offered before a purge)."""
+        self._require_owner(ctx)
+        return BusinessExportResponse(
+            business_id=ctx.business_id,
+            exported_at=datetime.now(timezone.utc),
+            tables=await self.repo.export(ctx.business_id),
+        )
+
+    async def purge(
+        self, ctx: BusinessContext, user: CurrentUser, body: PurgeBusinessRequest
+    ) -> None:
+        """Permanently delete a business in Trash (B0.8): owner, re-auth, typed name, export offered.
+
+        The function re-checks owner, Trash and name, deletes every business row and writes
+        one platform audit row (business_purged).
+        """
+        self._require_owner(ctx)
         business = await self._owned(ctx.business_id, ctx.owner_id, include_deleted=True)
         if business.deleted_at is None:
             raise AppException("Business must be in Trash before it can be permanently deleted", 400)
-        before = BusinessResponse.model_validate(business)
-        await self.audit.record(ctx.user_id, "purge", ENTITY, business.id, business.id, before=before)
-        await self.repo.delete(business)
+        assert_recent_reauth(user)
+        if not body.export_offered:
+            raise AppException(
+                "Offer the business export before deleting", 422, {"code": "export_required"}
+            )
+        if body.confirmation != business.name:
+            raise AppException(
+                "Type the business name to confirm", 422, {"code": "confirmation_mismatch"}
+            )
+        await self.repo.purge(business.id, user.user_id, body.confirmation, current_request_id())
+
+    @staticmethod
+    def _require_owner(ctx: BusinessContext) -> None:
+        """Only the owner (D-34); anyone else gets the same 404 as a stranger."""
+        if not ctx.is_owner:
+            raise ResourceNotFoundError(ENTITY, ctx.business_id)

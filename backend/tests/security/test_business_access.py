@@ -38,6 +38,7 @@ ROUTE_MAP = {
     "POST /users/email-check": [(MEMBERS, C)],
     "GET /me": "member", "GET ": "member", "GET /tabs": "member",
     "DELETE ": [("account.businesses", D)], "DELETE /permanent": [("account.businesses", D)],
+    "GET /export": [("account.businesses", D)],
     "POST /restore": [("account.businesses", D)],
     "PUT ": [("settings.business_details", E)], "POST /reset": [("settings.business_details", E)],
     "PUT /tabs": [("settings.customize_tabs", E)],

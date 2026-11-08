@@ -22,8 +22,16 @@ export async function restoreBusiness(id) {
   return apiClient.post(`/v1/businesses/${id}/restore`, {});
 }
 
-export async function permanentDeleteBusiness(id) {
-  return apiClient.delete(`/v1/businesses/${id}/permanent`);
+// Owner only, from Trash; needs a recent sign-in, the typed business name and the export offered first.
+export async function permanentDeleteBusiness(id, confirmation) {
+  return apiClient.delete(`/v1/businesses/${id}/permanent`, {
+    confirmation,
+    export_offered: true,
+  });
+}
+
+export async function exportBusiness(id) {
+  return apiClient.get(`/v1/businesses/${id}/export`);
 }
 
 export async function getBusiness(id) {

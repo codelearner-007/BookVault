@@ -1,5 +1,7 @@
 """Business repository: businesses and business_details."""
 
+from typing import Any
+
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,9 +58,27 @@ class BusinessRepository:
         await self.session.flush()
         await self.session.refresh(business)
 
-    async def delete(self, business: Business) -> None:
-        await self.session.delete(business)
-        await self.session.flush()
+    async def export(self, business_id: str) -> dict[str, list[dict[str, Any]]]:
+        """Every business-scoped row by table (SECURITY DEFINER; caller must own the business)."""
+        result = await self.session.execute(
+            text("SELECT public.export_business(CAST(:id AS uuid))"), {"id": business_id}
+        )
+        return result.scalar_one()
+
+    async def purge(
+        self, business_id: str, actor_id: str, confirmation: str, request_id: str | None
+    ) -> dict[str, int]:
+        """Permanently delete the business through the audited purge function (B0.8)."""
+        result = await self.session.execute(
+            text(
+                "SELECT public.purge_business(CAST(:id AS uuid), CAST(:actor AS uuid),"
+                " :confirmation, :request_id)"
+            ),
+            {"id": business_id, "actor": actor_id, "confirmation": confirmation,
+             "request_id": request_id},
+        )
+        self.session.expunge_all()
+        return result.scalar_one()
 
     async def get_details(self, business_id: str) -> BusinessDetails | None:
         result = await self.session.execute(

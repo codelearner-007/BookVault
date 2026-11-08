@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   ChevronDown,
+  Building2,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useGlobal } from '@/lib/context/GlobalContext';
@@ -131,6 +132,17 @@ export default function SuperAdminShellLayout({ children }) {
               );
             })}
           </div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-6 mb-3 px-2">
+            My Account
+          </p>
+          <Link
+            href="/admin"
+            onClick={closeSidebar}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-foreground hover:bg-muted"
+          >
+            <Building2 className="h-4 w-4 flex-shrink-0" />
+            Admin (my businesses)
+          </Link>
         </nav>
 
         {/* Bottom: theme toggle + user dropdown */}

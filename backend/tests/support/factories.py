@@ -27,7 +27,12 @@ class TestUser:
 
 
 def make_token(
-    secret: str, user_id: str, email: str, role: str | None, app_metadata: dict | None = None
+    secret: str,
+    user_id: str,
+    email: str,
+    role: str | None,
+    app_metadata: dict | None = None,
+    extra: dict | None = None,
 ) -> str:
     """Sign a Supabase-shaped access token with the test secret (HS256)."""
     now = datetime.now(timezone.utc)
@@ -40,6 +45,7 @@ def make_token(
         **({"user_role": role} if role else {}),
         "iat": int(now.timestamp()),
         "exp": int((now + TOKEN_TTL).timestamp()),
+        **(extra or {}),
     }
     return jwt.encode(claims, secret, algorithm="HS256")
 
@@ -103,14 +109,37 @@ class UserFactory:
         )
 
     async def purge_created(self) -> None:
-        """Mode C cleanup: remove the users this factory made and everything they own."""
+        """Mode C cleanup: purge their businesses (audited purge, B0.8), then the users."""
         if not self.created:
             return
         params = {"ids": self.created}
-        await self.conn.execute(
-            text("DELETE FROM public.businesses WHERE owner_id::text = ANY(:ids)"), params
+        owned = await self.conn.execute(
+            text("SELECT id::text, name, owner_id::text FROM public.businesses"
+                 " WHERE owner_id::text = ANY(:ids)"),
+            params,
         )
+        for business_id, name, owner_id in owned.all():
+            await purge_business(self.conn, business_id, owner_id, name)
         await self.conn.execute(text("DELETE FROM auth.users WHERE id::text = ANY(:ids)"), params)
+
+
+async def purge_business(conn: AsyncConnection, business_id: str, owner_id: str, name: str) -> dict:
+    """Trash + purge a business as its owner through the API role, on an autocommit connection."""
+    await conn.execute(
+        text("UPDATE public.businesses SET deleted_at = COALESCE(deleted_at, now()) WHERE id = :id"),
+        {"id": business_id},
+    )
+    await conn.execute(text("SET ROLE bookvault_api"))
+    try:
+        await conn.execute(text("SELECT set_config('app.user_id', :uid, false)"), {"uid": owner_id})
+        result = await conn.execute(
+            text("SELECT public.purge_business(CAST(:id AS uuid), CAST(:uid AS uuid), :name)"),
+            {"id": business_id, "uid": owner_id, "name": name},
+        )
+        return result.scalar_one()
+    finally:
+        await conn.execute(text("RESET ROLE"))
+        await conn.execute(text("SELECT set_config('app.user_id', '', false)"))
 
 
 async def create_business(client: httpx.AsyncClient, user: TestUser, name: str = "Acme") -> dict:

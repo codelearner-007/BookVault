@@ -122,13 +122,7 @@ export async function updateSession(request) {
             url.pathname = '/admin'
             return NextResponse.redirect(url)
         }
-
-        // /admin/* — super_admin should use /super-admin instead
-        if (pathname.startsWith('/admin') && isSuperAdmin) {
-            const url = request.nextUrl.clone()
-            url.pathname = '/super-admin'
-            return NextResponse.redirect(url)
-        }
+        // /admin/* is open to super_admin too (CS-25): the Platform area stays under /super-admin.
     }
 
     // IMPORTANT: You *must* return the supabaseResponse object as it is.
@@ -145,9 +139,4 @@ export async function updateSession(request) {
     // of sync and terminate the user's session prematurely!
 
     return supabaseResponse
-}
-
-function normalizePermissions(value) {
-    if (!Array.isArray(value)) return []
-    return value.filter((p) => typeof p === 'string' && p.includes(':'))
 }

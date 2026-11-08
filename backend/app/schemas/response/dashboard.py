@@ -4,10 +4,8 @@ from pydantic import BaseModel
 
 
 class DashboardStatsResponse(BaseModel):
-    """Dashboard statistics response."""
+    """The caller's own numbers (CS-21): never platform-wide counts."""
 
-    total_roles: int
-    total_permissions: int
-    total_users: int
+    total_businesses: int
     total_audit_logs: int
     recent_activity_24h: int
