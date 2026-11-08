@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Hourglass } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState } from '@/components/common/page';
+import { EmptyState, ListCard, PageHeader } from '@/components/common/page';
 import { SHELL_COPY } from '@/lib/copy/shell';
 import { BUSINESS_PAGES, DEFAULT_TAB, RENAMED_TABS, businessRoute } from '@/lib/navigation/business-tabs';
 import { useBusinessWorkspace } from '@/components/shell/ShellContext';
@@ -28,6 +29,8 @@ const TAB_COMPONENTS = {
   suppliers: BusinessSuppliers,
   receipts: BusinessReceipts,
 };
+
+const BUILT_TABS = Object.keys(TAB_COMPONENTS);
 
 // Sub-pages under the Settings tab: ?tab=settings&page=Y (CLAUDE.md rule 17).
 const SETTINGS_PAGE_COMPONENTS = {
@@ -72,11 +75,23 @@ function useTabGuard({ loading, enabledKeys, rawTab, tab }) {
   }, [loading, enabledKeys, rawTab, tab, query, router]);
 }
 
+// An enabled tab whose phase is not built yet (all 40 Manager tabs are in the catalog).
+function TabComingSoon({ label }) {
+  return (
+    <>
+      <PageHeader title={label} />
+      <ListCard>
+        <EmptyState icon={Hourglass} title={SHELL_COPY.comingSoon} description={SHELL_COPY.comingSoonDescription} />
+      </ListCard>
+    </>
+  );
+}
+
 function BusinessPage({ page, workspace }) {
   const { business, tabs, setTabs } = workspace;
   if (page === BUSINESS_PAGES.history) return <BusinessHistory business={business} />;
   if (page === BUSINESS_PAGES.members) return <BusinessMembers business={business} />;
-  return <BusinessCustomize business={business} tabs={tabs} setTabs={setTabs} onSaved={setTabs} />;
+  return <BusinessCustomize business={business} tabs={tabs} setTabs={setTabs} onSaved={setTabs} builtTabs={BUILT_TABS} />;
 }
 
 export default function BusinessWorkspace() {
@@ -115,7 +130,9 @@ export default function BusinessWorkspace() {
     );
   }
 
-  if (!TAB_COMPONENTS[tab]) return <EmptyState title={SHELL_COPY.tabNotBuilt} />;
+  if (!TAB_COMPONENTS[tab]) {
+    return <TabComingSoon label={workspace.tabs.find((t) => t.key === tab)?.label ?? SHELL_COPY.comingSoon} />;
+  }
 
   return Object.entries(TAB_COMPONENTS).map(([key, Component]) =>
     mountedTabs.has(key) ? (

@@ -1,5 +1,6 @@
-import { Blocks, Building2, ClipboardList, LayoutDashboard, LayoutGrid, UserRound, Users } from 'lucide-react';
+import { Blocks, Building2, ClipboardList, LayoutDashboard, LayoutGrid, ScrollText, UserRound, Users } from 'lucide-react';
 import { SHELL_COPY } from '@/lib/copy/shell';
+import { SUPER_ADMIN_COPY } from '@/lib/copy/super-admin';
 
 // Workspace (outside a business) and Platform (super admin) navigation.
 export const WORKSPACE_LINKS = [
@@ -13,4 +14,5 @@ export const PLATFORM_LINKS = [
   { href: '/super-admin', label: SHELL_COPY.platformOverview, icon: LayoutGrid, exact: true },
   { href: '/super-admin/users', label: SHELL_COPY.platformUsers, icon: Users },
   { href: '/super-admin/features', label: SHELL_COPY.platformModules, icon: Blocks },
+  { href: '/super-admin/audit', label: SUPER_ADMIN_COPY.nav.audit, icon: ScrollText },
 ];

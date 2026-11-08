@@ -1,160 +1,112 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { format } from 'date-fns';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { UserStatsCards } from '@/components/admin/modules/users/UserStatsCards';
+import Link from 'next/link';
+import { Users } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { EmptyState, ListCard, PageHeader } from '@/components/common/page';
 import { getUserStats, listUsersWithRoles } from '@/lib/services/rbac.service';
+import { SUPER_ADMIN_COPY } from '@/lib/copy/super-admin';
+import { PlatformRoleBadge, UserStatusBadge, formatDate, platformRole } from './platform-parts';
 
-function formatDate(dateString) {
-  if (!dateString) return 'Never';
-  return format(new Date(dateString), 'MMM d, yyyy');
+const COPY = SUPER_ADMIN_COPY.overview;
+const COLUMNS = SUPER_ADMIN_COPY.users.columns;
+const RECENT_COUNT = 8;
+
+// One quiet card of account counts: figures, not KPI tiles.
+function Figures({ stats }) {
+  return (
+    <Card className="mb-8 max-md:mb-6">
+      <dl aria-label={COPY.figuresLabel} className="grid grid-cols-2 gap-x-6 gap-y-4 p-card sm:grid-cols-3 lg:grid-cols-5">
+        {COPY.figures.map(({ key, label }) => (
+          <div key={key}>
+            <dt className="text-sm text-muted-foreground">{label}</dt>
+            <dd className="mt-1 text-xl font-semibold tabular-nums">{stats?.[key] ?? '—'}</dd>
+          </div>
+        ))}
+      </dl>
+    </Card>
+  );
 }
 
-function RecentAdminsTableSkeleton() {
+function OverviewSkeleton() {
   return (
-    <div className="space-y-3 p-6" role="status" aria-label="Loading recent admins">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="h-12 rounded bg-muted animate-pulse" />
-      ))}
-      <span className="sr-only">Loading recent admins...</span>
+    <div aria-busy="true">
+      <div className="mb-8 space-y-2 max-md:mb-6">
+        <Skeleton className="h-9 w-60" />
+        <Skeleton className="h-4 w-96 max-w-full" />
+      </div>
+      <Skeleton className="mb-8 h-28 rounded-card max-md:mb-6" />
+      <Skeleton className="mb-4 h-6 w-40" />
+      <ListCard>
+        <div className="space-y-2 p-2">
+          <Skeleton className="h-row-head w-full" />
+          {Array.from({ length: RECENT_COUNT }, (_, i) => <Skeleton key={i} className="h-row w-full" />)}
+        </div>
+      </ListCard>
     </div>
   );
 }
 
-function RecentAdminsTable({ users }) {
-  if (users.length === 0) {
-    return (
-      <div className="p-12 text-center">
-        <p className="text-sm text-muted-foreground">No users found</p>
-      </div>
-    );
-  }
-
+function RecentTable({ users }) {
   return (
-    <div className="overflow-x-auto">
-      <Table aria-label="Recent admins">
-        <TableHeader>
-          <TableRow className="bg-muted/40">
-            <TableHead className="font-semibold">Email</TableHead>
-            <TableHead className="font-semibold">Status</TableHead>
-            <TableHead className="font-semibold">Registered</TableHead>
+    <Table aria-label={COPY.recentTitle}>
+      <TableHeader>
+        <TableRow>
+          <TableHead>{COLUMNS.user}</TableHead>
+          <TableHead>{COLUMNS.role}</TableHead>
+          <TableHead>{COLUMNS.status}</TableHead>
+          <TableHead>{COLUMNS.created}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {users.map((user) => (
+          <TableRow key={user.id}>
+            <TableCell data-card="title" className="break-all font-medium">{user.email}</TableCell>
+            <TableCell data-card="meta"><PlatformRoleBadge name={platformRole(user)?.name} /></TableCell>
+            <TableCell data-card="end"><UserStatusBadge user={user} /></TableCell>
+            <TableCell data-card="meta" data-label={`${COLUMNS.created}:`} className="whitespace-nowrap text-muted-foreground">
+              {formatDate(user.created_at)}
+            </TableCell>
           </TableRow>
-        </TableHeader>
-        <TableBody>
-          {users.map((user) => (
-            <TableRow key={user.id} className="hover:bg-muted/30">
-              <TableCell>
-                <div>
-                  <p className="font-medium text-sm">{user.email}</p>
-                  <p className="text-xs text-muted-foreground font-mono">
-                    {user.id.slice(0, 8)}
-                  </p>
-                </div>
-              </TableCell>
-              <TableCell>
-                {user.is_banned ? (
-                  <Badge variant="destructive" className="text-xs">Banned</Badge>
-                ) : user.email_confirmed_at ? (
-                  <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 text-xs">
-                    Active
-                  </Badge>
-                ) : (
-                  <Badge variant="secondary" className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 text-xs">
-                    Pending
-                  </Badge>
-                )}
-              </TableCell>
-              <TableCell className="text-sm text-muted-foreground">
-                {formatDate(user.created_at)}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
 export default function SuperAdminHomePage() {
-  const [stats, setStats] = useState(null);
-  const [loadingStats, setLoadingStats] = useState(true);
-
-  const [recentUsers, setRecentUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(true);
-  const [usersError, setUsersError] = useState(null);
+  const [data, setData] = useState(null);
 
   useEffect(() => {
-    async function load() {
-      const [statsResult, usersResult] = await Promise.allSettled([
-        getUserStats(),
-        listUsersWithRoles({ page: 1, page_size: 10 }),
-      ]);
-
-      if (statsResult.status === 'fulfilled') {
-        setStats(statsResult.value);
-      }
-      setLoadingStats(false);
-
-      if (usersResult.status === 'fulfilled') {
-        setRecentUsers(usersResult.value.items);
-      } else {
-        const err = usersResult.reason;
-        setUsersError(err instanceof Error ? err.message : 'Failed to load recent admins');
-      }
-      setLoadingUsers(false);
-    }
-
-    load();
+    Promise.allSettled([getUserStats(), listUsersWithRoles({ page: 1, page_size: RECENT_COUNT })]).then(
+      ([stats, recent]) => setData({
+        stats: stats.status === 'fulfilled' ? stats.value : null,
+        recent: recent.status === 'fulfilled' ? recent.value.items : null,
+      })
+    );
   }, []);
 
+  if (!data) return <OverviewSkeleton />;
+
   return (
-    <div className="space-y-8 max-w-[1600px]">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Super Admin Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Full system overview and management
-        </p>
+    <>
+      <PageHeader title={COPY.title} description={COPY.description} />
+      <Figures stats={data.stats} />
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-md font-semibold">{COPY.recentTitle}</h2>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/super-admin/users">{COPY.allUsers}</Link>
+        </Button>
       </div>
-
-      {/* Stats Cards */}
-      <UserStatsCards stats={stats} loading={loadingStats} />
-
-      {/* Recent Admins Table */}
-      <div>
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
-          Recent Users
-        </h3>
-
-        <Card className="border-border shadow-sm">
-          <CardHeader className="pb-0">
-            <CardTitle className="text-base font-semibold text-foreground">
-              Latest Registrations
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0 mt-4">
-            {loadingUsers ? (
-              <RecentAdminsTableSkeleton />
-            ) : usersError ? (
-              <div className="p-8 text-center" role="alert">
-                <p className="text-sm text-destructive">{usersError}</p>
-              </div>
-            ) : (
-              <RecentAdminsTable users={recentUsers} />
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+      <ListCard>
+        {data.recent === null && <p className="p-4 text-sm text-bad" role="alert">{COPY.loadFailed}</p>}
+        {data.recent?.length === 0 && <EmptyState icon={Users} title={SUPER_ADMIN_COPY.users.empty} />}
+        {data.recent?.length > 0 && <RecentTable users={data.recent} />}
+      </ListCard>
+    </>
   );
 }

@@ -1,72 +1,49 @@
 'use client';
 
 import { useState } from 'react';
-import { useAuth } from '@/lib/hooks/useAuth';
+import { MailCheck } from 'lucide-react';
+import { authService } from '@/lib/services/auth.service';
 import { ForgotPasswordForm } from '@/components/forms/auth/ForgotPasswordForm';
-import Link from 'next/link';
-import { CheckCircle } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AuthCard, AuthLink } from '@/components/auth/common/AuthCard';
+import { Button } from '@/components/ui/button';
+import { AUTH_UI_COPY } from '@/lib/copy/auth-ui';
+import { AUTH_ROUTES } from '@/lib/utils/auth-routes';
 
+const COPY = AUTH_UI_COPY.forgot;
+
+// One generic answer whether or not the email has an account (AC-37): the server's message.
 export function ForgotPasswordPage() {
-  const { forgotPassword, loading, error } = useAuth();
-  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [sentMessage, setSentMessage] = useState('');
+  const backToLogin = <AuthLink href={AUTH_ROUTES.login}>{AUTH_UI_COPY.common.backToLogin}</AuthLink>;
 
-  const handleSubmit = async (data) => {
-    const result = await forgotPassword(data.email);
-    if (result.success) {
-      setSuccess(true);
+  const send = async ({ email }) => {
+    setLoading(true);
+    try {
+      const response = await authService.forgotPassword({ email });
+      setSentMessage(response.message);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (success) {
+  if (sentMessage) {
     return (
-      <Card className="w-full max-w-md">
-        <CardContent className="pt-6">
-          <div className="text-center">
-            <div className="flex justify-center mb-4">
-              <CheckCircle className="h-16 w-16 text-primary" />
-            </div>
-
-            <h2 className="text-2xl font-bold text-foreground mb-2">
-              Check your email
-            </h2>
-
-            <p className="text-muted-foreground mb-8">
-              We have sent a password reset link to your email address.
-              Please check your inbox and follow the instructions to reset your password.
-            </p>
-
-            <Link href="/auth/login" className="font-medium text-primary hover:text-primary/80 transition-colors">
-              Return to login
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
+      <AuthCard icon={MailCheck} title={COPY.sentTitle} lede={sentMessage} alt={backToLogin}>
+        <p className="mb-5 text-center text-sm text-muted-foreground">{COPY.sentNote}</p>
+        <Button variant="secondary" className="w-full" onClick={() => setSentMessage('')}>
+          {COPY.again}
+        </Button>
+      </AuthCard>
     );
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle>Reset your password</CardTitle>
-        <CardDescription>Enter your email to receive a password reset link</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {error && (
-          <div className="p-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">
-            {error}
-          </div>
-        )}
-
-        <ForgotPasswordForm onSubmit={handleSubmit} loading={loading} />
-
-        <div className="text-center text-sm text-muted-foreground">
-          Remember your password?{' '}
-          <Link href="/auth/login" className="font-medium text-primary hover:text-primary/80 transition-colors">
-            Sign in
-          </Link>
-        </div>
-      </CardContent>
-    </Card>
+    <AuthCard title={COPY.title} lede={COPY.lede} alt={backToLogin}>
+      <ForgotPasswordForm onSubmit={send} loading={loading} />
+    </AuthCard>
   );
 }

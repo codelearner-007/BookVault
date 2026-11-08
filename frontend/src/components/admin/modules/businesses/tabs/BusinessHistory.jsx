@@ -132,7 +132,7 @@ function ChangesTable({ changes }) {
       <TableBody>
         {changes.map((row) => (
           <TableRow key={row.key}>
-            <TableCell className="whitespace-nowrap text-muted-foreground">{FIELD_LABELS[row.key] ?? row.key}</TableCell>
+            <TableCell className="whitespace-nowrap text-muted-foreground" data-card="title">{FIELD_LABELS[row.key] ?? row.key}</TableCell>
             <TableCell className="break-all text-muted-foreground">{row.before}</TableCell>
             <TableCell className="break-all">{row.after}</TableCell>
           </TableRow>
@@ -215,14 +215,14 @@ function HistoryTable({ logs, onView }) {
       <TableBody>
         {logs.map((log) => (
           <TableRow key={log.id} onClick={() => onView(log)}>
-            <TableCell className="whitespace-nowrap">
+            <TableCell className="whitespace-nowrap" data-card="meta">
               <Button variant="link" onClick={() => onView(log)} aria-label={`View ${buildDescription(log)}`}>
                 {formatTimestamp(log.created_at)}
               </Button>
             </TableCell>
-            <TableCell className="whitespace-nowrap">{log.performed_by ?? 'Admin'}</TableCell>
-            <TableCell className="max-w-0 truncate text-muted-foreground">{buildDescription(log)}</TableCell>
-            <TableCell className="whitespace-nowrap">
+            <TableCell className="whitespace-nowrap" data-card="meta">{log.performed_by ?? 'Admin'}</TableCell>
+            <TableCell className="max-w-0 truncate text-muted-foreground max-md:max-w-none max-md:whitespace-normal" data-card="title">{buildDescription(log)}</TableCell>
+            <TableCell className="whitespace-nowrap" data-card="end">
               <ActionBadge action={log.action} />
             </TableCell>
           </TableRow>

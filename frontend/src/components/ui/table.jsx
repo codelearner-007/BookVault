@@ -4,9 +4,20 @@ import { cn } from "@/lib/utils"
 
 // Comfortable rows, faint dividers, no cell borders. Amount cells use the `num` utility.
 // TableFooter is the totals row: it sits on its own rule.
-const Table = React.forwardRef(({ className, ...props }, ref) => (
+//
+// On phones (< md) every table becomes stacked cards, one card per row (globals.css `.table-cards`).
+// Cells place themselves with `data-card` tokens and name their value with `data-label`:
+//   title    the first line, semibold          end      top end (amount, status)
+//   meta     a muted line (also the default)   actions  the row's More menu, at the end
+//   start    a leading checkbox                 hide     not shown on phones
+// Pass cards={false} for editing grids (form lines), which keep their columns and scroll.
+const Table = React.forwardRef(({ className, cards = true, ...props }, ref) => (
   <div className="relative w-full overflow-x-auto">
-    <table ref={ref} className={cn("w-full border-separate border-spacing-0 text-base", className)} {...props} />
+    <table
+      ref={ref}
+      className={cn("w-full border-separate border-spacing-0 text-base", cards && "table-cards", className)}
+      {...props}
+    />
   </div>
 ))
 Table.displayName = "Table"

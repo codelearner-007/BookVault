@@ -8,8 +8,15 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.access_rights import AreaRight
-from app.core.dependencies import get_current_user, get_db, require_business_access, require_role
+from app.core.dependencies import (
+    get_current_user,
+    get_db,
+    require_business_access,
+    require_live_super_admin,
+    require_role,
+)
 from app.core.pagination import PageParams, page_params
+from app.models.audit_log import SCOPE_PLATFORM
 from app.repositories.audit_repository import AuditFilter
 from app.schemas.auth import CurrentUser
 from app.schemas.common import KEY_MAX, PaginatedResponse
@@ -63,6 +70,33 @@ async def list_business_history(
     """Every audited change of the business (history:view)."""
     f = AuditFilter(
         business_id=ctx.business_id,
+        entity_type=entity_type,
+        action=action,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return await AuditService(db).list_page(f, params)
+
+
+@router.get(
+    "/platform/audit",
+    response_model=PaginatedResponse[AuditLogResponse],
+    dependencies=[Depends(require_live_super_admin)],
+)
+async def list_platform_audit(
+    params: PageParams = Depends(page_params),
+    entity_type: Optional[str] = Query(None, max_length=KEY_MAX),
+    action: Optional[str] = Query(None, max_length=KEY_MAX),
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    db: AsyncSession = Depends(get_db),
+) -> PaginatedResponse[AuditLogResponse]:
+    """Platform-scope audit rows of every actor (live super admin, AAL2).
+
+    Business-scope rows (tenant books) are never returned here: they stay in each business's history.
+    """
+    f = AuditFilter(
+        scope=SCOPE_PLATFORM,
         entity_type=entity_type,
         action=action,
         start_date=start_date,

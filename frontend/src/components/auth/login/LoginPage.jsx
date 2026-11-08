@@ -1,47 +1,38 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { LoginForm } from '@/components/forms/auth/LoginForm';
-import Link from 'next/link';
 import SSOButtons from '@/components/auth/SSOButtons';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AuthCard, AuthLink } from '@/components/auth/common/AuthCard';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AUTH_UI_COPY } from '@/lib/copy/auth-ui';
+import { AUTH_ROUTES, returnPath } from '@/lib/utils/auth-routes';
+
+const COPY = AUTH_UI_COPY.login;
+// ?error= values the auth callback sets when an emailed link cannot be used.
+const LINK_ERRORS = ['invalid_code', 'link_invalid'];
 
 export function LoginPage() {
-  const { login, loading, error } = useAuth();
+  const searchParams = useSearchParams();
+  const { login, loading } = useAuth();
+  const returnTo = returnPath(searchParams.get('returnTo'));
+  const linkInvalid = LINK_ERRORS.includes(searchParams.get('error'));
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle>Welcome back</CardTitle>
-        <CardDescription>Sign in to your account to continue</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {error && (
-          <div className="p-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">
-            {error}
-          </div>
-        )}
-
-        <LoginForm onSubmit={login} loading={loading} />
-
-        <div className="flex items-center justify-end">
-          <Link
-            href="/auth/forgot-password"
-            className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-          >
-            Forgot your password?
-          </Link>
-        </div>
-
-        <SSOButtons onError={() => {}} />
-
-        <div className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{' '}
-          <Link href="/auth/register" className="font-medium text-primary hover:text-primary/80 transition-colors">
-            Sign up
-          </Link>
-        </div>
-      </CardContent>
-    </Card>
+    <AuthCard
+      title={COPY.title}
+      lede={COPY.lede}
+      alt={<>{COPY.alt} <AuthLink href={AUTH_ROUTES.register}>{COPY.altLink}</AuthLink></>}
+      note={COPY.note}
+    >
+      {linkInvalid && (
+        <Alert variant="warn" className="mb-5">
+          <AlertDescription>{COPY.linkInvalid}</AlertDescription>
+        </Alert>
+      )}
+      <LoginForm onSubmit={(values) => login(values, returnTo)} loading={loading} />
+      <SSOButtons />
+    </AuthCard>
   );
 }

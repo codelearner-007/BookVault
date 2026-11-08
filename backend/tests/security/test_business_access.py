@@ -384,6 +384,19 @@ async def test_presets_only_tick_boxes_and_keep_no_link(client, users, db_conn):
     assert links.scalar() == 0
 
 
+async def test_access_areas_list_only_grantable_areas(client, users):
+    user = await users.create()
+
+    response = await client.get("/api/v1/access-areas", headers=user.headers)
+
+    assert response.status_code == 200
+    by_key = {a["key"]: a for a in response.json()["items"]}
+    assert MEMBERS not in by_key and "account.businesses" not in by_key
+    assert not any(key.startswith("platform.") for key in by_key)
+    assert by_key["summary"]["is_view_only"] and not by_key["receipts"]["is_view_only"]
+    assert by_key["customers"]["tab_key"] == "customers"
+
+
 # ------------------------------------------------------------------ M8: new areas, owner, full
 
 

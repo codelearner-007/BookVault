@@ -56,6 +56,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 _DUMP_SKIP_MARKERS = (
     "on_auth_user_created",
     "on_auth_user_bootstrap_check",
+    "on_auth_user_provisioned_late",
     "receipts_bucket_service_role_all",
 )
 

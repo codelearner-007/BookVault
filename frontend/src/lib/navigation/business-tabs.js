@@ -90,7 +90,7 @@ export const TAB_GROUPS = [
       { key: 'capital-accounts', icon: PiggyBank },
       { key: 'special-accounts', icon: Asterisk },
       { key: 'journal-entries', icon: BookOpen },
-      { key: 'folders', icon: Folder },
+      { key: 'folders', icon: Folder, area: 'folders_attachments' },
       { key: 'reports', icon: ChartColumn },
       { key: 'settings', icon: Settings },
     ],

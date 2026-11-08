@@ -8,6 +8,14 @@ import { zodToApiError } from '@/lib/utils/api-errors';
 import { USER_MANAGEMENT_COPY } from '@/lib/copy/user-management';
 
 const EMAIL_EXISTS_CODE = 'email_exists';
+const IDEMPOTENCY_HEADER = 'idempotency-key';
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9-]{8,128}$/;
+
+// The browser's key (one per Add user form) goes on to POST /members; anything malformed is dropped.
+function clientIdempotencyKey(request) {
+  const key = request.headers.get(IDEMPOTENCY_HEADER);
+  return key && IDEMPOTENCY_KEY_PATTERN.test(key) ? key : undefined;
+}
 
 /**
  * POST /api/businesses/[id]/users
@@ -55,6 +63,7 @@ export async function POST(request, { params }) {
     const added = await fetchBackendAsCaller(request, `${businessPath}/members`, {
       method: 'POST',
       body: { user_id: data.user.id, ...input.access },
+      idempotencyKey: clientIdempotencyKey(request),
     });
     if (!added.ok) {
       await adminClient.auth.admin.deleteUser(data.user.id);

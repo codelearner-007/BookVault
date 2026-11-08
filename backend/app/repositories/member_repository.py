@@ -125,6 +125,16 @@ class MemberRepository:
         )
         return [tuple(row) for row in result.all()]
 
+    async def list_grantable_areas(self) -> list[tuple[str, str, str | None, bool]]:
+        """(key, label, tab_key, is_view_only) of every area a custom member can be granted."""
+        result = await self.session.execute(
+            select(Area.key, Area.label, Area.tab_key, Area.is_view_only)
+            .join(Module, Module.id == Area.module_id)
+            .where(Area.is_owner_only.is_(False), Module.key != PLATFORM_MODULE)
+            .order_by(Area.sort_order)
+        )
+        return [tuple(row) for row in result.all()]
+
     async def list_tab_areas(self) -> dict[str, str]:
         result = await self.session.execute(select(Area.tab_key, Area.key).where(Area.tab_key.is_not(None)))
         return {tab_key: area_key for tab_key, area_key in result.all()}

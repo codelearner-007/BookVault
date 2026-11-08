@@ -39,7 +39,9 @@ export const SHELL_COPY = {
   breadcrumb: 'Breadcrumb',
   loadFailed: 'This business could not be opened. It may have been removed or you no longer have access.',
   pageNotFound: 'This page does not exist.',
-  tabNotBuilt: 'This tab is not available yet.',
+  comingSoon: 'Coming soon',
+  comingSoonDescription: 'This tab is switched on for the business but is not built yet. Its records will appear here when it arrives.',
+  comingSoonTag: 'Coming soon',
 };
 
 // Breadcrumb labels of business sub-pages (?page=<key>).

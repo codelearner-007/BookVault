@@ -225,6 +225,52 @@ async def test_provisioning_requires_the_business_owner_as_creator(client, users
         await savepoint.rollback()
 
 
+async def _set_app_metadata(db_conn, user_id, app_metadata):
+    await db_conn.execute(text(
+        "UPDATE auth.users SET raw_app_meta_data = CAST(:meta AS jsonb) WHERE id = CAST(:u AS uuid)"
+    ), {"u": user_id, "meta": json.dumps(app_metadata)})
+
+
+async def test_provisioning_written_after_insert_makes_a_member(client, users, db_conn):
+    """GoTrue admin createUser stores app_metadata with an UPDATE after the insert."""
+    owner = await users.create()
+    business_id = (await create_business(client, owner))["id"]
+    user_id = await _signup(db_conn, f"late{uuid.uuid4().hex[:6]}@{EMAIL_DOMAIN}", True)
+    assert await _live_role(db_conn, user_id) == "admin"
+
+    await _set_app_metadata(db_conn, user_id,
+                            {"provisioned_for_business": business_id, "created_by_user_id": owner.id})
+
+    profile = (await db_conn.execute(text(
+        "SELECT is_provisioned, created_by_user_id::text FROM user_profiles WHERE user_id = CAST(:u AS uuid)"
+    ), {"u": user_id})).one()
+    assert tuple(profile) == (True, owner.id)
+    assert await _live_role(db_conn, user_id) == "member"
+
+
+@pytest.mark.parametrize("case", ["signed_in", "stranger_creator", "owns_business"])
+async def test_late_provisioning_refused_for_existing_or_foreign_accounts(client, users, db_conn, case):
+    owner = await users.create()
+    business_id = (await create_business(client, owner))["id"]
+    creator = await users.create() if case == "stranger_creator" else owner
+    if case == "owns_business":
+        target = await users.create()
+        await create_business(client, target)
+        user_id = target.id
+    else:
+        user_id = await _signup(db_conn, f"late{uuid.uuid4().hex[:6]}@{EMAIL_DOMAIN}", True)
+    if case == "signed_in":
+        await db_conn.execute(text(
+            "UPDATE auth.users SET last_sign_in_at = now() WHERE id = CAST(:u AS uuid)"), {"u": user_id})
+
+    async with db_conn.begin_nested() as savepoint:
+        with pytest.raises(DBAPIError):
+            await _set_app_metadata(db_conn, user_id,
+                                    {"provisioned_for_business": business_id, "created_by_user_id": creator.id})
+        await savepoint.rollback()
+    assert await _live_role(db_conn, user_id) != "member"
+
+
 async def test_create_user_cannot_set_role_or_app_metadata(client, users):
     owner, business_id, _ = await _owner_and_member(client, users)
     member = await users.create_member(owner, business_id)

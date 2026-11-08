@@ -20,32 +20,46 @@ export const memberAccessSchema = z
   })
   .strict();
 
+const fullNameSchema = z.string().trim().min(1, 'Enter a name').max(NAME_MAX_LENGTH);
+const emailSchema = z.string().trim().toLowerCase().email('Enter a valid email');
+
+// The Add user form (the access grid is held outside the form).
+export const businessUserFormSchema = z.object({
+  full_name: fullNameSchema,
+  email: emailSchema,
+  password: strongPasswordSchema,
+  must_change_password: z.boolean(),
+});
+
 // POST /api/businesses/[id]/users. Strict: role and app_metadata can never be sent.
-export const createBusinessUserSchema = z
-  .object({
-    full_name: z.string().trim().min(1).max(NAME_MAX_LENGTH),
-    email: z.string().trim().toLowerCase().email(),
-    password: strongPasswordSchema,
+export const createBusinessUserSchema = businessUserFormSchema
+  .extend({
     must_change_password: z.boolean().default(true),
     access: memberAccessSchema.default({ access_mode: 'custom', areas: [] }),
   })
   .strict();
 
+// The edit-details form.
+export const businessUserDetailsFormSchema = z.object({ full_name: fullNameSchema, email: emailSchema });
+
 // PATCH /api/users/[userId]
 export const updateBusinessUserSchema = z
   .object({
-    full_name: z.string().trim().min(1).max(NAME_MAX_LENGTH).optional(),
-    email: z.string().trim().toLowerCase().email().optional(),
+    full_name: fullNameSchema.optional(),
+    email: emailSchema.optional(),
   })
   .strict()
   .refine((value) => value.full_name !== undefined || value.email !== undefined, {
     message: 'Nothing to update',
   });
 
+// The reset-password form.
+export const resetPasswordFormSchema = z.object({
+  password: strongPasswordSchema,
+  must_change_password: z.boolean(),
+});
+
 // POST /api/users/[userId]/reset-password
-export const resetBusinessUserPasswordSchema = z
-  .object({
-    password: strongPasswordSchema,
-    must_change_password: z.boolean().default(true),
-  })
+export const resetBusinessUserPasswordSchema = resetPasswordFormSchema
+  .extend({ must_change_password: z.boolean().default(true) })
   .strict();

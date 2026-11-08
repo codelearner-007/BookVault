@@ -48,6 +48,22 @@ class MyBusinessAccessResponse(BaseModel):
     areas: list[AreaAccessOut]
 
 
+class AccessAreaResponse(BaseModel):
+    """A grantable area: one row of the custom access grid."""
+
+    key: str
+    label: str
+    tab_key: str | None
+    is_view_only: bool
+
+
+class AccessAreaListResponse(BaseModel):
+    items: list[AccessAreaResponse]
+    total: int
+    page: int
+    page_size: int
+
+
 class AccessPresetResponse(BaseModel):
     key: str
     label: str

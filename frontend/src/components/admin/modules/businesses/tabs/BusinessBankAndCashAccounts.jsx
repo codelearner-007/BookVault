@@ -397,13 +397,13 @@ function AccountCell({ col, account, onView }) {
   if (col.key === BALANCE_COL) {
     const zero = isZeroAmount(account.current_balance);
     return (
-      <TableCell className={cn('num', zero && 'text-muted-foreground')}>
+      <TableCell className={cn('num', zero && 'text-muted-foreground')} data-card="end">
         {formatMoney(account.current_balance)}
       </TableCell>
     );
   }
   return (
-    <TableCell>
+    <TableCell data-card="title">
       <Button variant="link" onClick={() => onView(account)} className="text-foreground hover:text-link">
         {account.name}
       </Button>
@@ -429,7 +429,7 @@ function AccountsTable({ accounts, visibleCols, coaTotal, onView, onEdit }) {
         {accounts.map((account) => (
           <TableRow key={account.id}>
             {visibleCols.map((col) => <AccountCell key={col.key} col={col} account={account} onView={onView} />)}
-            <TableCell className="text-end">
+            <TableCell className="text-end" data-card="actions">
               <Button variant="ghost" size="icon-sm" onClick={() => onEdit(account)} aria-label={`Edit ${account.name}`}>
                 <Pencil />
               </Button>

@@ -1,28 +1,31 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
 import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  useSortable,
-  arrayMove,
+  SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { LayoutGrid, Plus, X, GripVertical, Loader2, Pencil, Check, ArrowUpDown, Trash2 } from 'lucide-react';
+import { ArrowUpDown, Blocks, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { EmptyState, ListCard, MoreMenu, PageHeader } from '@/components/common/page';
 import { listAdminTabs, updateAdminTabs, deleteAdminTab } from '@/lib/services/business.service';
+import { SUPER_ADMIN_COPY } from '@/lib/copy/super-admin';
+import { ConfirmDialog } from './platform-parts';
 
-/* ── Toggle ─────────────────────────────────────────────── */
+const COPY = SUPER_ADMIN_COPY.modules;
+const SKELETON_ROWS = 8;
+const DRAG_DISTANCE_PX = 4;
+
 // PUT /admin-tabs replaces the catalog: send every field so defaults and parents survive.
 function toUpsertItem(tab) {
   return {
@@ -34,481 +37,273 @@ function toUpsertItem(tab) {
   };
 }
 
-function Toggle({ enabled, onChange, label, disabled }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={enabled}
-      aria-label={label}
-      onClick={disabled ? undefined : onChange}
-      className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-        disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
-      } ${enabled ? 'bg-primary' : 'bg-muted-foreground/30'}`}
-    >
-      <span
-        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition-transform duration-300 ease-in-out ${
-          enabled ? 'translate-x-5' : 'translate-x-0'
-        }`}
-      />
-    </button>
-  );
+function keyFromLabel(label) {
+  return label.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 }
 
-/* ── Sortable row inside reorder modal ───────────────────── */
-function SortableItem({ tab }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: tab.key });
-
+function ModulesSkeleton() {
   return (
-    <li
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`flex items-center gap-3 px-4 py-3 bg-card border border-border rounded-lg select-none ${
-        isDragging ? 'shadow-lg opacity-90 z-10' : ''
-      }`}
-    >
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="flex-shrink-0 text-muted-foreground/50 hover:text-muted-foreground cursor-grab active:cursor-grabbing touch-none"
-        aria-label="Drag to reorder"
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
-      <span className="text-sm text-foreground flex-1 truncate">{tab.label}</span>
-    </li>
-  );
-}
-
-/* ── Reorder modal ───────────────────────────────────────── */
-function ReorderModal({ tabs, onSave, onClose, saving }) {
-  const [order, setOrder] = useState(tabs);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
-  );
-
-  function handleDragEnd(event) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIdx = order.findIndex(t => t.key === active.id);
-    const newIdx = order.findIndex(t => t.key === over.id);
-    setOrder(arrayMove(order, oldIdx, newIdx));
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      onClick={onClose}
-    >
-      <div className="absolute inset-0 bg-background/70 backdrop-blur-sm" />
-
-      <Card
-        className="relative z-10 w-full max-w-sm border-border shadow-2xl"
-        onClick={e => e.stopPropagation()}
-      >
-        <CardContent className="p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-foreground">Reorder Tabs</p>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              aria-label="Close"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={order.map(t => t.key)}
-              strategy={verticalListSortingStrategy}
-            >
-              <ul className="space-y-2">
-                {order.map(tab => (
-                  <SortableItem key={tab.key} tab={tab} />
-                ))}
-              </ul>
-            </SortableContext>
-          </DndContext>
-
-          <div className="flex gap-2 pt-1">
-            <Button
-              size="sm"
-              onClick={() => onSave(order)}
-              disabled={saving}
-              className="cursor-pointer"
-            >
-              {saving && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
-              {saving ? 'Saving...' : 'Save Order'}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={onClose} disabled={saving} className="cursor-pointer">
-              Cancel
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+    <div aria-busy="true">
+      <div className="mb-8 flex items-end justify-between gap-4 max-md:mb-6">
+        <div className="space-y-2">
+          <Skeleton className="h-9 w-40" />
+          <Skeleton className="h-4 w-96 max-w-full" />
+        </div>
+        <Skeleton className="h-control w-28 rounded-full" />
+      </div>
+      <ListCard>
+        <div className="space-y-2 p-2">
+          <Skeleton className="h-row-head w-full" />
+          {Array.from({ length: SKELETON_ROWS }, (_, i) => <Skeleton key={i} className="h-row w-full" />)}
+        </div>
+      </ListCard>
     </div>
   );
 }
 
-/* ── Tab row ─────────────────────────────────────────────── */
-function TabRow({ tab, onToggle, onLabelSave, onDelete, disabled }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(tab.label);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const inputRef = useRef(null);
+// Add or rename: one name field. editing = { tab } to rename, {} to add, null when closed.
+function NameDialog({ editing, tabs, busy, onSubmit, onClose }) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState(null);
+  const renaming = Boolean(editing?.tab);
 
-  function startEdit() {
-    if (disabled) return;
-    setDraft(tab.label);
-    setEditing(true);
-    setTimeout(() => inputRef.current?.focus(), 0);
-  }
+  useEffect(() => {
+    setName(editing?.tab?.label ?? '');
+    setError(null);
+  }, [editing]);
 
-  function commitEdit() {
-    const trimmed = draft.trim();
-    if (trimmed && trimmed !== tab.label) onLabelSave(trimmed);
-    setEditing(false);
-  }
-
-  function handleKeyDown(e) {
-    if (e.key === 'Enter') commitEdit();
-    if (e.key === 'Escape') { setEditing(false); setDraft(tab.label); }
-  }
-
-  if (confirmDelete) {
-    return (
-      <li className="flex items-center gap-3 px-4 py-3 bg-destructive/5 border-l-2 border-destructive">
-        <span className="text-sm text-destructive flex-1 truncate">
-          Delete <span className="font-medium">{tab.label}</span>?
-        </span>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            type="button"
-            onClick={() => onDelete()}
-            className="text-xs font-medium text-destructive hover:text-destructive/80 cursor-pointer"
-          >
-            Delete
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmDelete(false)}
-            className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-          >
-            Cancel
-          </button>
-        </div>
-      </li>
-    );
+  function submit(event) {
+    event.preventDefault();
+    const label = name.trim();
+    if (!label) return setError(COPY.nameRequired);
+    if (!renaming && tabs.some((t) => t.key === keyFromLabel(label))) return setError(COPY.nameTaken);
+    return onSubmit(label);
   }
 
   return (
-    <li className="flex items-center gap-3 px-4 py-3.5 group/row">
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        {editing ? (
-          <Input
-            ref={inputRef}
-            value={draft}
-            onChange={e => setDraft(e.target.value)}
-            onBlur={commitEdit}
-            onKeyDown={handleKeyDown}
-            className="h-7 text-sm px-2 py-0"
-          />
-        ) : (
-          <span className="text-sm text-foreground truncate">{tab.label}</span>
-        )}
-        {!editing && !disabled && (
-          <div className="flex items-center gap-2 opacity-0 group-hover/row:opacity-100 transition-opacity duration-150">
-            <button
-              type="button"
-              onClick={startEdit}
-              aria-label="Edit label"
-              className="text-muted-foreground hover:text-primary cursor-pointer"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(true)}
-              aria-label="Delete tab"
-              className="text-muted-foreground hover:text-destructive cursor-pointer"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+    <Dialog open={!!editing} onOpenChange={(open) => !open && !busy && onClose()}>
+      <DialogContent className="md:max-w-sm">
+        <form onSubmit={submit} className="grid gap-4" noValidate>
+          <DialogHeader>
+            <DialogTitle>{renaming ? COPY.renameTitle : COPY.addTitle}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="tab-name">{COPY.nameLabel}</Label>
+            <Input
+              id="tab-name"
+              value={name}
+              onChange={(event) => { setName(event.target.value); setError(null); }}
+              aria-invalid={!!error}
+              aria-describedby={error ? 'tab-name-error' : undefined}
+              autoFocus
+            />
+            {error && <p id="tab-name-error" className="text-sm text-bad">{error}</p>}
           </div>
-        )}
-        {editing && (
-          <button
-            type="button"
-            onClick={commitEdit}
-            aria-label="Confirm"
-            className="flex-shrink-0 text-primary cursor-pointer"
-          >
-            <Check className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>{COPY.cancel}</Button>
+            <Button type="submit" disabled={busy}>{busy ? COPY.saving : renaming ? COPY.save : COPY.add}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-      <div className="flex items-center gap-3 flex-shrink-0">
-        <Toggle
-          enabled={tab.enabled}
-          onChange={onToggle}
-          label={`Enable ${tab.label}`}
-          disabled={disabled}
-        />
-      </div>
+function SortableItem({ tab }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: tab.key });
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`flex items-center gap-2 rounded-control border border-border bg-popover px-2 py-1.5 ${isDragging ? 'z-10 shadow-pop' : ''}`}
+    >
+      <Button variant="ghost" size="icon-sm" className="cursor-grab touch-none" aria-label={COPY.dragHandle(tab.label)} {...attributes} {...listeners}>
+        <GripVertical aria-hidden="true" />
+      </Button>
+      <span className="truncate">{tab.label}</span>
     </li>
   );
 }
 
-/* ── Page ────────────────────────────────────────────────── */
-export default function SuperAdminFeaturesPage() {
-  const [tabs, setTabs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [toggling, setToggling] = useState(false);
-  const [showReorder, setShowReorder] = useState(false);
-  const [reorderSaving, setReorderSaving] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newLabel, setNewLabel] = useState('');
-  const [addError, setAddError] = useState(null);
-  const [adding, setAdding] = useState(false);
-  const [error, setError] = useState(null);
+function ReorderDialog({ open, tabs, busy, onSave, onClose }) {
+  const [order, setOrder] = useState(tabs);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: DRAG_DISTANCE_PX } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
-  useEffect(() => { fetchTabs(); }, []);
+  useEffect(() => {
+    if (open) setOrder(tabs);
+  }, [open, tabs]);
 
-  async function fetchTabs() {
-    setLoading(true);
-    try {
-      const data = await listAdminTabs();
-      setTabs(data.items || []);
-    } catch {
-      setError('Failed to load features.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  /* Toggle on/off — optimistic, no re-fetch */
-  async function toggleEnabled(idx) {
-    if (toggling) return;
-    const next = tabs.map((t, i) => i === idx ? { ...t, enabled: !t.enabled } : t);
-    setTabs(next); // optimistic
-    setToggling(true);
-    try {
-      await updateAdminTabs(next.map(toUpsertItem));
-    } catch {
-      setTabs(tabs); // rollback
-      setError('Failed to save. Please try again.');
-    } finally {
-      setToggling(false);
-    }
-  }
-
-  /* Label edit — optimistic, no re-fetch */
-  async function saveLabel(idx, val) {
-    if (toggling) return;
-    const next = tabs.map((t, i) => i === idx ? { ...t, label: val } : t);
-    setTabs(next);
-    try {
-      await updateAdminTabs(next.map(toUpsertItem));
-    } catch {
-      setTabs(tabs);
-      setError('Failed to save label.');
-    }
-  }
-
-  /* Reorder save — single API call, then re-fetch */
-  async function handleReorderSave(ordered) {
-    setReorderSaving(true);
-    try {
-      await updateAdminTabs(ordered.map(toUpsertItem));
-      const data = await listAdminTabs();
-      setTabs(data.items || []);
-      setShowReorder(false);
-    } catch {
-      setError('Failed to save order.');
-    } finally {
-      setReorderSaving(false);
-    }
-  }
-
-  /* Add tab */
-  async function handleAddTab() {
-    const label = newLabel.trim();
-    if (!label) { setAddError('Tab name is required.'); return; }
-    const key = label.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    if (tabs.some(t => t.key === key)) { setAddError('A tab with this name already exists.'); return; }
-
-    setAdding(true);
-    const next = [...tabs, { id: null, key, label, enabled: true, order_index: tabs.length }];
-    try {
-      await updateAdminTabs(next.map(toUpsertItem));
-      const data = await listAdminTabs();
-      setTabs(data.items || []);
-      setNewLabel('');
-      setAddError(null);
-      setShowAddForm(false);
-    } catch {
-      setError('Failed to add tab.');
-    } finally {
-      setAdding(false);
-    }
-  }
-
-  /* Delete tab */
-  async function handleDeleteTab(key) {
-    try {
-      await deleteAdminTab(key);
-      setTabs(prev => prev.filter(t => t.key !== key));
-    } catch {
-      setError('Failed to delete tab.');
-    }
-  }
-
-  function openAddForm() {
-    setShowAddForm(true);
-    setNewLabel('');
-    setAddError(null);
-  }
-
-  function closeAddForm() { setShowAddForm(false); setAddError(null); }
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-40" />
-          <Skeleton className="h-4 w-72" />
-        </div>
-        <Card className="border-border shadow-sm">
-          <CardContent className="p-0">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="flex items-center gap-3 px-4 py-3.5 border-b border-border last:border-0">
-                <Skeleton className="h-4 w-40 rounded" />
-                <div className="flex-1" />
-                <Skeleton className="h-6 w-11 rounded-full" />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-    );
+  function handleDragEnd({ active, over }) {
+    if (!over || active.id === over.id) return;
+    setOrder((prev) => arrayMove(prev, prev.findIndex((t) => t.key === active.id), prev.findIndex((t) => t.key === over.id)));
   }
 
   return (
-    <>
-      {/* Reorder modal */}
-      {showReorder && (
-        <ReorderModal
-          tabs={tabs}
-          onSave={handleReorderSave}
-          onClose={() => !reorderSaving && setShowReorder(false)}
-          saving={reorderSaving}
-        />
-      )}
-
-      {/* Add tab modal */}
-      {showAddForm && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4" onClick={closeAddForm}>
-          <div className="absolute inset-0 bg-background/70 backdrop-blur-sm" />
-          <Card className="relative z-10 w-full max-w-xs border-border shadow-2xl" onClick={e => e.stopPropagation()}>
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-foreground">New Tab</p>
-                <button type="button" onClick={closeAddForm} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer" aria-label="Close">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <Input
-                value={newLabel}
-                onChange={e => { setNewLabel(e.target.value); setAddError(null); }}
-                onKeyDown={e => e.key === 'Enter' && handleAddTab()}
-                placeholder="Tab name"
-                className="h-8 text-sm"
-                autoFocus
-              />
-              {addError && <p className="text-xs text-destructive">{addError}</p>}
-              <div className="flex gap-2">
-                <Button size="sm" onClick={handleAddTab} disabled={adding} className="cursor-pointer h-7 text-xs px-3">
-                  {adding && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
-                  {adding ? 'Adding...' : 'Add'}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={closeAddForm} className="cursor-pointer h-7 text-xs px-3">
-                  Cancel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Features</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Manage global tab availability for all businesses.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {tabs.length > 1 && (
-              <Button variant="ghost" size="sm" className="gap-1.5 cursor-pointer text-muted-foreground" onClick={() => setShowReorder(true)}>
-                <ArrowUpDown className="h-3.5 w-3.5" />
-                Reorder
-              </Button>
-            )}
-            <Button variant="outline" size="sm" className="gap-1.5 cursor-pointer" onClick={openAddForm}>
-              <Plus className="h-3.5 w-3.5" />
-              Add Tab
-            </Button>
-          </div>
-        </div>
-
-        {error && <p className="text-sm text-destructive">{error}</p>}
-
-        {tabs.length === 0 ? (
-          <Card className="border-border shadow-sm">
-            <CardContent className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-              <div className="p-3 rounded-full bg-muted">
-                <LayoutGrid className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <p className="text-sm font-semibold text-foreground">No features yet</p>
-              <p className="text-xs text-muted-foreground max-w-xs">
-                Add tabs to make them available for businesses to use.
-              </p>
-              <Button size="sm" className="gap-1.5 cursor-pointer mt-1" onClick={openAddForm}>
-                <Plus className="h-3.5 w-3.5" />
-                Add Tab
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="border-border shadow-sm overflow-hidden">
-            <ul className="divide-y divide-border">
-              {tabs.map((tab, idx) => (
-                <TabRow
-                  key={tab.key}
-                  tab={tab}
-                  idx={idx}
-                  onToggle={() => toggleEnabled(idx)}
-                  onLabelSave={val => saveLabel(idx, val)}
-                  onDelete={() => handleDeleteTab(tab.key)}
-                  disabled={toggling}
-                />
-              ))}
+    <Dialog open={open} onOpenChange={(next) => !next && !busy && onClose()}>
+      <DialogContent className="md:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{COPY.reorderTitle}</DialogTitle>
+          <DialogDescription>{COPY.reorderBody}</DialogDescription>
+        </DialogHeader>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={order.map((t) => t.key)} strategy={verticalListSortingStrategy}>
+            <ul className="grid max-h-[60dvh] gap-1.5 overflow-y-auto">
+              {order.map((tab) => <SortableItem key={tab.key} tab={tab} />)}
             </ul>
-          </Card>
+          </SortableContext>
+        </DndContext>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>{COPY.cancel}</Button>
+          <Button onClick={() => onSave(order)} disabled={busy}>{busy ? COPY.saving : COPY.saveOrder}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TabsTable({ tabs, disabled, onToggle, onRename, onRemove }) {
+  const columns = COPY.columns;
+  return (
+    <Table aria-label={COPY.title}>
+      <TableHeader>
+        <TableRow>
+          <TableHead>{columns.tab}</TableHead>
+          <TableHead>{columns.key}</TableHead>
+          <TableHead className="w-24 text-end">{columns.offered}</TableHead>
+          <TableHead className="w-12"><span className="sr-only">{SUPER_ADMIN_COPY.users.columns.actions}</span></TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {tabs.map((tab) => (
+          <TableRow key={tab.key}>
+            <TableCell data-card="title" className="font-medium">{tab.label}</TableCell>
+            <TableCell data-card="meta" className="font-mono text-sm text-muted-foreground">{tab.key}</TableCell>
+            <TableCell data-card="end" className="w-24 text-end">
+              <Switch
+                checked={tab.enabled}
+                onCheckedChange={() => onToggle(tab)}
+                disabled={disabled}
+                aria-label={COPY.offered(tab.label)}
+              />
+            </TableCell>
+            <TableCell data-card="actions" className="w-12 pe-2">
+              <MoreMenu
+                label={COPY.rowActions(tab.label)}
+                items={[
+                  { label: COPY.rename, icon: Pencil, onSelect: () => onRename(tab), disabled },
+                  { label: COPY.remove, icon: Trash2, destructive: true, separatorBefore: true, onSelect: () => onRemove(tab), disabled },
+                ]}
+              />
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+export default function SuperAdminFeaturesPage() {
+  const [tabs, setTabs] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [reordering, setReordering] = useState(false);
+  const [removing, setRemoving] = useState(null);
+
+  async function reload() {
+    try {
+      setTabs((await listAdminTabs()).items);
+    } catch {
+      toast.error(COPY.loadFailed);
+      setTabs((prev) => prev ?? []);
+    }
+  }
+
+  useEffect(() => {
+    reload();
+  }, []);
+
+  // Optimistic catalog write; rolls back on failure.
+  async function save(next, { refetch = false } = {}) {
+    const previous = tabs;
+    setTabs(next);
+    setSaving(true);
+    try {
+      await updateAdminTabs(next.map(toUpsertItem));
+      if (refetch) await reload();
+      return true;
+    } catch {
+      setTabs(previous);
+      toast.error(COPY.saveFailed);
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function submitName(label) {
+    const next = editing.tab
+      ? tabs.map((t) => (t.key === editing.tab.key ? { ...t, label } : t))
+      : [...tabs, { key: keyFromLabel(label), label, enabled: true }];
+    if (await save(next, { refetch: !editing.tab })) setEditing(null);
+  }
+
+  async function saveOrder(ordered) {
+    if (await save(ordered, { refetch: true })) setReordering(false);
+  }
+
+  async function remove() {
+    setSaving(true);
+    try {
+      await deleteAdminTab(removing.key);
+      setTabs((prev) => prev.filter((t) => t.key !== removing.key));
+      setRemoving(null);
+    } catch (err) {
+      toast.error(err?.message || COPY.removeFailed);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!tabs) return <ModulesSkeleton />;
+
+  const actions = (
+    <>
+      <MoreMenu items={[tabs.length > 1 && { label: COPY.reorder, icon: ArrowUpDown, onSelect: () => setReordering(true) }]} />
+      <Button onClick={() => setEditing({})}>
+        <Plus aria-hidden="true" />
+        {COPY.addTab}
+      </Button>
+    </>
+  );
+
+  return (
+    <>
+      <PageHeader title={COPY.title} description={COPY.description} actions={actions} />
+      <ListCard>
+        {tabs.length === 0 ? (
+          <EmptyState icon={Blocks} title={COPY.empty} description={COPY.emptyBody} />
+        ) : (
+          <TabsTable
+            tabs={tabs}
+            disabled={saving}
+            onToggle={(tab) => save(tabs.map((t) => (t.key === tab.key ? { ...t, enabled: !t.enabled } : t)))}
+            onRename={(tab) => setEditing({ tab })}
+            onRemove={setRemoving}
+          />
         )}
-      </div>
+      </ListCard>
+      <NameDialog editing={editing} tabs={tabs} busy={saving} onSubmit={submitName} onClose={() => setEditing(null)} />
+      <ReorderDialog open={reordering} tabs={tabs} busy={saving} onSave={saveOrder} onClose={() => setReordering(false)} />
+      <ConfirmDialog
+        confirm={removing && { title: COPY.removeTitle(removing.label), body: COPY.removeBody, action: COPY.remove, destructive: true }}
+        busy={saving}
+        onConfirm={remove}
+        onClose={() => setRemoving(null)}
+        cancelLabel={COPY.cancel}
+      />
     </>
   );
 }

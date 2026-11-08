@@ -1,79 +1,43 @@
 'use client';
 
-import { CheckCircle } from 'lucide-react';
-import Link from 'next/link';
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { MailCheck, MailX } from 'lucide-react';
 import { authService } from '@/lib/services/auth.service';
+import { AuthCard, AuthLink } from '@/components/auth/common/AuthCard';
 import { ResendVerificationForm } from '@/components/forms/auth/ResendVerificationForm';
+import { linkFailedInUrl, readPendingEmail } from './pending-email';
+import { AUTH_UI_COPY } from '@/lib/copy/auth-ui';
+import { AUTH_ROUTES } from '@/lib/utils/auth-routes';
 
+const COPY = AUTH_UI_COPY.verify;
+
+// Pending (after signup) or expired (a used or old link); both offer a resend with a cooldown.
 export function VerifyEmailPage() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
+  const searchParams = useSearchParams();
+  const [email, setEmail] = useState('');
+  const [expired, setExpired] = useState(false);
 
-  const handleResend = async (data) => {
-    try {
-      setLoading(true);
-      setError('');
-      await authService.resendVerificationEmail(data.email);
-      setSuccess(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    setEmail(readPendingEmail());
+    setExpired(linkFailedInUrl(searchParams));
+  }, [searchParams]);
+
+  const pendingLede = email ? COPY.ledeFor(email) : COPY.lede;
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <div className="flex justify-center mb-2">
-          <CheckCircle className="h-16 w-16 text-primary" />
-        </div>
-        <CardTitle>Check your email</CardTitle>
-        <CardDescription>We&apos;ve sent you a verification link</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-6">
-          <p className="text-muted-foreground text-center">
-            We&apos;ve sent you an email with a verification link.
-            Please check your inbox and click the link to verify your account.
-          </p>
-
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground text-center">
-              Didn&apos;t receive the email? Check your spam folder or enter your email to resend:
-            </p>
-
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            {success && (
-              <Alert className="border-primary/30 bg-primary/5">
-                <AlertDescription className="text-primary">
-                  Verification email has been resent successfully.
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <ResendVerificationForm onSubmit={handleResend} loading={loading} />
-          </div>
-
-          <div className="pt-6 border-t border-border">
-            <Link
-              href="/auth/login"
-              className="block text-center text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-            >
-              Return to login
-            </Link>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <AuthCard
+      icon={expired ? MailX : MailCheck}
+      title={expired ? COPY.expiredTitle : COPY.title}
+      lede={expired ? COPY.expiredLede : pendingLede}
+      alt={<AuthLink href={AUTH_ROUTES.login}>{AUTH_UI_COPY.common.backToLogin}</AuthLink>}
+    >
+      {!expired && <p className="mb-4 text-center text-sm text-muted-foreground">{COPY.resendLabel}</p>}
+      <ResendVerificationForm
+        defaultEmail={email}
+        variant={expired ? 'default' : 'secondary'}
+        onSubmit={(address) => authService.resendVerificationEmail(address)}
+      />
+    </AuthCard>
   );
 }

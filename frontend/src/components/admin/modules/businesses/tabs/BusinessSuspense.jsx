@@ -50,10 +50,10 @@ function SuspenseTable({ entries, balance }) {
       <TableBody>
         {entries.map((entry, i) => (
           <TableRow key={`${entry.receipt_id}-${i}`}>
-            <TableCell className="whitespace-nowrap">{formatDate(entry.receipt_date)}</TableCell>
+            <TableCell className="whitespace-nowrap" data-card="title">{formatDate(entry.receipt_date)}</TableCell>
             <TableCell className="whitespace-nowrap text-muted-foreground">{entry.receipt_reference || '—'}</TableCell>
             <TableCell className="whitespace-nowrap text-muted-foreground">{formatPaidBy(entry)}</TableCell>
-            <TableCell className="num">{formatMoney(entry.amount)}</TableCell>
+            <TableCell className="num" data-card="end">{formatMoney(entry.amount)}</TableCell>
           </TableRow>
         ))}
       </TableBody>

@@ -85,9 +85,9 @@ function api(page) {
 
 async function loginUi(page, email, password) {
   await page.goto('/auth/login');
-  await page.getByPlaceholder('you@example.com').fill(email);
-  await page.getByPlaceholder('••••••••').fill(password);
-  await page.getByRole('button', { name: /sign in|log in|login/i }).click();
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Password', { exact: true }).fill(password);
+  await page.getByRole('button', { name: 'Log in' }).click();
 }
 
 async function createConfirmedUser(request, email, password) {
@@ -107,15 +107,15 @@ test('signup -> verify -> login -> 2FA enroll -> logout -> TOTP login -> recover
 
   // Signup with the country picker (prefilled from the browser locale; chosen explicitly here).
   await page.goto('/auth/register');
-  await page.getByPlaceholder('John Doe').fill('E2E User');
-  await page.getByPlaceholder('you@example.com').fill(email);
+  await page.getByLabel('Full name').fill('E2E User');
+  await page.getByLabel('Email').fill(email);
   await page.getByLabel('Country').click();
   await page.getByRole('option', { name: 'Pakistan' }).click();
-  await page.getByPlaceholder('Create a strong password').fill(PASSWORD);
-  await page.getByPlaceholder('Re-enter your password').fill(PASSWORD);
+  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+  await page.getByLabel('Confirm password').fill(PASSWORD);
   await page.locator('#terms').click();
   const sentAt = Date.now() - 1000;
-  await page.getByRole('button', { name: 'Register' }).click();
+  await page.getByRole('button', { name: 'Create account' }).click();
   await expect(page).toHaveURL(/\/auth\/verify-email/);
 
   // Verify from the email, then sign out and sign in with the password.
@@ -145,20 +145,24 @@ test('signup -> verify -> login -> 2FA enroll -> logout -> TOTP login -> recover
   await expect(page).toHaveURL(/\/auth\/2fa/);
   await page.goto('/admin');
   await expect(page).toHaveURL(/\/auth\/2fa/);
-  await page.getByPlaceholder('Enter 6-digit code').fill(await freshTotp(enroll.secret));
-  await page.getByRole('button', { name: /verify/i }).click();
+  await page.getByLabel('Authentication code').fill(await freshTotp(enroll.secret));
+  await page.getByRole('button', { name: 'Verify' }).click();
   await expect(page).not.toHaveURL(/\/auth\/2fa/);
 
-  // Lost phone: sign in, spend a recovery code. The factor is removed and the user must enroll again.
+  // Lost phone: sign in, spend a recovery code on the 2FA page. The factor is removed and
+  // the user must enroll again before using the app (enrol-first page).
   await api(page).post('/api/auth/logout');
   await loginUi(page, email, PASSWORD);
   await expect(page).toHaveURL(/\/auth\/2fa/);
-  const recovered = await api(page).post('/api/auth/mfa/recover', { code: codes[0] });
-  expect((await recovered.json()).reenrollRequired).toBe(true);
+  await page.getByRole('button', { name: 'Use a recovery code' }).click();
+  await page.getByLabel('Recovery code').fill(codes[0]);
+  await page.getByRole('button', { name: 'Use recovery code' }).click();
+  await expect(page).toHaveURL(/\/auth\/enroll-2fa/);
   const reused = await api(page).post('/api/auth/mfa/recover', { code: codes[0] });
   expect(reused.status()).toBe(400);
   await page.goto('/admin');
-  await expect(page).toHaveURL(/\/profile\?enrollMfa=1/);
+  await expect(page).toHaveURL(/\/auth\/enroll-2fa/);
+  await expect(page.getByRole('img', { name: 'QR code for your authenticator app' })).toBeVisible();
 });
 
 test('forgot password -> reset from the email; the link cannot be used twice', async ({ page, browser }) => {
@@ -167,24 +171,25 @@ test('forgot password -> reset from the email; the link cannot be used twice', a
   await createConfirmedUser(page.request, email, PASSWORD);
 
   await page.goto('/auth/forgot-password');
-  await page.getByPlaceholder('you@example.com').fill(email);
+  await page.getByLabel('Email').fill(email);
   const sentAt = Date.now() - 1000;
-  await page.getByRole('button', { name: /send|reset/i }).click();
+  await page.getByRole('button', { name: 'Send reset link' }).click();
   await expect(page.getByText(/if an account exists|check your email/i).first()).toBeVisible();
 
   const link = await latestLink(page.request, email, { after: sentAt });
   await page.goto(link);
   await expect(page).toHaveURL(/\/auth\/reset-password/);
-  await page.getByPlaceholder('Enter your new password').fill(NEW_PASSWORD);
-  await page.getByPlaceholder('Confirm your new password').fill(NEW_PASSWORD);
-  await page.getByRole('button', { name: /reset|update|save/i }).click();
+  await page.getByLabel('New password', { exact: true }).fill(NEW_PASSWORD);
+  await page.getByLabel('Confirm new password').fill(NEW_PASSWORD);
+  await page.getByRole('button', { name: 'Save new password' }).click();
   await expect(page).toHaveURL(/\/admin/);
 
-  // Second use of the same link, in a clean browser: refused, no session.
+  // Second use of the same link, in a clean browser: refused with an explanation, no session.
   const fresh = await browser.newContext();
   const second = await fresh.newPage();
   await second.goto(link);
-  await expect(second).toHaveURL(/\/auth\/login/);
+  await expect(second).toHaveURL(/\/auth\/reset-password\?status=invalid/);
+  await expect(second.getByRole('link', { name: 'Request a new link' })).toBeVisible();
   await second.goto('/admin');
   await expect(second).toHaveURL(/\/auth\/login/);
 
@@ -194,4 +199,54 @@ test('forgot password -> reset from the email; the link cannot be used twice', a
   await loginUi(second, email, NEW_PASSWORD);
   await expect(second).toHaveURL(/\/(admin|app)/);
   await fresh.close();
+});
+
+test('Account -> Security: password, 2FA on with codes, new codes, 2FA off, other sessions', async ({ page }) => {
+  test.setTimeout(180_000);
+  const email = uniqueEmail('security');
+  await createConfirmedUser(page.request, email, PASSWORD);
+  await loginUi(page, email, PASSWORD);
+  await expect(page).toHaveURL(/\/admin/);
+  await page.goto('/admin/profile?tab=security');
+
+  // Change password (re-auth with the current one).
+  await page.getByRole('button', { name: 'Change password' }).click();
+  const passwordDialog = page.getByRole('dialog');
+  await passwordDialog.getByLabel('Current password').fill(PASSWORD);
+  await passwordDialog.getByLabel('New password', { exact: true }).fill(NEW_PASSWORD);
+  await passwordDialog.getByLabel('Confirm new password').fill(NEW_PASSWORD);
+  await passwordDialog.getByRole('button', { name: 'Save password' }).click();
+  await expect(passwordDialog).toBeHidden();
+
+  // Turn on 2FA: QR + manual key, verify a code, recovery codes shown once.
+  await page.getByRole('button', { name: 'Turn on' }).click();
+  const enrolDialog = page.getByRole('dialog');
+  await expect(enrolDialog.getByRole('img', { name: 'QR code for your authenticator app' })).toBeVisible();
+  const secret = (await enrolDialog.locator('code').textContent()).trim();
+  await enrolDialog.getByLabel('Authentication code').fill(await freshTotp(secret));
+  await enrolDialog.getByRole('button', { name: 'Verify and turn on' }).click();
+  await expect(enrolDialog.getByRole('list', { name: 'Save your recovery codes' }).getByRole('listitem')).toHaveCount(10);
+  await enrolDialog.getByRole('button', { name: 'I saved my codes' }).click();
+  await expect(page.getByText('On', { exact: true })).toBeVisible();
+  await expect(page.getByText(/10 unused/)).toBeVisible();
+
+  // New recovery codes replace the old set.
+  await page.getByRole('button', { name: 'Generate new codes' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Generate new codes' }).click();
+  await expect(page.getByRole('dialog').getByRole('listitem')).toHaveCount(10);
+  await page.getByRole('dialog').getByRole('button', { name: 'I saved my codes' }).click();
+
+  // Turn off: password + a current code.
+  await page.getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menuitem', { name: 'Turn off two-factor sign-in' }).click();
+  const disableDialog = page.getByRole('dialog');
+  await disableDialog.getByLabel('Password', { exact: true }).fill(NEW_PASSWORD);
+  await disableDialog.getByLabel('Authentication code').fill(await freshTotp(secret));
+  await disableDialog.getByRole('button', { name: 'Turn off' }).click();
+  await expect(page.getByText('Off', { exact: true })).toBeVisible();
+
+  // Log out other sessions, confirmed.
+  await page.getByRole('button', { name: 'Log out other sessions' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Log out other sessions' }).click();
+  await expect(page.getByText('All other sessions were signed out.')).toBeVisible();
 });

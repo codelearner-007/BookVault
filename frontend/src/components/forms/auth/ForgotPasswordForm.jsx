@@ -2,54 +2,47 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { forgotPasswordSchema } from '@/lib/schemas/auth.schema';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { AUTH_UI_COPY } from '@/lib/copy/auth-ui';
 
-const forgotPasswordSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
-});
+const COPY = AUTH_UI_COPY.forgot;
+const COMMON = AUTH_UI_COPY.common;
 
 export function ForgotPasswordForm({ onSubmit, loading }) {
-  const form = useForm({
-    resolver: zodResolver(forgotPasswordSchema),
-    defaultValues: {
-      email: '',
-    },
-  });
+  const form = useForm({ resolver: zodResolver(forgotPasswordSchema), defaultValues: { email: '' } });
 
-  const handleSubmit = async (data) => {
-    await onSubmit(data);
+  const handleSubmit = async (values) => {
+    const result = await onSubmit(values);
+    if (!result.success) form.setError('root', { message: result.error || COMMON.unexpected });
   };
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="grid gap-5" noValidate>
+        {form.formState.errors.root && (
+          <Alert variant="destructive">
+            <AlertDescription>{form.formState.errors.root.message}</AlertDescription>
+          </Alert>
+        )}
         <FormField
           control={form.control}
           name="email"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email address</FormLabel>
+              <FormLabel>{COMMON.email}</FormLabel>
               <FormControl>
-                <Input
-                  type="email"
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  {...field}
-                />
+                <Input type="email" autoComplete="email" placeholder={COMMON.emailPlaceholder} {...field} />
               </FormControl>
-              <FormDescription>
-                Enter your email address and we will send you a link to reset your password.
-              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
-
-        <Button type="submit" disabled={loading} className="w-full">
-          {loading ? 'Sending reset link...' : 'Send reset link'}
+        <Button type="submit" className="mt-2 w-full" disabled={loading}>
+          {loading ? COPY.submitting : COPY.submit}
         </Button>
       </form>
     </Form>

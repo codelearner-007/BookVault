@@ -21,6 +21,7 @@ from app.schemas.request.member import (
     UpdateMemberRequest,
 )
 from app.schemas.response.member import (
+    AccessAreaListResponse,
     AccessPresetListResponse,
     ManagedUserListResponse,
     ManagedUserResponse,
@@ -175,6 +176,19 @@ async def my_businesses(
     return await MemberService(db).list_my_businesses(
         current_user.user_id, params.page, params.page_size
     )
+
+
+@router.get(
+    "/access-areas",
+    response_model=AccessAreaListResponse,
+    dependencies=[Depends(get_current_user)],
+)
+async def list_access_areas(
+    params: PageParams = Depends(page_params),
+    db: AsyncSession = Depends(get_db),
+) -> AccessAreaListResponse:
+    """The rows of the custom access grid: grantable areas (no owner-only or platform areas)."""
+    return await MemberService(db).list_areas(params)
 
 
 @router.get(

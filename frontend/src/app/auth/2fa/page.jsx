@@ -1,19 +1,13 @@
-import { MFAVerificationPage } from '@/components/auth/mfa/MFAVerificationPage';
 import { Suspense } from 'react';
+import { MFAVerificationPage } from '@/components/auth/mfa/MFAVerificationPage';
+import { AUTH_UI_COPY } from '@/lib/copy/auth-ui';
+import { AuthCardSkeleton } from '@/components/auth/common/AuthCardSkeleton';
 
-export const metadata = {
-  title: 'Two-Factor Authentication',
-};
+export const metadata = { title: AUTH_UI_COPY.mfa.title };
 
 export default function Page() {
   return (
-    <Suspense
-      fallback={
-        <div className="w-full max-w-md flex justify-center items-center p-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      }
-    >
+    <Suspense fallback={<AuthCardSkeleton fields={1} />}>
       <MFAVerificationPage />
     </Suspense>
   );

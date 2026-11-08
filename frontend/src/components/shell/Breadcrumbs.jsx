@@ -4,11 +4,13 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { SHELL_COPY, PAGE_LABELS } from '@/lib/copy/shell';
 import { DEFAULT_TAB, businessRoute } from '@/lib/navigation/business-tabs';
+import { SUPER_ADMIN_COPY } from '@/lib/copy/super-admin';
 import { useShell } from './ShellContext';
 
 const AREA_CRUMBS = [
   { prefix: '/super-admin/users', trail: [SHELL_COPY.groupPlatform, SHELL_COPY.platformUsers] },
   { prefix: '/super-admin/features', trail: [SHELL_COPY.groupPlatform, SHELL_COPY.platformModules] },
+  { prefix: '/super-admin/audit', trail: [SHELL_COPY.groupPlatform, SUPER_ADMIN_COPY.nav.audit] },
   { prefix: '/super-admin/profile', trail: [SHELL_COPY.groupPlatform, SHELL_COPY.account] },
   { prefix: '/super-admin', trail: [SHELL_COPY.groupPlatform, SHELL_COPY.platformOverview] },
   { prefix: '/admin/businesses', trail: [SHELL_COPY.businesses] },

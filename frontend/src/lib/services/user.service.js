@@ -8,8 +8,4 @@ export const userService = {
   async updateProfile(data) {
     return apiClient.patch('/v1/profile', data);
   },
-
-  async changePassword(data) {
-    return apiClient.post('/auth/change-password', data);
-  },
 };

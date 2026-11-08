@@ -1,139 +1,48 @@
 'use client';
 
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { changePasswordSchema } from '@/lib/schemas/auth.schema';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { passwordChangeSchema, getPasswordStrength } from '@/lib/schemas/user.schema';
-import { cn } from '@/lib/utils';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Form } from '@/components/ui/form';
+import { PasswordFormField } from '@/components/auth/common/PasswordFormField';
+import { PasswordRules } from '@/components/auth/common/PasswordRules';
+import { AUTH_UI_COPY } from '@/lib/copy/auth-ui';
 
-export function ChangePasswordForm({ onSubmit, loading }) {
-  const [passwordStrength, setPasswordStrength] = useState(0);
+const COPY = AUTH_UI_COPY.security;
 
+/*
+  Change password with re-authentication (the current password, checked by the route).
+  onSubmit resolves { success, error }; a success resets the form.
+*/
+export function ChangePasswordForm({ onSubmit, currentLabel = COPY.currentPassword, submitLabel = COPY.savePassword, fullWidth }) {
   const form = useForm({
-    resolver: zodResolver(passwordChangeSchema),
-    defaultValues: {
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: '',
-    },
+    resolver: zodResolver(changePasswordSchema),
+    defaultValues: { currentPassword: '', newPassword: '', confirmPassword: '' },
   });
+  const [newPassword, confirmPassword] = useWatch({ control: form.control, name: ['newPassword', 'confirmPassword'] });
 
-  const handleSubmit = async (data) => {
-    const result = await onSubmit(data);
-    if (result?.success) {
-      form.reset();
-      setPasswordStrength(0);
-    }
-  };
-
-  const getStrengthLabel = (strength) => {
-    const labels = ['Very Weak', 'Weak', 'Fair', 'Strong', 'Very Strong'];
-    return labels[strength] || 'Very Weak';
-  };
-
-  const getStrengthColor = (strength) => {
-    const colors = [
-      'bg-destructive',
-      'bg-chart-1',
-      'bg-chart-4',
-      'bg-chart-2',
-      'bg-chart-5',
-    ];
-    return colors[strength] || 'bg-destructive';
+  const handleSubmit = async (values) => {
+    const result = await onSubmit(values);
+    if (result.success) form.reset();
+    else form.setError('root', { message: result.error || AUTH_UI_COPY.common.unexpected });
   };
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-        <FormField
-          control={form.control}
-          name="currentPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Current Password</FormLabel>
-              <FormControl>
-                <Input
-                  type="password"
-                  autoComplete="current-password"
-                  placeholder="Enter your current password"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="newPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>New Password</FormLabel>
-              <FormControl>
-                <Input
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder="Enter your new password"
-                  {...field}
-                  onChange={(e) => {
-                    field.onChange(e);
-                    setPasswordStrength(getPasswordStrength(e.target.value));
-                  }}
-                />
-              </FormControl>
-              {field.value && (
-                <div className="space-y-2 mt-2">
-                  <div className="flex gap-1">
-                    {[0, 1, 2, 3, 4].map((level) => (
-                      <div
-                        key={level}
-                        className={cn(
-                          "h-2 flex-1 rounded-full transition-colors",
-                          level < passwordStrength
-                            ? getStrengthColor(passwordStrength)
-                            : "bg-muted"
-                        )}
-                      />
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Password strength: <span className="font-medium">{getStrengthLabel(passwordStrength)}</span>
-                  </p>
-                </div>
-              )}
-              <FormDescription>
-                At least 12 characters. A passphrase of a few words works well.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="confirmPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Confirm New Password</FormLabel>
-              <FormControl>
-                <Input
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder="Confirm your new password"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <Button type="submit" disabled={loading}>
-          {loading ? 'Updating...' : 'Update Password'}
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="grid gap-5" noValidate>
+        {form.formState.errors.root && (
+          <Alert variant="destructive">
+            <AlertDescription>{form.formState.errors.root.message}</AlertDescription>
+          </Alert>
+        )}
+        <PasswordFormField control={form.control} name="currentPassword" label={currentLabel} autoComplete="current-password" />
+        <PasswordFormField control={form.control} name="newPassword" label={COPY.newPassword} />
+        <PasswordFormField control={form.control} name="confirmPassword" label={COPY.confirmPassword} />
+        <PasswordRules password={newPassword} confirm={confirmPassword} />
+        <Button type="submit" className={fullWidth ? 'mt-2 w-full' : 'mt-2 justify-self-start'} disabled={form.formState.isSubmitting}>
+          {form.formState.isSubmitting ? COPY.saving : submitLabel}
         </Button>
       </form>
     </Form>

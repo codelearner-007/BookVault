@@ -400,9 +400,9 @@ function ReceiptsList({ receipts, loading }) {
       <TableBody>
         {receipts.map((r) => (
           <TableRow key={r.id}>
-            <TableCell>{formatDate(r.date)}</TableCell>
+            <TableCell data-card="title">{formatDate(r.date)}</TableCell>
             <TableCell className="text-muted-foreground">{r.reference || '—'}</TableCell>
-            <TableCell className="num">{formatMoney(r.total)}</TableCell>
+            <TableCell className="num" data-card="end">{formatMoney(r.total)}</TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -460,7 +460,7 @@ function ViewDialog({ open, onOpenChange, customer, businessId }) {
 function CustomerCell({ col, customer, onView }) {
   if (col.key === 'name') {
     return (
-      <TableCell className="whitespace-nowrap">
+      <TableCell className="whitespace-nowrap" data-card="title">
         <Button variant="link" onClick={() => onView(customer)} className="text-foreground hover:text-link">
           {customer.name}
         </Button>
@@ -468,7 +468,7 @@ function CustomerCell({ col, customer, onView }) {
     );
   }
   const value = col.key === 'code' ? customer.code : customer.email;
-  return <TableCell className="whitespace-nowrap text-muted-foreground">{value || '—'}</TableCell>;
+  return <TableCell className="whitespace-nowrap text-muted-foreground" data-label={col.label}>{value || '—'}</TableCell>;
 }
 
 function CustomersTable({ customers, visibleCols, onView, onEdit }) {
@@ -486,7 +486,7 @@ function CustomersTable({ customers, visibleCols, onView, onEdit }) {
             {visibleCols.map((col) => (
               <CustomerCell key={col.key} col={col} customer={customer} onView={onView} />
             ))}
-            <TableCell className="text-end">
+            <TableCell className="text-end" data-card="actions">
               <Button
                 variant="ghost"
                 size="icon-sm"

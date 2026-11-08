@@ -491,7 +491,7 @@ function ReceiptLinesEditor({ lines, setLines, flags, saving, coaAccounts, onUpd
 
   return (
     <ListCard footer={addLineButton}>
-      <Table className="min-w-xl">
+      <Table className="min-w-xl" cards={false}>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead className="w-10"><span className="sr-only">Reorder</span></TableHead>
@@ -980,9 +980,9 @@ function ReceiptViewLines({ lines, total, showLineNumber, showDescription, showQ
           {lines.map((line, idx) => (
             <TableRow key={line.id ?? idx}>
               {showLineNumber && (
-                <TableCell className="text-center tabular-nums text-muted-foreground">{idx + 1}</TableCell>
+                <TableCell className="text-center tabular-nums text-muted-foreground" data-card="hide">{idx + 1}</TableCell>
               )}
-              <TableCell>{line.account_name ?? line.account_id ?? '—'}</TableCell>
+              <TableCell data-card="title">{line.account_name ?? line.account_id ?? '—'}</TableCell>
               {showDescription && (
                 <TableCell className="text-muted-foreground">{line.line_description || '—'}</TableCell>
               )}
@@ -991,7 +991,7 @@ function ReceiptViewLines({ lines, total, showLineNumber, showDescription, showQ
               {showDiscount && (
                 <TableCell className="num text-muted-foreground">{formatMoney(line.discount ?? 0)}</TableCell>
               )}
-              <TableCell className="num font-medium">{formatMoney(line.total)}</TableCell>
+              <TableCell className="num font-medium" data-card="end">{formatMoney(line.total)}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -1059,7 +1059,7 @@ function listCellValue(key, receipt) {
 function ReceiptListCell({ colKey, receipt, onView }) {
   if (colKey === 'date') {
     return (
-      <TableCell className="whitespace-nowrap">
+      <TableCell className="whitespace-nowrap" data-card="title">
         <Button variant="link" className="h-auto px-0 text-foreground hover:text-link" onClick={onView}>
           {formatDate(receipt.date)}
         </Button>
@@ -1081,7 +1081,10 @@ function ReceiptListCell({ colKey, receipt, onView }) {
   if (value === null) return null;
   const muted = colKey !== 'amount' || Number(receipt.total) === 0;
   return (
-    <TableCell className={cn('whitespace-nowrap', NUMERIC_COLS.has(colKey) && 'num', muted ? 'text-muted-foreground' : 'text-foreground')}>
+    <TableCell
+      className={cn('whitespace-nowrap', NUMERIC_COLS.has(colKey) && 'num', muted ? 'text-muted-foreground' : 'text-foreground')}
+      data-card={colKey === 'amount' ? 'end' : undefined}
+    >
       {value}
     </TableCell>
   );
@@ -1109,7 +1112,7 @@ function ReceiptsTable({ visibleCols, rows, onView, onEdit }) {
             {visibleCols.map((col) => (
               <ReceiptListCell key={col.key} colKey={col.key} receipt={receipt} onView={() => onView(receipt.id)} />
             ))}
-            <TableCell className="w-12 pe-2 ps-0 text-end">
+            <TableCell className="w-12 pe-2 ps-0 text-end" data-card="actions">
               <Button
                 variant="ghost"
                 size="icon-sm"

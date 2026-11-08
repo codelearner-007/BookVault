@@ -1,24 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import Link from 'next/link';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { registerSchema } from '@/lib/schemas/auth.schema';
-import { getPasswordStrength, PASSWORD_MIN_LENGTH } from '@/lib/schemas/password.schema';
 import { listCountries } from '@/lib/services/countries.service';
 import { Button } from '@/components/ui/button';
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
+import { PasswordFormField } from '@/components/auth/common/PasswordFormField';
+import { PasswordRules } from '@/components/auth/common/PasswordRules';
+import { AUTH_UI_COPY } from '@/lib/copy/auth-ui';
+
+const COPY = AUTH_UI_COPY.register;
+const COMMON = AUTH_UI_COPY.common;
+const TERMS_ID = 'terms';
 
 // Region of the browser locale ("en-PK" -> "PK"), used to prefill the country (B0.7).
 function browserRegion() {
@@ -29,19 +30,68 @@ function browserRegion() {
   }
 }
 
+function TermsField({ accepted, onChange, error }) {
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex items-start gap-3">
+        <Checkbox
+          id={TERMS_ID}
+          checked={accepted}
+          onCheckedChange={(checked) => onChange(checked === true)}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${TERMS_ID}-error` : undefined}
+          className="mt-0.5"
+        />
+        <Label htmlFor={TERMS_ID} className="text-sm font-normal leading-snug text-muted-foreground">
+          <span>
+            {COPY.termsBefore}
+            <Link href="/terms" target="_blank" className="font-medium text-link hover:underline">{COPY.terms}</Link>
+            {COPY.termsAnd}
+            <Link href="/privacy" target="_blank" className="font-medium text-link hover:underline">{COPY.privacy}</Link>
+          </span>
+        </Label>
+      </div>
+      {error && <p id={`${TERMS_ID}-error`} className="text-sm text-bad">{error}</p>}
+    </div>
+  );
+}
+
+function CountryField({ control, countries }) {
+  return (
+    <FormField
+      control={control}
+      name="country_id"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{COPY.country}</FormLabel>
+          <Select value={field.value} onValueChange={field.onChange}>
+            <FormControl>
+              <SelectTrigger aria-label={COPY.country}>
+                <SelectValue placeholder={COPY.countryPlaceholder} />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              {countries.map((country) => (
+                <SelectItem key={country.id} value={country.id}>{country.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
+
 export function RegisterForm({ onSubmit, loading }) {
-  const [passwordStrength, setPasswordStrength] = useState(0);
   const [countries, setCountries] = useState([]);
+  const [accepted, setAccepted] = useState(false);
+  const [termsError, setTermsError] = useState('');
   const form = useForm({
     resolver: zodResolver(registerSchema),
-    defaultValues: {
-      email: '',
-      password: '',
-      confirmPassword: '',
-      full_name: '',
-      country_id: '',
-    },
+    defaultValues: { full_name: '', email: '', country_id: '', password: '', confirmPassword: '' },
   });
+  const [password, confirmPassword] = useWatch({ control: form.control, name: ['password', 'confirmPassword'] });
 
   useEffect(() => {
     listCountries()
@@ -53,141 +103,63 @@ export function RegisterForm({ onSubmit, loading }) {
       .catch(() => setCountries([]));
   }, [form]);
 
-  const handleSubmit = async (data) => {
-    const result = await onSubmit(data);
-    if (!result.success && result.error) {
-      form.setError('root', { message: result.error });
+  const handleSubmit = async (values) => {
+    if (!accepted) {
+      setTermsError(COPY.termsRequired);
+      return;
     }
+    const result = await onSubmit(values);
+    if (!result.success) form.setError('root', { message: result.error || COMMON.unexpected });
+  };
+
+  const changeTerms = (value) => {
+    setAccepted(value);
+    if (value) setTermsError('');
   };
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="grid gap-5" noValidate>
         {form.formState.errors.root && (
-          <div className="text-sm text-destructive">
-            {form.formState.errors.root.message}
-          </div>
+          <Alert variant="destructive">
+            <AlertDescription>{form.formState.errors.root.message}</AlertDescription>
+          </Alert>
         )}
-
         <FormField
           control={form.control}
           name="full_name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Full Name (Optional)</FormLabel>
+              <FormLabel>
+                {COPY.fullName} <span className="font-normal text-muted-foreground">{COPY.fullNameHint}</span>
+              </FormLabel>
               <FormControl>
-                <Input type="text" placeholder="John Doe" {...field} />
+                <Input autoComplete="name" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-
         <FormField
           control={form.control}
           name="email"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
+              <FormLabel>{COMMON.email}</FormLabel>
               <FormControl>
-                <Input type="email" placeholder="you@example.com" autoComplete="email" {...field} />
+                <Input type="email" autoComplete="email" placeholder={COMMON.emailPlaceholder} {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-
-        <FormField
-          control={form.control}
-          name="country_id"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Country</FormLabel>
-              <Select value={field.value} onValueChange={field.onChange}>
-                <FormControl>
-                  <SelectTrigger aria-label="Country">
-                    <SelectValue placeholder="Select your country" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {countries.map((country) => (
-                    <SelectItem key={country.id} value={country.id}>
-                      {country.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Password</FormLabel>
-              <FormControl>
-                <Input
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder="Create a strong password"
-                  {...field}
-                  onChange={(e) => {
-                    field.onChange(e);
-                    setPasswordStrength(getPasswordStrength(e.target.value));
-                  }}
-                />
-              </FormControl>
-              {field.value && (
-                <div className="space-y-2 mt-2">
-                  <div className="flex gap-1">
-                    {[0, 1, 2, 3, 4].map((level) => (
-                      <div
-                        key={level}
-                        className={cn(
-                          'h-2 flex-1 rounded-full transition-colors',
-                          level < passwordStrength
-                            ? ['bg-destructive', 'bg-chart-1', 'bg-chart-4', 'bg-chart-2', 'bg-chart-5'][passwordStrength] ||
-                                'bg-destructive'
-                            : 'bg-muted'
-                        )}
-                      />
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Password strength:{' '}
-                    <span className="font-medium">
-                      {['Very Weak', 'Weak', 'Fair', 'Strong', 'Very Strong'][passwordStrength] || 'Very Weak'}
-                    </span>
-                  </p>
-                </div>
-              )}
-              <FormDescription>
-                At least {PASSWORD_MIN_LENGTH} characters. A passphrase of a few words works well.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="confirmPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Confirm Password</FormLabel>
-              <FormControl>
-                <Input type="password" autoComplete="new-password" placeholder="Re-enter your password" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? 'Registering...' : 'Register'}
+        <CountryField control={form.control} countries={countries} />
+        <PasswordFormField control={form.control} name="password" label={COPY.password} />
+        <PasswordFormField control={form.control} name="confirmPassword" label={COPY.confirmPassword} />
+        <PasswordRules password={password} confirm={confirmPassword} />
+        <TermsField accepted={accepted} onChange={changeTerms} error={termsError} />
+        <Button type="submit" className="mt-2 w-full" disabled={loading}>
+          {loading ? COPY.submitting : COPY.submit}
         </Button>
       </form>
     </Form>

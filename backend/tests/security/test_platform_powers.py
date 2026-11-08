@@ -21,6 +21,7 @@ PLATFORM_ROUTES = [
     ("GET", "/api/v1/admin-tabs"),
     ("PUT", "/api/v1/admin-tabs"),
     ("DELETE", "/api/v1/admin-tabs/{other}"),
+    ("GET", "/api/v1/platform/audit"),
 ]
 PLATFORM_IDS = [f"{m} {p}" for m, p in PLATFORM_ROUTES]
 

@@ -20,11 +20,12 @@ export async function fetchBackendWithToken(accessToken, path, options = {}) {
   return callBackend({ authorization: `Bearer ${accessToken}` }, path, options);
 }
 
-async function callBackend(authHeaders, path, { method = 'GET', body } = {}) {
+async function callBackend(authHeaders, path, { method = 'GET', body, idempotencyKey } = {}) {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || DEFAULT_BACKEND_URL;
   const headers = { ...authHeaders, ...CLIENT_HEADER };
   // Create routes (e.g. POST /members) require an Idempotency-Key; other POSTs tolerate it.
-  if (method === 'POST') headers['Idempotency-Key'] = crypto.randomUUID();
+  // A caller that has the browser's key (one per form) passes it on, so a retry is recognised.
+  if (method === 'POST') headers['Idempotency-Key'] = idempotencyKey || crypto.randomUUID();
   if (body !== undefined) headers['content-type'] = 'application/json';
   return fetch(`${baseUrl}${path}`, {
     method,

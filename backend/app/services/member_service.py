@@ -20,6 +20,8 @@ from app.schemas.request.member import (
 from app.schemas.response.business import BusinessResponse
 from app.schemas.response.tab import BusinessTabResponse
 from app.schemas.response.member import (
+    AccessAreaListResponse,
+    AccessAreaResponse,
     AccessPresetListResponse,
     AccessPresetResponse,
     AreaAccessOut,
@@ -102,6 +104,15 @@ class MemberService:
             return tab_areas.get(tab_key) in viewable
 
         return [t for t in tabs if visible(t.key)]
+
+    async def list_areas(self, params: PageParams) -> AccessAreaListResponse:
+        areas = [
+            AccessAreaResponse(key=key, label=label, tab_key=tab_key, is_view_only=view_only)
+            for key, label, tab_key, view_only in await self.repo.list_grantable_areas()
+        ]
+        return AccessAreaListResponse(
+            items=params.slice(areas), total=len(areas), page=params.page, page_size=params.page_size
+        )
 
     async def list_presets(self, params: PageParams) -> AccessPresetListResponse:
         presets = [

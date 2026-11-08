@@ -103,11 +103,12 @@ export async function updateSession(request) {
         const isSuperAdmin = userRole === 'super_admin'
 
         // Business users created with "must change password at next login" (D-30):
-        // every protected page leads to the profile page until the password is changed.
-        const profilePath = isSuperAdmin ? '/super-admin/profile' : '/admin/profile'
-        if (user.user.app_metadata?.must_change_password && !pathname.startsWith(profilePath)) {
+        // every protected page leads to the change-password page until the password is changed.
+        if (user.user.app_metadata?.must_change_password) {
             const url = request.nextUrl.clone()
-            url.pathname = profilePath
+            url.pathname = '/auth/change-password'
+            url.search = ''
+            url.searchParams.set('returnTo', pathname)
             return NextResponse.redirect(url)
         }
 
@@ -116,11 +117,10 @@ export async function updateSession(request) {
         // Users with a verified factor were already sent to /auth/2fa above.
         const mustEnroll =
             (isSuperAdmin || user.user.app_metadata?.mfa_reenroll_required) && !mfaStatus?.hasVerifiedMFA
-        if (mustEnroll && !pathname.startsWith(profilePath)) {
+        if (mustEnroll) {
             const url = request.nextUrl.clone()
-            url.pathname = profilePath
+            url.pathname = '/auth/enroll-2fa'
             url.search = ''
-            url.searchParams.set('enrollMfa', '1')
             return NextResponse.redirect(url)
         }
 

@@ -19,9 +19,12 @@ class AuditFilter:
     action: Optional[str] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
+    scope: Optional[str] = None
 
 
 def _where(query, f: AuditFilter):
+    if f.scope is not None:
+        query = query.where(AuditLog.scope == f.scope)
     if f.user_id is not None:
         query = query.where(AuditLog.user_id == f.user_id)
     if f.business_id is not None:

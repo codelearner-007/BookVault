@@ -1,67 +1,82 @@
 'use client';
 
-import { useState } from 'react';
-import { useAuth } from '@/lib/hooks/useAuth';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { LinkIcon } from 'lucide-react';
+import { authService } from '@/lib/services/auth.service';
 import { ResetPasswordForm } from '@/components/forms/auth/ResetPasswordForm';
-import { useRouter } from 'next/navigation';
-import { CheckCircle } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AuthCard, AuthLink } from '@/components/auth/common/AuthCard';
+import { AuthCardSkeleton } from '@/components/auth/common/AuthCardSkeleton';
+import { linkFailedInUrl } from '@/components/auth/verify-email/pending-email';
 import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { AUTH_UI_COPY } from '@/lib/copy/auth-ui';
+import { AUTH_ROUTES, withReturnTo } from '@/lib/utils/auth-routes';
+
+const COPY = AUTH_UI_COPY.reset;
+const STATE = { checking: 'checking', ready: 'ready', invalid: 'invalid' };
+
+// The emailed link opens a recovery session (auth callback); without one the link was used or expired.
+async function recoveryState(searchParams) {
+  if (linkFailedInUrl(searchParams)) return { state: STATE.invalid };
+  try {
+    const me = await authService.getCurrentUser();
+    if (!me.user) return { state: STATE.invalid };
+    return { state: STATE.ready, requiresMFA: Boolean(me.requiresMFA) };
+  } catch {
+    return { state: STATE.invalid };
+  }
+}
 
 export function ResetPasswordPage() {
-  const { resetPassword, loading, error } = useAuth();
-  const [success, setSuccess] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [state, setState] = useState(STATE.checking);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (data) => {
-    const result = await resetPassword(data.newPassword, data.confirmPassword);
-    if (result.success) {
-      setSuccess(true);
-      const requiresMFA =
-        'requiresMFA' in result && typeof result.requiresMFA === 'boolean'
-          ? result.requiresMFA
-          : false;
-      setTimeout(() => {
-        router.push(requiresMFA ? '/auth/2fa?returnTo=/app' : '/app');
-      }, 1500);
+  useEffect(() => {
+    let active = true;
+    recoveryState(searchParams).then((result) => {
+      if (!active) return;
+      // A user with 2FA finishes the second step before the password can change.
+      if (result.requiresMFA) router.replace(withReturnTo(AUTH_ROUTES.mfa, AUTH_ROUTES.reset));
+      else setState(result.state);
+    });
+    return () => {
+      active = false;
+    };
+  }, [router, searchParams]);
+
+  const save = async (values) => {
+    setLoading(true);
+    try {
+      await authService.resetPassword(values);
+      router.push(AUTH_ROUTES.home);
+      return { success: true };
+    } catch (err) {
+      if (err.status === 401) setState(STATE.invalid);
+      return { success: false, error: err.message };
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (success) {
+  if (state === STATE.checking) return <AuthCardSkeleton fields={2} />;
+
+  const backToLogin = <AuthLink href={AUTH_ROUTES.login}>{AUTH_UI_COPY.common.backToLogin}</AuthLink>;
+  if (state === STATE.invalid) {
     return (
-      <Card className="w-full max-w-md">
-        <CardContent className="pt-6">
-          <div className="text-center">
-            <div className="flex justify-center mb-4">
-              <CheckCircle className="h-16 w-16 text-primary" />
-            </div>
-            <h2 className="text-2xl font-bold text-foreground mb-2">
-              Password reset successful
-            </h2>
-            <p className="text-muted-foreground mb-8">
-              Your password has been successfully reset.
-              You will be redirected to the app in a moment.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <AuthCard icon={LinkIcon} title={COPY.invalidTitle} lede={COPY.invalidLede} alt={backToLogin}>
+        <Button asChild className="w-full">
+          <Link href={AUTH_ROUTES.forgot}>{COPY.requestNew}</Link>
+        </Button>
+      </AuthCard>
     );
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle>Create new password</CardTitle>
-        <CardDescription>Enter your new password below</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {error && (
-          <div className="p-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">
-            {error}
-          </div>
-        )}
-        <ResetPasswordForm onSubmit={handleSubmit} loading={loading} />
-      </CardContent>
-    </Card>
+    <AuthCard title={COPY.title} lede={COPY.lede} alt={backToLogin}>
+      <ResetPasswordForm onSubmit={save} loading={loading} />
+    </AuthCard>
   );
 }

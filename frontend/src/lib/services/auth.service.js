@@ -29,13 +29,18 @@ export const authService = {
     return apiClient.post('/auth/reset-password', data);
   },
 
+  async changePassword(data) {
+    return apiClient.post('/auth/change-password', data);
+  },
+
   // MFA Management
   async listMFAFactors() {
     return apiClient.get('/auth/mfa/factors');
   },
 
-  async enrollMFAFactor(friendlyName) {
-    return apiClient.post('/auth/mfa/enroll', { friendlyName });
+  // password is needed only when the sign-in is not recent (403 code reauth_required).
+  async enrollMFAFactor(friendlyName, password) {
+    return apiClient.post('/auth/mfa/enroll', { friendlyName, ...(password ? { password } : {}) });
   },
 
   async challengeMFAFactor(factorId) {
@@ -46,20 +51,36 @@ export const authService = {
     return apiClient.post('/auth/mfa/verify', { factorId, challengeId, code });
   },
 
-  async unenrollMFAFactor(factorId) {
-    return apiClient.post('/auth/mfa/unenroll', { factorId });
+  async unenrollMFAFactor(factorId, password) {
+    return apiClient.post('/auth/mfa/unenroll', { factorId, password });
   },
 
   async generateRecoveryCodes() {
     return apiClient.post('/auth/mfa/recovery-codes');
   },
 
-  async useRecoveryCode(code) {
+  async getRecoveryCodeStatus() {
+    return apiClient.get('/auth/mfa/recovery-codes');
+  },
+
+  async redeemRecoveryCode(code) {
     return apiClient.post('/auth/mfa/recover', { code });
   },
 
   async revokeOtherSessions() {
     return apiClient.post('/auth/sessions/revoke-others');
+  },
+
+  // Challenge + verify in one step: the login challenge, an enrollment, or a confirmation.
+  async verifyTotpCode(factorId, code) {
+    const { challengeId } = await this.challengeMFAFactor(factorId);
+    return this.verifyMFAFactor(factorId, challengeId, code);
+  },
+
+  // The user's verified TOTP factor, or null when 2FA is off.
+  async getVerifiedTotpFactor() {
+    const { totp } = await this.listMFAFactors();
+    return (totp ?? []).find((factor) => factor.status === 'verified') ?? null;
   },
 
   async getMFAStatus() {

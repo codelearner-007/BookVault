@@ -1,124 +1,39 @@
 'use client';
 
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { resetPasswordSchema } from '@/lib/schemas/auth.schema';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { cn } from '@/lib/utils';
-import { getPasswordStrength, strongPasswordSchema } from '@/lib/schemas/password.schema';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Form } from '@/components/ui/form';
+import { PasswordFormField } from '@/components/auth/common/PasswordFormField';
+import { PasswordRules } from '@/components/auth/common/PasswordRules';
+import { AUTH_UI_COPY } from '@/lib/copy/auth-ui';
 
-const resetPasswordSchema = z.object({
-  newPassword: strongPasswordSchema,
-  confirmPassword: z.string(),
-}).refine((data) => data.newPassword === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ['confirmPassword'],
-});
+const COPY = AUTH_UI_COPY.reset;
 
 export function ResetPasswordForm({ onSubmit, loading }) {
-  const [passwordStrength, setPasswordStrength] = useState(0);
+  const form = useForm({ resolver: zodResolver(resetPasswordSchema), defaultValues: { password: '', confirmPassword: '' } });
+  const [password, confirmPassword] = useWatch({ control: form.control, name: ['password', 'confirmPassword'] });
 
-  const form = useForm({
-    resolver: zodResolver(resetPasswordSchema),
-    defaultValues: {
-      newPassword: '',
-      confirmPassword: '',
-    },
-  });
-
-  const handleSubmit = async (data) => {
-    await onSubmit(data);
-  };
-
-  const getStrengthLabel = (strength) => {
-    const labels = ['Very Weak', 'Weak', 'Fair', 'Strong', 'Very Strong'];
-    return labels[strength] || 'Very Weak';
-  };
-
-  const getStrengthColor = (strength) => {
-    const colors = [
-      'bg-destructive',
-      'bg-chart-1',
-      'bg-chart-4',
-      'bg-chart-2',
-      'bg-chart-5',
-    ];
-    return colors[strength] || 'bg-destructive';
+  const handleSubmit = async (values) => {
+    const result = await onSubmit(values);
+    if (!result.success) form.setError('root', { message: result.error || AUTH_UI_COPY.common.unexpected });
   };
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-        <FormField
-          control={form.control}
-          name="newPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>New Password</FormLabel>
-              <FormControl>
-                <Input
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder="Enter your new password"
-                  {...field}
-                  onChange={(e) => {
-                    field.onChange(e);
-                    setPasswordStrength(getPasswordStrength(e.target.value));
-                  }}
-                />
-              </FormControl>
-              {field.value && (
-                <div className="space-y-2 mt-2">
-                  <div className="flex gap-1">
-                    {[0, 1, 2, 3, 4].map((level) => (
-                      <div
-                        key={level}
-                        className={cn(
-                          "h-2 flex-1 rounded-full transition-colors",
-                          level < passwordStrength
-                            ? getStrengthColor(passwordStrength)
-                            : "bg-muted"
-                        )}
-                      />
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Password strength: <span className="font-medium">{getStrengthLabel(passwordStrength)}</span>
-                  </p>
-                </div>
-              )}
-              <FormDescription>
-                At least 12 characters. A passphrase of a few words works well.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="confirmPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Confirm New Password</FormLabel>
-              <FormControl>
-                <Input
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder="Confirm your new password"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <Button type="submit" disabled={loading} className="w-full">
-          {loading ? 'Resetting password...' : 'Reset password'}
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="grid gap-5" noValidate>
+        {form.formState.errors.root && (
+          <Alert variant="destructive">
+            <AlertDescription>{form.formState.errors.root.message}</AlertDescription>
+          </Alert>
+        )}
+        <PasswordFormField control={form.control} name="password" label={COPY.newPassword} />
+        <PasswordFormField control={form.control} name="confirmPassword" label={COPY.confirmPassword} />
+        <PasswordRules password={password} confirm={confirmPassword} />
+        <Button type="submit" className="mt-2 w-full" disabled={loading}>
+          {loading ? COPY.submitting : COPY.submit}
         </Button>
       </form>
     </Form>

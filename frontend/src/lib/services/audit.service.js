@@ -30,3 +30,12 @@ export async function listMyAuditLogs(params) {
 export async function listBusinessHistory(businessId, params) {
   return apiClient.get(`/v1/businesses/${businessId}/history?${toQuery(params)}`);
 }
+
+/**
+ * Platform-scope audit rows of every account (live super admin; never business rows).
+ *
+ * Supported params: page, page_size, entity_type, action, start_date, end_date
+ */
+export async function listPlatformAudit(params) {
+  return apiClient.get(`/v1/platform/audit?${toQuery(params)}`);
+}

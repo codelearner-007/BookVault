@@ -430,6 +430,67 @@
   }
 }
 
+/*
+  Phones: a list table becomes stacked cards (one mechanism for every list, review-notes §6 H).
+  Cells carry data-card tokens (title, end, meta, actions, start, hide) and an optional data-label
+  that names the value in front of it. Unmarked cells read as meta lines.
+*/
+@media (max-width: 47.99rem) {
+  .table-cards thead { display: none; }
+  .table-cards, .table-cards tbody, .table-cards tfoot { display: block; }
+  .table-cards { min-width: 0; }
+  .table-cards tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 0.75rem;
+    row-gap: 0.25rem;
+    padding: 0.875rem 0.75rem;
+    border-bottom: 1px solid var(--row-divider);
+  }
+  .table-cards tbody tr:last-child { border-bottom: 0; }
+  .table-cards tbody tr:has(> td[data-card~="start"]) { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .table-cards td {
+    grid-column: 1;
+    height: auto;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    text-align: start;
+    font-size: var(--text-sm);
+    color: var(--muted-foreground);
+  }
+  .table-cards tr:has(> td[data-card~="start"]) > td { grid-column: 2; }
+  .table-cards td[data-card~="title"] {
+    grid-row: 1;
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--foreground);
+  }
+  .table-cards td[data-card~="end"],
+  .table-cards tr:has(> td[data-card~="start"]) > td[data-card~="end"] {
+    grid-column: -2;
+    grid-row: 1;
+    justify-self: end;
+    text-align: end;
+    color: var(--foreground);
+  }
+  .table-cards td[data-card~="actions"],
+  .table-cards tr:has(> td[data-card~="start"]) > td[data-card~="actions"] {
+    grid-column: -2;
+    grid-row: 2 / span 2;
+    justify-self: end;
+    align-self: center;
+  }
+  .table-cards td[data-card~="title"] > :is(a, button) { height: auto; padding-inline: 0; }
+  .table-cards td[data-card~="start"] { grid-column: 1; grid-row: 1 / span 3; align-self: center; }
+  .table-cards td[data-card~="hide"] { display: none; }
+  .table-cards td[data-label]::before { content: attr(data-label) " "; color: var(--muted-foreground); }
+  .table-cards td[data-label]:empty { display: none; }
+  .table-cards tfoot tr { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.875rem 0.75rem 0; }
+  .table-cards tfoot td { height: auto; padding: 0; border: 0; }
+  .table-cards tfoot td:empty, .table-cards tfoot td[data-card~="hide"] { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

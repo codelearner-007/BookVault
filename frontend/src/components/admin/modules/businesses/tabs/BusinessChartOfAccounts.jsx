@@ -32,6 +32,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   DropdownMenu,
@@ -520,11 +521,11 @@ function GroupRows({ group, accounts, onEditGroup, onDeleteGroup, onEditAccount,
   return (
     <>
       <TableRow>
-        <TableCell className="font-semibold">
+        <TableCell className="font-semibold" data-card="title">
           {group.name}
           {group.is_system && <SystemLock title="System group — cannot be modified" />}
         </TableCell>
-        <TableCell className="w-32 pe-2">
+        <TableCell className="w-32 pe-2" data-card="end">
           <div className="flex items-center justify-end gap-0.5">
             {!group.is_system && (
               <>
@@ -556,11 +557,11 @@ function GroupRows({ group, accounts, onEditGroup, onDeleteGroup, onEditAccount,
 function AccountRow({ account, onEdit, onDelete, onReorderAccounts, indented }) {
   return (
     <TableRow className="group">
-      <TableCell className={indented ? 'ps-10' : undefined}>
-        <span className={account.type === 'total' ? 'italic text-muted-foreground' : undefined}>{account.name}</span>
+      <TableCell className={indented ? 'ps-10' : undefined} data-card="title">
+        <span className={cn(indented && 'max-md:ms-5', account.type === 'total' && 'italic text-muted-foreground')}>{account.name}</span>
         {account.is_system && <SystemLock title="System account — cannot be modified" />}
       </TableCell>
-      <TableCell className="w-32 pe-2">
+      <TableCell className="w-32 pe-2" data-card="end">
         <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">
           {!account.is_system && (
             <>
