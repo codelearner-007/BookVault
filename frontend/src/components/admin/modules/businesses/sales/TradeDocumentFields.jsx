@@ -1,5 +1,7 @@
 'use client';
 
+import { Plus, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,9 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { DEFAULT_LOCATION_LABEL } from '../inventory/inventory-documents';
 import { RecordSelect } from './catalog-dialog';
-import { DOC_TYPES, ROLES, TRADE_SIDES } from './sales-documents';
+import { DOC_TYPES, ROLES, TRADE_SIDES, WHT_TYPES } from './sales-documents';
 import { InvoiceSelect, TradePartyPicker } from './sales-parts';
-import { DISCOUNT_TYPES, DUE_MODES, ROUNDING } from './trade-form-model';
+import { DISCOUNT_TYPES, DUE_MODES, ROUNDING, emptyFreightLine } from './trade-form-model';
 
 /* The header fields and the options of a trade document form, in Manager's order. */
 
@@ -154,12 +156,45 @@ function SelectOption({ id, label, value, options, onChange, disabled }) {
   );
 }
 
-const DISCOUNT_OPTIONS = [[DISCOUNT_TYPES.none, 'None'], [DISCOUNT_TYPES.percentage, 'Percentage'], [DISCOUNT_TYPES.amount, 'Exact amount']];
+// Purchase invoices: freight paid to bring the goods in, capitalised to the inventory lines.
+function FreightInRows({ rows, setField, disabled }) {
+  const setRows = (next) => setField('freightIn', next);
+  const update = (key, field, value) => setRows(rows.map((row) => (row.key === key ? { ...row, [field]: value } : row)));
+  return (
+    <div className="grid max-w-xl gap-2 ps-6">
+      {rows.map((row, index) => (
+        <div key={row.key} className="flex items-center gap-2">
+          <Input
+            aria-label={`Freight-in ${index + 1} description`} placeholder="Description" value={row.description}
+            onChange={(e) => update(row.key, 'description', e.target.value)} disabled={disabled}
+          />
+          <Input
+            aria-label={`Freight-in ${index + 1} amount`} placeholder="0.00" inputMode="decimal" className="num w-32 text-end"
+            value={row.amount} onChange={(e) => update(row.key, 'amount', e.target.value)} disabled={disabled}
+          />
+          <Button
+            variant="ghost" size="icon" aria-label={`Remove freight-in ${index + 1}`} onClick={() => setRows(rows.filter((r) => r.key !== row.key))}
+            disabled={disabled || rows.length === 1}
+          >
+            <Trash2 />
+          </Button>
+        </div>
+      ))}
+      <Button variant="ghost" className="justify-self-start" onClick={() => setRows([...rows, emptyFreightLine()])} disabled={disabled}>
+        <Plus />
+        Add freight-in
+      </Button>
+    </div>
+  );
+}
+
+const DISCOUNT_OPTIONS =[[DISCOUNT_TYPES.none, 'None'], [DISCOUNT_TYPES.percentage, 'Percentage'], [DISCOUNT_TYPES.amount, 'Exact amount']];
 const ROUNDING_OPTIONS = [[ROUNDING.none, 'None'], [ROUNDING.nearest, 'To nearest'], [ROUNDING.down, 'Round down']];
 
 // The options under the lines: tax inclusive, discount column, the invoice terms and the "Also acts as" checkbox
 // (with its inventory location, like Manager).
-export function TradeOptions({ config, form, setField, isEdit, locations, disabled }) {
+// showWht: the business shows withholding tax on this type (or the document already has it).
+export function TradeOptions({ config, form, setField, isEdit, locations, showWht, disabled }) {
   if (!config.priced) return null;
   const check = (field) => ({ checked: form[field], onChange: (on) => setField(field, on), disabled });
   return (
@@ -175,6 +210,29 @@ export function TradeOptions({ config, form, setField, isEdit, locations, disabl
         </CheckOption>
       )}
       {config.closable && isEdit && <CheckOption id="trade-closed" label="Closed invoice" {...check('isClosed')} />}
+      {showWht && (
+        <CheckOption id="trade-wht" label="Withholding tax" {...check('wht')}>
+          <Select value={form.whtType} onValueChange={(type) => setField('whtType', type)} disabled={disabled}>
+            <SelectTrigger aria-label="Withholding tax type" className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={WHT_TYPES.percentage}>Percentage</SelectItem>
+              <SelectItem value={WHT_TYPES.amount}>Exact amount</SelectItem>
+            </SelectContent>
+          </Select>
+          <RateInput
+            label={form.whtType === WHT_TYPES.percentage ? 'Withholding tax rate' : 'Withholding tax amount'} value={form.whtValue}
+            onChange={(v) => setField('whtValue', v)} disabled={disabled} suffix={form.whtType === WHT_TYPES.percentage ? '%' : ''}
+          />
+        </CheckOption>
+      )}
+      {config.freightIn && (
+        <div className="space-y-3">
+          <CheckOption id="trade-freight" label="Freight-in" {...check('freightOn')} />
+          {form.freightOn && <FreightInRows rows={form.freightIn} setField={setField} disabled={disabled} />}
+        </div>
+      )}
       {config.type === DOC_TYPES.invoice && (
         <>
           <CheckOption id="trade-early-discount" label="Early payment discount" checked={form.earlyDiscount} onChange={(on) => setField('earlyDiscount', on)} disabled={disabled}>

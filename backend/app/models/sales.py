@@ -28,11 +28,12 @@ class TaxCode(Base, TimestampMixin, VersionedMixin):
     business_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_reverse_charge: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # PR-40 (B7)
     is_inactive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 class TaxCodeComponent(Base):
-    """One component per code until B7 (multi-rate)."""
+    """One row per rate of a code (single rate = one component, PR-18)."""
 
     __tablename__ = "tax_code_components"
     __table_args__ = (
@@ -79,6 +80,8 @@ class TradeDocument(Base):
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     acts_as_stock_movement: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     location_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)  # NULL = default (B6)
+    wht_type_key: Mapped[str | None] = mapped_column(Text, nullable=True)  # percentage | amount (B7)
+    wht_value: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
 
 
 class TradeDocumentLine(Base):
@@ -102,7 +105,46 @@ class TradeDocumentLine(Base):
     tax_code_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     tax_rate: Mapped[Decimal | None] = mapped_column(RATE, nullable=True)
     tax_account_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    tax_reverse_charge: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     line_kind_key: Mapped[str] = mapped_column(Text, nullable=False, default="standard")
+
+
+class TradeDocumentLineTax(Base):
+    """Snapshot of one tax component a line was saved with (BUG-08, B7)."""
+
+    __tablename__ = "trade_document_line_taxes"
+
+    id: Mapped[str] = _uuid_pk()
+    business_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    line_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    line_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    component_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    rate: Mapped[Decimal] = mapped_column(RATE, nullable=False)
+    account_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+
+
+class TradeDocumentFreightLine(Base):
+    """Freight-in on a purchase invoice, capitalised to its inventory lines by value (PR-41b)."""
+
+    __tablename__ = "trade_document_freight_lines"
+
+    id: Mapped[str] = _uuid_pk()
+    business_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    document_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    line_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+
+
+class WithholdingTaxReceipt(Base):
+    """A customer's withholding tax certificate (PR-36)."""
+
+    __tablename__ = "withholding_tax_receipts"
+
+    document_id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True)
+    business_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    party_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
 
 
 class InvoiceTerms(Base):

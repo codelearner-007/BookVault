@@ -1,4 +1,4 @@
-"""Sales master data repository: tax codes (single rate, B4) and items (non-inventory, B4)."""
+"""Sales master data repository: tax codes (components, B7) and items (non-inventory, B4)."""
 
 from sqlalchemy import func, select, text
 from sqlalchemy.engine import Row
@@ -6,17 +6,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.sales import Item, TaxCode, TaxCodeComponent
 
+# One row per code: rate = sum of its components, account = the first component's (single-rate view).
 _TAX_CODE_ROWS = """
-    SELECT CAST(t.id AS text) AS id, t.name, t.code, t.is_inactive, t.version, t.created_at, t.updated_at,
-           c.rate, CAST(c.account_id AS text) AS account_id, a.name AS account_name
+    SELECT CAST(t.id AS text) AS id, t.name, t.code, t.is_reverse_charge, t.is_inactive, t.version, t.created_at,
+           t.updated_at, c.rate, CAST(f.account_id AS text) AS account_id, a.name AS account_name, c.components
     FROM public.tax_codes t
-    JOIN public.tax_code_components c ON c.business_id = t.business_id AND c.tax_code_id = t.id
-    LEFT JOIN public.coa_accounts a ON a.business_id = c.business_id AND a.id = c.account_id
+    CROSS JOIN LATERAL (SELECT sum(x.rate) AS rate, count(*) AS components FROM public.tax_code_components x
+                        WHERE x.business_id = t.business_id AND x.tax_code_id = t.id) c
+    CROSS JOIN LATERAL (SELECT x.account_id FROM public.tax_code_components x
+                        WHERE x.business_id = t.business_id AND x.tax_code_id = t.id ORDER BY x.line_no LIMIT 1) f
+    LEFT JOIN public.coa_accounts a ON a.business_id = t.business_id AND a.id = f.account_id
     WHERE t.business_id = :business_id
 """
 _TAX_CODE_PAGE = text(f"{_TAX_CODE_ROWS} ORDER BY t.is_inactive, t.name, t.id OFFSET :offset LIMIT :limit")
 _TAX_CODE_ONE = text(f"{_TAX_CODE_ROWS} AND t.id = :id")
 _TAX_CODE_RATES = text(f"{_TAX_CODE_ROWS} AND t.id = ANY(CAST(:ids AS uuid[]))")
+_TAX_COMPONENTS = text("""
+    SELECT CAST(c.id AS text) AS id, CAST(c.tax_code_id AS text) AS tax_code_id, c.line_no, c.name, c.rate,
+           CAST(c.account_id AS text) AS account_id, a.name AS account_name
+    FROM public.tax_code_components c
+    LEFT JOIN public.coa_accounts a ON a.business_id = c.business_id AND a.id = c.account_id
+    WHERE c.business_id = :business_id AND c.tax_code_id = ANY(CAST(:ids AS uuid[]))
+    ORDER BY c.tax_code_id, c.line_no
+""")
+_COMPONENT_IN_USE = text("""
+    SELECT EXISTS (SELECT 1 FROM public.trade_document_line_taxes
+                   WHERE business_id = :business_id AND component_id = :id)
+""")
 _ITEM_ROWS = """
     SELECT CAST(i.id AS text) AS id, i.code, i.name, i.unit_name, i.description, i.sales_unit_price,
            i.purchase_unit_price, CAST(i.income_account_id AS text) AS income_account_id,
@@ -70,10 +86,21 @@ class MasterDataRepository:
         return (await self.session.execute(select(TaxCode).where(
             TaxCode.business_id == business_id, TaxCode.id == tax_code_id))).scalar_one_or_none()
 
-    async def tax_component(self, business_id: str, tax_code_id: str) -> TaxCodeComponent:
-        return (await self.session.execute(select(TaxCodeComponent).where(
+    async def tax_components(self, business_id: str, tax_code_id: str) -> list[TaxCodeComponent]:
+        return list((await self.session.execute(select(TaxCodeComponent).where(
             TaxCodeComponent.business_id == business_id, TaxCodeComponent.tax_code_id == tax_code_id,
-        ))).scalar_one()
+        ).order_by(TaxCodeComponent.line_no))).scalars().all())
+
+    async def component_rows(self, business_id: str, ids: set[str]) -> dict[str, list[Row]]:
+        """Components per tax code id, in line order."""
+        found: dict[str, list[Row]] = {i: [] for i in ids}
+        for row in await self.session.execute(_TAX_COMPONENTS, {"business_id": business_id, "ids": list(ids)}):
+            found[row.tax_code_id].append(row)
+        return found
+
+    async def component_in_use(self, business_id: str, component_id: str) -> bool:
+        return bool((await self.session.execute(
+            _COMPONENT_IN_USE, {"business_id": business_id, "id": component_id})).scalar())
 
     async def tax_code_page(self, business_id: str, offset: int, limit: int) -> tuple[list[Row], int]:
         total = (await self.session.execute(

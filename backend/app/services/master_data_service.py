@@ -1,7 +1,8 @@
-"""Tax codes (single rate until B7, D-05) and non-inventory items (PR-25) for the sales forms (B4).
+"""Tax codes (B7: one or more components, reverse charge) and non-inventory items (PR-25).
 
-A tax code is one component with a rate and the account its tax posts to (default Tax payable,
-PR-18 BV: never a component without an account). A non-inventory item names the income account
+A tax code has one component (single rate) or several (multiple rates, PR-18); each has a rate
+and the account its tax posts to (default Tax payable, PR-18 BV: never a component without an
+account). A reverse-charge code (PR-40) is self-assessed on purchases. A non-inventory item names the income account
 it is sold to (no Suspense default). Both are hard-deleted only while nothing references them.
 """
 
@@ -16,7 +17,13 @@ from app.models.sales import Item, TaxCode, TaxCodeComponent
 from app.repositories.coa_repository import CoaRepository
 from app.repositories.master_data_repository import MasterDataRepository
 from app.schemas.request.sales import CreateItemRequest, CreateTaxCodeRequest, UpdateItemRequest, UpdateTaxCodeRequest
-from app.schemas.response.sales import ItemListResponse, ItemResponse, TaxCodeListResponse, TaxCodeResponse
+from app.schemas.response.sales import (
+    ItemListResponse,
+    ItemResponse,
+    TaxCodeListResponse,
+    TaxCodeResponse,
+    TaxComponentResponse,
+)
 from app.services.access_service import BusinessContext
 from app.services.audit_service import AuditService
 from app.services.versioning import changed_fields, check_version
@@ -49,23 +56,25 @@ class MasterDataService:
     # ---------------------------------------------------------------- tax codes
     async def list_tax_codes(self, business_id: str, params: PageParams) -> TaxCodeListResponse:
         rows, total = await self.repo.tax_code_page(business_id, params.offset, params.page_size)
-        return TaxCodeListResponse.build([TaxCodeResponse.model_validate(r) for r in rows], total,
+        components = await self.repo.component_rows(business_id, {r.id for r in rows})
+        return TaxCodeListResponse.build([_tax_code_response(r, components[r.id]) for r in rows], total,
                                          params.page, params.page_size)
 
     async def get_tax_code(self, business_id: str, tax_code_id: str) -> TaxCodeResponse:
         row = await self.repo.tax_code_row(business_id, tax_code_id) if is_uuid(tax_code_id) else None
         if row is None:
             raise ResourceNotFoundError("TaxCode", tax_code_id)
-        return TaxCodeResponse.model_validate(row)
+        return _tax_code_response(row, (await self.repo.component_rows(business_id, {row.id}))[row.id])
 
     async def create_tax_code(self, ctx: BusinessContext, body: CreateTaxCodeRequest) -> TaxCodeResponse:
-        account_id = body.account_id or await self.coa.system_account_id(ctx.business_id, TAX_PAYABLE)
-        await self._assert_account(ctx.business_id, account_id, TAX_ACCOUNT_TYPES, "liability or asset")
+        components = await self._components(ctx.business_id, body)
         await self.assert_unique(TaxCode, ctx.business_id, body.name, body.code)
-        code = TaxCode(business_id=ctx.business_id, name=body.name, code=body.code)
+        code = TaxCode(business_id=ctx.business_id, name=body.name, code=body.code,
+                       is_reverse_charge=bool(body.is_reverse_charge))
         await self.repo.add(code)
-        await self.repo.add(TaxCodeComponent(business_id=ctx.business_id, tax_code_id=code.id, rate=body.rate,
-                                             account_id=account_id))
+        for no, (name, rate, account_id) in enumerate(components, start=1):
+            await self.repo.add(TaxCodeComponent(business_id=ctx.business_id, tax_code_id=code.id, line_no=no,
+                                                 name=name, rate=rate, account_id=account_id))
         after = await self.get_tax_code(ctx.business_id, code.id)
         await self.audit.record(ctx.user_id, "create", "TaxCode", code.id, ctx.business_id, after=after)
         return after
@@ -75,20 +84,54 @@ class MasterDataService:
         before = await self.get_tax_code(ctx.business_id, tax_code_id)
         code = await self.repo.tax_code(ctx.business_id, tax_code_id)
         check_version(code, body.version)
-        fields = changed_fields(body, required=("name", "rate", "account_id"))
-        await self._assert_account(ctx.business_id, fields.get("account_id"), TAX_ACCOUNT_TYPES, "liability or asset")
+        fields = changed_fields(body, required=("name", "rate", "account_id", "components", "is_reverse_charge"))
         await self.assert_unique(TaxCode, ctx.business_id, fields.get("name"), fields.get("code"), code.id)
-        component = await self.repo.tax_component(ctx.business_id, code.id)
-        for key in ("rate", "account_id"):
-            if key in fields:
-                setattr(component, key, fields.pop(key))
+        if {"rate", "account_id", "components"} & set(fields):
+            await self._replace_components(ctx.business_id, code.id, await self._components(
+                ctx.business_id, body, before))
+        for key in ("rate", "account_id", "components"):
+            fields.pop(key, None)
         for key, value in fields.items():
             setattr(code, key, value)
-        code.updated_at = datetime.now(timezone.utc)  # write the row so its version moves (rate is on the component)
+        code.updated_at = datetime.now(timezone.utc)  # write the row so its version moves (rates are on components)
         await self.repo.save()
         after = await self.get_tax_code(ctx.business_id, code.id)
         await self.audit.record(ctx.user_id, "update", "TaxCode", code.id, ctx.business_id, before=before, after=after)
         return after
+
+    async def _components(self, business_id: str, body, before: TaxCodeResponse | None = None) -> list[tuple]:
+        """(name, rate, account_id) per component: the sent list, or a single rate (an update keeps the
+        unsent half of a single-rate code)."""
+        if body.components is not None:
+            wanted = [(x.name, x.rate, x.account_id) for x in body.components]
+        else:
+            current = before.components[0] if before and len(before.components) == 1 else None
+            rate = body.rate if body.rate is not None else (current.rate if current else None)
+            if rate is None:
+                raise LedgerValidationError("A single-rate tax code needs a rate", "rate_required")
+            wanted = [(None, rate, body.account_id or (current.account_id if current else None))]
+        default = await self.coa.system_account_id(business_id, TAX_PAYABLE)
+        components = [(name, rate, account_id or default) for name, rate, account_id in wanted]
+        for _, _, account_id in components:
+            await self._assert_account(business_id, account_id, TAX_ACCOUNT_TYPES, "liability or asset")
+        return components
+
+    async def _replace_components(self, business_id: str, tax_code_id: str, components: list[tuple]) -> None:
+        """Update in place by position; a removed component that a document line used cannot go (409)."""
+        stored = await self.repo.tax_components(business_id, tax_code_id)
+        for row in stored[len(components):]:
+            if await self.repo.component_in_use(business_id, row.id):
+                raise ConflictError("A rate used by documents cannot be removed; make the code inactive instead",
+                                    "tax_component_in_use")
+            await self.repo.delete(row)
+        for no, (name, rate, account_id) in enumerate(components, start=1):
+            if no <= len(stored):
+                row = stored[no - 1]
+                row.name, row.rate, row.account_id = name, rate, account_id
+            else:
+                await self.repo.add(TaxCodeComponent(business_id=business_id, tax_code_id=tax_code_id, line_no=no,
+                                                     name=name, rate=rate, account_id=account_id))
+        await self.repo.save()
 
     async def delete_tax_code(self, ctx: BusinessContext, tax_code_id: str, version: int) -> None:
         before = await self.get_tax_code(ctx.business_id, tax_code_id)
@@ -151,3 +194,9 @@ class MasterDataService:
             raise ConflictError("This item is used and cannot be deleted; make it inactive instead", "item_in_use")
         await self.repo.delete(item)
         await self.audit.record(ctx.user_id, "delete", "Item", item_id, ctx.business_id, before=before)
+
+
+def _tax_code_response(row, components: list) -> TaxCodeResponse:
+    return TaxCodeResponse.model_validate({
+        **row._mapping, "type": "multiple_rates" if len(components) > 1 else "single_rate",
+        "components": [TaxComponentResponse.model_validate(c) for c in components]})

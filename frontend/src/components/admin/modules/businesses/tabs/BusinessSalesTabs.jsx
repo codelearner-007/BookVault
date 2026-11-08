@@ -4,6 +4,7 @@ import LateFeesTab from '../sales/LateFeesTab';
 import PartiesTab from '../sales/PartiesTab';
 import { DOC_TYPES, TRADE_SIDES } from '../sales/sales-documents';
 import TradeDocumentsTab from '../sales/TradeDocumentsTab';
+import WhtReceiptsTab from '../sales/WhtReceiptsTab';
 
 /* The Sales sidebar tabs (B4): customers, the five trade documents and late payment fees. */
 
@@ -33,4 +34,8 @@ export function BusinessDeliveryNotes({ business }) {
 
 export function BusinessLatePaymentFees({ business }) {
   return <LateFeesTab business={business} />;
+}
+
+export function BusinessWithholdingTaxReceipts({ business }) {
+  return <WhtReceiptsTab business={business} />;
 }

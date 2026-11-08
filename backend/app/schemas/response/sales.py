@@ -68,15 +68,31 @@ class OpenInvoicesResponse(PaginatedResponse[OpenInvoice]):
     pass
 
 
+class TaxComponentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    line_no: int
+    name: str | None
+    rate: MoneyOut
+    account_id: str
+    account_name: str | None
+
+
 class TaxCodeResponse(BaseModel):
+    """rate = sum of the component rates; account_id = the first component's account."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
     name: str
     code: str | None
+    type: str  # single_rate | multiple_rates
     rate: MoneyOut
     account_id: str
     account_name: str | None
+    is_reverse_charge: bool
+    components: list[TaxComponentResponse]
     is_inactive: bool
     version: int
     created_at: datetime
@@ -128,9 +144,24 @@ class TradeLineResponse(BaseModel):
     tax_code_id: str | None
     tax_code_name: str | None
     tax_rate: MoneyOut | None
+    tax_reverse_charge: bool = False
     net: MoneyOut
     tax: MoneyOut
     total: MoneyOut
+
+
+class WithholdingTaxOut(BaseModel):
+    type: str
+    value: MoneyOut
+    amount: MoneyOut
+
+
+class FreightLineOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    line_no: int
+    description: str | None
+    amount: MoneyOut
 
 
 class TaxBreakdownItem(BaseModel):
@@ -194,7 +225,11 @@ class TradeDocumentBase(BaseModel):
     subtotal: MoneyOut
     tax_total: MoneyOut
     rounding: MoneyOut
-    total: MoneyOut
+    total: MoneyOut  # amount due: after withholding tax (Manager's printed Total)
+    gross_total: MoneyOut  # before withholding tax
+    freight: MoneyOut
+    freight_in: list[FreightLineOut] = []
+    withholding_tax: WithholdingTaxOut | None = None
     tax_breakdown: list[TaxBreakdownItem]
     expiry_date: date | None = None
     invoice_status: str | None = None
@@ -281,6 +316,9 @@ class TradeTotalsResponse(BaseModel):
     subtotal: MoneyOut
     tax_total: MoneyOut
     rounding: MoneyOut
+    freight: MoneyOut
+    gross_total: MoneyOut
+    withholding_tax: MoneyOut
     total: MoneyOut
     tax_breakdown: list[TaxBreakdownItem]
 

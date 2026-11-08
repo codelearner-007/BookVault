@@ -13,7 +13,14 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.sales import InvoiceTerms, LatePaymentFee, TradeDocument, TradeDocumentLine
+from app.models.sales import (
+    InvoiceTerms,
+    LatePaymentFee,
+    TradeDocument,
+    TradeDocumentFreightLine,
+    TradeDocumentLine,
+    TradeDocumentLineTax,
+)
 
 _LIST_FILTER = """
     FROM public.documents d
@@ -42,7 +49,8 @@ _LIST_TOTALS = text(f"""
     {_LIST_FILTER}
 """)
 _DETAIL = text("""
-    SELECT COALESCE(cu.name, su.name) AS party_name, t.subtotal, t.tax_total, t.rounding, t.total
+    SELECT COALESCE(cu.name, su.name) AS party_name, t.subtotal, t.tax_total, t.rounding, t.total, t.freight,
+           t.withholding_tax, t.gross_total
     FROM public.trade_documents td
     LEFT JOIN public.customers cu ON cu.business_id = td.business_id AND cu.id = td.party_id
     LEFT JOIN public.suppliers su ON su.business_id = td.business_id AND su.id = td.party_id
@@ -54,7 +62,8 @@ _LINES = text("""
            CAST(x.account_id AS text) AS account_id, a.code AS account_code, a.name AS account_name,
            x.description, x.qty, x.unit_price, x.discount, CAST(x.tax_code_id AS text) AS tax_code_id,
            tc.name AS tax_code_name, x.tax_rate, CAST(x.tax_account_id AS text) AS tax_account_id,
-           COALESCE(m.net, 0) AS net, COALESCE(m.tax, 0) AS tax
+           x.tax_reverse_charge, COALESCE(m.net, 0) AS net, COALESCE(m.tax, 0) AS tax,
+           COALESCE(m.self_assessed_tax, 0) AS self_assessed_tax
     FROM public.trade_document_lines x
     LEFT JOIN public.trade_document_line_amounts m ON m.business_id = x.business_id AND m.line_id = x.id
     LEFT JOIN public.items i ON i.business_id = x.business_id AND i.id = x.item_id
@@ -71,6 +80,16 @@ _PREVIEW = text("""
                                                  x.rate, :inclusive, :dp) a
     ORDER BY x.ord
 """)
+_LINE_TAXES = text("""
+    SELECT CAST(t.line_id AS text) AS line_id, CAST(t.component_id AS text) AS component_id, t.line_no, t.rate,
+           CAST(t.account_id AS text) AS account_id, c.name
+    FROM public.trade_document_line_taxes t
+    JOIN public.trade_document_lines x ON x.business_id = t.business_id AND x.id = t.line_id
+    LEFT JOIN public.tax_code_components c ON c.business_id = t.business_id AND c.id = t.component_id
+    WHERE x.business_id = :business_id AND x.document_id = :document_id
+    ORDER BY t.line_id, t.line_no
+""")
+_WHT_BASE = text("SELECT wht_base_key FROM public.business_settings WHERE business_id = :business_id")
 _ROUNDING = text("""
     SELECT CASE CAST(:method AS text) WHEN 'nearest' THEN round(CAST(:gross AS numeric), 0) - CAST(:gross AS numeric)
                 WHEN 'down' THEN trunc(CAST(:gross AS numeric)) - CAST(:gross AS numeric) ELSE 0 END
@@ -234,6 +253,33 @@ class SalesRepository:
         ))
         self.session.add_all(lines)
         await self.session.flush()
+
+    async def replace_line_taxes(self, rows: list[TradeDocumentLineTax]) -> None:
+        """Component snapshots of freshly stored lines (the old ones went with their lines, ON DELETE CASCADE)."""
+        self.session.add_all(rows)
+        await self.session.flush()
+
+    async def line_taxes(self, business_id: str, document_id: str) -> dict[str, list[Row]]:
+        found: dict[str, list[Row]] = {}
+        for row in await self.session.execute(_LINE_TAXES, {"business_id": business_id, "document_id": document_id}):
+            found.setdefault(row.line_id, []).append(row)
+        return found
+
+    async def freight_lines(self, business_id: str, document_id: str) -> list[TradeDocumentFreightLine]:
+        return list((await self.session.execute(select(TradeDocumentFreightLine).where(
+            TradeDocumentFreightLine.business_id == business_id, TradeDocumentFreightLine.document_id == document_id,
+        ).order_by(TradeDocumentFreightLine.line_no))).scalars().all())
+
+    async def replace_freight_lines(self, business_id: str, document_id: str,
+                                    lines: list[TradeDocumentFreightLine]) -> None:
+        await self.session.execute(delete(TradeDocumentFreightLine).where(
+            TradeDocumentFreightLine.business_id == business_id, TradeDocumentFreightLine.document_id == document_id,
+        ))
+        self.session.add_all(lines)
+        await self.session.flush()
+
+    async def wht_base(self, business_id: str) -> str:
+        return (await self.session.execute(_WHT_BASE, {"business_id": business_id})).scalar_one_or_none() or "gross"
 
     # ---------------------------------------------------------------- reads
     async def list_page(self, business_id: str, type_key: str, offset: int, limit: int,

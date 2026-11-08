@@ -84,6 +84,7 @@ class DocumentLine(Base):
     invoice_document_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     item_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     tax_code_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    tax_component_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
@@ -121,6 +122,7 @@ class JournalLine(Base):
     invoice_document_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     item_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     tax_code_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    tax_component_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     document_line_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     line_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

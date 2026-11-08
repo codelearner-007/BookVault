@@ -2,7 +2,7 @@ import { toInputAmount } from '../coa/coa-tree';
 import { parseAmount } from '../ledger/JournalLinesEditor';
 import { todayIso } from '../ledger/ledger-parts';
 import { optionalNumber } from '../banking/CashLinesEditor';
-import { DOC_TYPES, ROLES, plainNumber } from './sales-documents';
+import { DOC_TYPES, ROLES, WHT_TYPES, plainNumber } from './sales-documents';
 
 /*
   Form state of a trade document and the request bodies built from it, field by field (strict API bodies:
@@ -71,8 +71,52 @@ export function tradeForm(source, party, { sourceId = null, startingBalance = fa
     actsAsStockMovement: src.acts_as_stock_movement ?? false,
     locationId: src.location_id ?? '',
     isClosed: src.is_closed ?? false,
+    wht: !!src.withholding_tax,
+    whtType: src.withholding_tax?.type ?? WHT_TYPES.percentage,
+    whtValue: textOf(src.withholding_tax?.value),
+    freightOn: (src.freight_in ?? []).length > 0,
+    freightIn: freightFrom(src),
     sourceId,
   };
+}
+
+export function emptyFreightLine() {
+  return { key: crypto.randomUUID(), description: '', amount: '' };
+}
+
+function freightFrom(source) {
+  const rows = (source.freight_in ?? []).map((row) => ({
+    key: crypto.randomUUID(), description: row.description ?? '', amount: textOf(row.amount),
+  }));
+  return rows.length > 0 ? rows : [emptyFreightLine()];
+}
+
+const isBlankFreight = (row) => !row.description.trim() && !row.amount.trim();
+
+// Withholding tax (sales invoices, credit notes, purchase invoices): { withholding_tax } or { invalid }.
+function whtFields(form, config) {
+  if (!config.withholdingTax) return {};
+  if (!form.wht) return { withholding_tax: null };
+  const value = parseAmount(form.whtValue);
+  if (!form.whtValue.trim() || value === null) return { invalid: true };
+  return { withholding_tax: { type: form.whtType, value } };
+}
+
+// Freight-in rows (purchase invoices): { freight_in } or { invalid }.
+function freightFields(form, config) {
+  if (!config.freightIn) return {};
+  if (!form.freightOn) return { freight_in: [] };
+  const rows = form.freightIn.filter((row) => !isBlankFreight(row));
+  if (rows.some((row) => parseAmount(row.amount) === null || !row.amount.trim())) return { invalid: true };
+  return { freight_in: rows.map((row) => ({ description: row.description.trim() || null, amount: parseAmount(row.amount) })) };
+}
+
+// WHT and freight-in fields of a body, or null while an amount cannot be read.
+function chargeFields(form, config) {
+  const wht = whtFields(form, config);
+  const freight = freightFields(form, config);
+  if (wht.invalid || freight.invalid) return null;
+  return { ...wht, ...freight };
 }
 
 function isBlankLine(line) {
@@ -89,7 +133,10 @@ export function isInvalidTradeLine(line, priced) {
 // The POST /totals body of the lines on screen, or null while an amount cannot be read.
 export function totalsRequest(form, config) {
   if (!config.priced || form.lines.some((line) => isInvalidTradeLine(line, true))) return null;
+  const charges = chargeFields(form, config);
+  if (!charges) return null;
   return {
+    ...charges,
     amounts_include_tax: form.amountsIncludeTax,
     discount_type: form.discountType === DISCOUNT_TYPES.none ? null : form.discountType,
     ...(config.role === ROLES.invoice ? { rounding: form.rounding } : {}),
@@ -171,6 +218,8 @@ export function buildTradeBody(form, config, { creditLimitOverride = false, isEd
   const lines = form.lines.filter((line) => !isBlankLine(line));
   const error = validate(form, lines, config);
   if (error) return { error };
+  const charges = chargeFields(form, config);
+  if (!charges) return { error: 'Withholding tax and freight-in amounts must be numbers, for example 5 or 120.00.' };
   const priced = config.priced
     ? {
       billing_address: form.billingAddress.trim() || null,
@@ -187,6 +236,7 @@ export function buildTradeBody(form, config, { creditLimitOverride = false, isEd
       ...priced,
       lines: lines.map((line) => lineBody(line, form, config)),
       ...typeFields(form, config, { creditLimitOverride, isEdit }),
+      ...charges,
     },
   };
 }

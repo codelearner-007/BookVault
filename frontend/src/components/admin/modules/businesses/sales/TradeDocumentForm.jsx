@@ -12,6 +12,7 @@ import { getCoaTree } from '@/lib/services/coa.service';
 import { inventoryItemsService, inventoryKitsService, inventoryLocationsService } from '@/lib/services/inventory.service';
 import { nonInventoryItemsService, taxCodesService } from '@/lib/services/settings-catalog.service';
 import { listStartingBalanceInvoices } from '@/lib/services/starting-balances.service';
+import { getWithholdingTaxSettings } from '@/lib/services/withholding-tax.service';
 import { BackButton, ErrorAlert, JE_STATUS, todayIso, useTabNavigate } from '../ledger/ledger-parts';
 import { FormSkeleton, useLoad } from '../banking/banking-parts';
 import { lineAccountsFromTree } from '../banking/cash-directions';
@@ -61,7 +62,7 @@ function useTradeFormData(businessId, config, docId, copyFrom, startingBalance) 
   const { access } = useBusinessWorkspace();
   const mayView = (area) => can(access, area);
   return useLoad(async () => {
-    const [tree, items, taxCodes, locations, doc, copy, starting] = await Promise.all([
+    const [tree, items, taxCodes, locations, doc, copy, starting, whtSettings] = await Promise.all([
       config.accounts ? getCoaTree(businessId, todayIso()) : null,
       listLineItems(businessId, config.side, mayView),
       config.priced ? taxCodesService.listAll(businessId) : null,
@@ -69,6 +70,7 @@ function useTradeFormData(businessId, config, docId, copyFrom, startingBalance) 
       docId ? config.service.get(businessId, docId) : null,
       copyFrom ? TRADE_DOCUMENTS[copyFrom.type].service.copyTo(businessId, copyFrom.id, config.type) : null,
       startingBalance ? listStartingBalanceInvoices(businessId, config.side.invoicesResource) : null,
+      config.withholdingTax ? getWithholdingTaxSettings(businessId) : null,
     ]);
     const prefill = copy?.prefill ?? null;
     const partyId = prefill?.[config.side.partyField];
@@ -80,6 +82,8 @@ function useTradeFormData(businessId, config, docId, copyFrom, startingBalance) 
       party,
       starting,
       locations: locations?.items ?? null,
+      // The setting only shows the block; a document that already withholds tax keeps it visible.
+      showWht: !!(whtSettings?.[config.withholdingTax] || doc?.withholding_tax || prefill?.withholding_tax),
       catalogs: {
         items: withSaved(items, savedLines, 'item_id', 'item_name'),
         taxCodes: taxCodes ? withSaved(taxCodes.items, savedLines, 'tax_code_id', 'tax_code_name') : [],
@@ -225,7 +229,7 @@ export default function TradeDocumentForm({ businessId, config, docId, allowed, 
           disabled={saving}
         />
         {config.priced && <TradeTotalsPanel totals={totals.totals} invalid={totals.invalid} />}
-        <TradeOptions config={config} form={form} setField={setField} isEdit={!!docId} locations={data.data.locations} disabled={saving} />
+        <TradeOptions config={config} form={form} setField={setField} isEdit={!!docId} locations={data.data.locations} showWht={data.data.showWht} disabled={saving} />
         <DocumentFormActions isPosted={doc?.status === JE_STATUS.posted} saving={saving} onSubmit={(action) => submit(action)} onCancel={back} />
       </div>
     </div>

@@ -61,18 +61,44 @@ class UpdateCustomerRequest(VersionedRequest, CustomerFields):
 
 
 # ---------------------------------------------------------------- tax codes and items
-class CreateTaxCodeRequest(RequestModel):
-    name: ShortText
-    code: OptionalCode = None
-    rate: Rate
-    account_id: Optional[IdStr] = None  # default: Tax payable
+MAX_TAX_COMPONENTS = 10
 
 
-class UpdateTaxCodeRequest(VersionedRequest):
+class TaxComponentRequest(RequestModel):
     name: OptionalName = None
+    rate: Rate
+    account_id: Optional[IdStr] = None  # default: Tax payable (PR-18 BV: never without an account)
+
+
+class TaxCodeFields(RequestModel):
+    """Single rate (rate + account_id) or multiple rates (components), never both (PR-18)."""
+
     code: OptionalCode = None
     rate: Optional[Rate] = None
     account_id: Optional[IdStr] = None
+    components: Optional[list[TaxComponentRequest]] = Field(default=None, min_length=1,
+                                                            max_length=MAX_TAX_COMPONENTS)
+    is_reverse_charge: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def _one_shape(self):
+        if self.components is not None and (self.rate is not None or self.account_id is not None):
+            raise ValueError("Send either rate and account_id or components, not both")
+        return self
+
+
+class CreateTaxCodeRequest(TaxCodeFields):
+    name: ShortText
+
+    @model_validator(mode="after")
+    def _has_rate(self):
+        if self.components is None and self.rate is None:
+            raise ValueError("A tax code needs a rate or components")
+        return self
+
+
+class UpdateTaxCodeRequest(VersionedRequest, TaxCodeFields):
+    name: OptionalName = None
     is_inactive: Optional[bool] = None
 
 
@@ -98,6 +124,28 @@ class UpdateItemRequest(VersionedRequest, ItemFields):
 
 
 # ---------------------------------------------------------------- trade documents
+WhtType = Literal["percentage", "amount"]
+MAX_FREIGHT_LINES = 20
+
+
+class WithholdingTaxIn(RequestModel):
+    """PR-21 / PR-41a: a rate (percent of the base, D-27) or an exact amount."""
+
+    type: WhtType
+    value: PositiveMoney
+
+    @model_validator(mode="after")
+    def _rate(self) -> "WithholdingTaxIn":
+        if self.type == "percentage" and self.value > 100:
+            raise ValueError("A withholding tax rate cannot exceed 100")
+        return self
+
+
+class FreightLineIn(RequestModel):
+    description: OptionalText = None
+    amount: PositiveMoney
+
+
 class TradeLineIn(RequestModel):
     item_id: Optional[IdStr] = None
     account_id: Optional[IdStr] = None
@@ -145,6 +193,7 @@ class InvoiceFields(TradeFields):
     credit_limit_override: bool = False
     acts_as_stock_movement: bool = False  # "Also acts as delivery note" (B6)
     location_id: Optional[IdStr] = None  # where stock moves (null = the default location)
+    withholding_tax: Optional[WithholdingTaxIn] = None  # B7, PR-21
 
     @model_validator(mode="after")
     def _terms(self) -> "InvoiceFields":
@@ -161,6 +210,7 @@ class CreditNoteFields(TradeFields):
     invoice_id: Optional[IdStr] = None  # null = Automatic (oldest open invoice, PR-30)
     acts_as_stock_movement: bool = False  # the returned goods are back on hand (B6)
     location_id: Optional[IdStr] = None
+    withholding_tax: Optional[WithholdingTaxIn] = None  # reversed with the same base (PR-29, T80)
 
 
 class DeliveryLineIn(RequestModel):
@@ -236,6 +286,8 @@ class TradeTotalsRequest(RequestModel):
     discount_type: Optional[DiscountType] = None
     rounding: RoundingMethod = "none"
     lines: list[TradeTotalsLineIn] = Field(max_length=LIST_MAX)
+    freight_in: list[FreightLineIn] = Field(default_factory=list, max_length=MAX_FREIGHT_LINES)
+    withholding_tax: Optional[WithholdingTaxIn] = None
 
 
 class PostTradeDocumentRequest(VersionedRequest):

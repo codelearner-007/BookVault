@@ -65,6 +65,13 @@ const SETTING_PAGES = [
     description: 'What happens when an invoice goes over a credit limit.',
     icon: Receipt,
   },
+  {
+    key: 'withholding-tax',
+    href: '?tab=settings&page=withholding-tax',
+    label: 'Withholding Tax',
+    description: 'Show withholding tax on sales and purchase invoices.',
+    icon: Percent,
+  },
 ];
 
 // Members is a business page (?page=members), owner only; listed here so Settings is a complete index.

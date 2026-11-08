@@ -56,9 +56,9 @@ def test_manager_only_setup_records_are_skipped():
     assert bookvault_setup_records(records) == [{"kind": "price"}]
 
 
-def test_b1_to_b6_schedule_is_runnable():
+def test_b1_to_b7_schedule_is_runnable():
     assert {f["id"] for f in RUNNABLE} == (B1_FIXTURES | B2_FIXTURES | B3_FIXTURES | B4_FIXTURES | B5_FIXTURES
-                                          | B6_FIXTURES | B7_EARLY | BOOKVAULT_ONLY)
+                                          | B6_FIXTURES | B7_FIXTURES | BOOKVAULT_ONLY)
 
 
 def test_golden_support_report(capsys):
@@ -195,10 +195,20 @@ async def _setup_tax_codes(run: GoldenRun, fixture: dict) -> None:
         if key in run.tax_codes:
             continue
         spec = specs[key]
-        response = await run.client.post(biz(run.business_id, "/tax-codes"), headers=run.owner.headers, json={
-            "name": spec["name"], "rate": spec["rate"], "account_id": run.accounts[spec["account"]]})
+        body = {"name": spec["name"], "is_reverse_charge": spec.get("reverse_charge", False)}
+        if spec["type"] == "multiple_rates":  # PR-18 BV: a component without an account takes Tax payable
+            accounts = [c["account"] for c in spec["components"] if c["account"]]
+            await _setup_accounts(run, {"setup": {"accounts": accounts}})
+            body["components"] = [{"name": c["name"], "rate": c["rate"],
+                                   "account_id": run.accounts[c["account"]] if c["account"] else None}
+                                  for c in spec["components"]]
+        else:
+            body.update(rate=spec["rate"], account_id=run.accounts[spec["account"]])
+        response = await run.client.post(biz(run.business_id, "/tax-codes"), headers=run.owner.headers, json=body)
         assert response.status_code == 201, response.text
         run.tax_codes[key] = response.json()["id"]
+        for component, stored in zip(spec.get("components", []), response.json()["components"]):
+            run.tax_components[component["key"]] = stored["id"]
 
 
 async def _create_item(run: GoldenRun, spec: dict) -> httpx.Response:
@@ -250,11 +260,15 @@ async def _setup_locations(run: GoldenRun, fixture: dict) -> None:
 async def _apply_settings(run: GoldenRun, fixture: dict) -> None:
     """BookVault-only sales setting (BUG-05); books_start_date is the runner's (no-op, T68)."""
     for setting in bookvault_setup_records(fixture.get("setup", {}).get("settings", [])):
-        if setting["key"] != "credit_limit_policy":
+        if setting["key"] in WHT_SETTINGS:  # B7: the flags only show the form fields (BUG-01)
+            path, body = "/settings/withholding-tax", {setting["key"]: setting["value"]}
+        elif setting["key"] == "credit_limit_policy":
+            path, body = "/settings/sales", {"credit_limit_policy": setting["value"]}
+        else:
             continue
-        current = (await run.client.get(biz(run.business_id, "/settings/sales"), headers=run.owner.headers)).json()
-        response = await run.client.put(biz(run.business_id, "/settings/sales"), headers=run.owner.headers,
-                                        json={"version": current["version"], "credit_limit_policy": setting["value"]})
+        current = (await run.client.get(biz(run.business_id, path), headers=run.owner.headers)).json()
+        response = await run.client.put(biz(run.business_id, path), headers=run.owner.headers,
+                                        json={"version": current["version"], **body})
         assert response.status_code == 200, response.text
 
 
@@ -263,6 +277,7 @@ def _lock_setting(fixture: dict) -> dict | None:
     return next((s for s in settings if s["key"] == "lock_date"), None)
 
 
+WHT_SETTINGS = {"wht_receivable_enabled", "wht_payable_enabled"}
 DOCUMENT_LISTS = ("/journal-entries", "/receipts", "/payments", "/inter-account-transfers", "/sales-invoices",
                   "/credit-notes", "/late-payment-fees", "/purchase-invoices", "/debit-notes", "/inventory-write-offs",
                   "/production-orders")
@@ -340,9 +355,7 @@ B4_FIXTURES = {"T04", "T05", "T09", "T37", "T42a", "T42b", "T43", "T47", "T56", 
 B5_FIXTURES = {"T06", "T07", "T63", "T79"}
 B6_FIXTURES = {"T10", "T11", "T12", "T13", "T14", "T15", "T16", "T17", "T18", "T19", "T20", "T28", "T29", "T32",
                "T33", "T46", "T48", "T49", "T58", "T69", "T70", "T73a", "T73", "T76"}
-# Scheduled for B7 but already runnable on the single-rate engine (inclusive tax T53, per-line rounding T82);
-# B7 re-asserts them with the full tax engine.
-B7_EARLY = {"T53", "T82"}
+B7_FIXTURES = {"T39", "T53", "T54", "T55", "T57", "T77", "T78", "T80", "T81", "T82"}
 # BookVault-only rules without a Manager observation (phase_tag "bv"): PR-78 receipt / payment without a bank account.
 BOOKVAULT_ONLY = {"T102", "T103"}
 STATEMENT_ROOT = {"pl": "expenses", "balance_sheet": "assets"}

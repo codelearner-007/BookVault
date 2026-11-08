@@ -30,6 +30,7 @@ class GoldenRun:
     pending_banks: set[str] = field(default_factory=set)  # keys of banks that can have pending
     parties: dict[str, str] = field(default_factory=dict)  # fixture party key -> party id
     tax_codes: dict[str, str] = field(default_factory=dict)  # fixture tax code key -> tax code id
+    tax_components: dict[str, str] = field(default_factory=dict)  # fixture component key -> component id
     items: dict[str, str] = field(default_factory=dict)  # fixture item key -> item id
     invoices: dict[str, str] = field(default_factory=dict)  # fixture id -> sales / purchase invoice document id
     documents: dict[str, str] = field(default_factory=dict)  # fixture id -> trade document id (orders, ...)
@@ -43,7 +44,8 @@ class GoldenRun:
         found = {}
         for name, ids, column in (("bank_account", self.banks, "bank_account_id"), ("party", self.parties, "party_id"),
                                   ("invoice", self.invoices, "invoice_document_id"),
-                                  ("tax_code", self.tax_codes, "tax_code_id"), ("item", self.items, "item_id")):
+                                  ("tax_code", self.tax_codes, "tax_code_id"), ("item", self.items, "item_id"),
+                                  ("tax_component", self.tax_components, "tax_component_id")):
             key = next((k for k, v in ids.items() if v == line.get(column)), None)
             if key:
                 found[name] = key
@@ -250,6 +252,14 @@ def _trade_lines(run: GoldenRun, lines: list[dict]) -> list[dict]:
 ROUNDING = {"round_to_nearest": "nearest", "round_down": "down"}
 
 
+def _withholding(fields: dict) -> dict:
+    """fields.withholding_tax {type percentage | amount, rate | amount} -> the request's withholding_tax (B7)."""
+    wht = fields.get("withholding_tax")
+    if not wht:
+        return {}
+    return {"withholding_tax": {"type": wht["type"], "value": wht.get("rate") or wht.get("amount")}}
+
+
 def _invoice_body(run: GoldenRun, doc: dict) -> dict:
     """PR-16..22, PR-31, PR-61: due Net N days, rounding, discount and late-fee terms, starting balance."""
     fields = doc.get("fields", {})
@@ -264,7 +274,7 @@ def _invoice_body(run: GoldenRun, doc: dict) -> dict:
         body.update(early_discount_rate=discount["rate"], early_discount_days=discount["days"])
     if fees := fields.get("late_payment_fees"):
         body["late_fee_rate"] = fees["monthly_percent"]
-    return body
+    return {**body, **_withholding(fields)}
 
 
 def _source(run: GoldenRun, fields: dict) -> dict:
@@ -356,7 +366,19 @@ async def credit_note(run: GoldenRun, fixture: dict) -> Outcome:
     response = await run.client.post(biz(run.business_id, "/credit-notes"), headers=run.owner.headers, json={
         "date": doc["date"], "customer_id": run.parties[fields["party"]], "post": True,
         "description": fields.get("description"), "invoice_id": run.invoices.get(linked),
-        "lines": _trade_lines(run, doc["lines"])})
+        "acts_as_stock_movement": fields.get("also_acts_as_delivery_note", False),
+        "lines": _trade_lines(run, doc["lines"]), **_withholding(fields)})
+    return await _with_journal(run, response)
+
+
+async def withholding_tax_receipt(run: GoldenRun, fixture: dict) -> Outcome:
+    """PR-36 / T39: Dr Withholding tax / Cr WHT receivable[customer], whatever the setting (BUG-01)."""
+    doc = fixture["document"]
+    fields = doc["fields"]
+    response = await run.client.post(biz(run.business_id, "/withholding-tax-receipts"), headers=run.owner.headers,
+                                     json={"date": doc["date"], "customer_id": run.parties[fields["party"]],
+                                           "amount": fields["amount"], "description": fields.get("description"),
+                                           "post": True})
     return await _with_journal(run, response)
 
 
@@ -387,9 +409,12 @@ def _purchase_body(run: GoldenRun, doc: dict) -> dict:
     body = {"date": doc["date"], "supplier_id": run.parties[fields["party"]], "post": True,
             "description": fields.get("description"), "amounts_include_tax": fields.get("amounts_include_tax", False),
             "lines": _trade_lines(run, doc["lines"]), "is_starting_balance": fields.get("is_starting_balance", False),
-            "acts_as_stock_movement": fields.get("also_acts_as_goods_receipt", False), **_source(run, fields)}
+            "acts_as_stock_movement": fields.get("also_acts_as_goods_receipt", False), **_source(run, fields),
+            **_withholding(fields)}
     if fields.get("due", {}).get("kind") == "net_days":
         body["due_date"] = (date.fromisoformat(doc["date"]) + timedelta(days=fields["due"]["days"])).isoformat()
+    if freight := fields.get("freight_in"):  # PR-41b; freight tax codes are not supported yet (none in the fixtures)
+        body["freight_in"] = [{"amount": x["amount"]} for x in freight]
     return body
 
 
@@ -468,6 +493,8 @@ ADAPTERS: dict[str, Adapter] = {
     "inventory_write_off": inventory_write_off,
     "inventory_transfer": inventory_transfer,
     "production_order": production_order,
+    # B7: withholding tax certificates
+    "withholding_tax_receipt": withholding_tax_receipt,
 }
 # Starting-balance kinds with an adapter (purchase invoices: B5, items: B6).
 STARTING_BALANCE_KINDS = {"balance_sheet_account", "bank_account", "sales_invoice", "inventory_item"}
@@ -479,13 +506,14 @@ SUPPORTED_SETUP = {"accounts", "settings", "account_groups", "bank_accounts", "p
 SUPPORTED_PARTY_KINDS = {"capital_account", "customer", "supplier"}
 # Item kinds the runner can create.
 SUPPORTED_ITEM_KINDS = {"non_inventory", "inventory", "kit"}
-# Tax code types the runner can create (multi-rate and reverse charge: B7).
-SUPPORTED_TAX_CODES = {"single_rate"}
+# Tax code types the runner can create (single and multiple rates, reverse charge: B7).
+SUPPORTED_TAX_CODES = {"single_rate", "multiple_rates"}
 # Settings the runner can apply; others belong to later phases (stock B6, WHT B7, currencies B8,
 # billable expenses B12).
-SUPPORTED_SETTINGS = {"books_start_date", "lock_date", "credit_limit_policy", "allow_negative_stock"}
-# Base-currency bank accounts only until B8; withholding tax arrives in B7.
-FOREIGN_FIELDS = {"currency", "exchange_rate", "currency_amount", "debit_currency_amount", "withholding_tax"}
+SUPPORTED_SETTINGS = {"books_start_date", "lock_date", "credit_limit_policy", "allow_negative_stock",
+                      "wht_receivable_enabled", "wht_payable_enabled"}
+# Base-currency bank accounts only until B8.
+FOREIGN_FIELDS = {"currency", "exchange_rate", "currency_amount", "debit_currency_amount"}
 
 
 def adapter_for(document_type: str) -> Adapter | None:
@@ -506,8 +534,7 @@ def _parties_supported(fixture: dict) -> bool:
     return (all(data["parties"][p]["kind"] in SUPPORTED_PARTY_KINDS and "currency" not in data["parties"][p]
                 for p in setup.get("parties", []))
             and all(data["items"][i]["kind"] in SUPPORTED_ITEM_KINDS for i in setup.get("items", []))
-            and all(data["tax_codes"][t]["type"] in SUPPORTED_TAX_CODES and not data["tax_codes"][t].get("reverse_charge")
-                    for t in setup.get("tax_codes", [])))
+            and all(data["tax_codes"][t]["type"] in SUPPORTED_TAX_CODES for t in setup.get("tax_codes", [])))
 
 
 def _dated_records_supported(fixture: dict) -> bool:

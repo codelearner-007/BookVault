@@ -18,6 +18,8 @@ import { tradeDocumentsService } from '@/lib/services/trade-documents.service';
     stockMovementLabel  invoices and notes: the "Also acts as ..." checkbox and, while checked, its inventory location
                         (delivery notes and goods receipts always name a location)
     closable  purchase invoices: the edit form's "Closed invoice" checkbox
+    withholdingTax  the withholding tax setting that shows the form's "Withholding tax" block (B7)
+    freightIn  purchase invoices: Freight-in rows, capitalised to the inventory lines (B7)
   Sales-only terms (expiry date, early payment discount, late fees, credit limit, delivery address) key on the
   sales DOC_TYPES themselves.
 */
@@ -29,7 +31,12 @@ export const SALES_TABS = {
   creditNotes: 'credit-notes',
   deliveryNotes: 'delivery-notes',
   lateFees: 'late-payment-fees',
+  whtReceipts: 'withholding-tax-receipts',
 };
+
+// Withholding tax settings flags (GET /settings/withholding-tax) that show the WHT block on a form.
+export const WHT_SETTINGS = { receivable: 'wht_receivable_enabled', payable: 'wht_payable_enabled' };
+export const WHT_TYPES = { percentage: 'percentage', amount: 'amount' };
 
 export const PURCHASE_TABS = {
   suppliers: 'suppliers',
@@ -199,6 +206,7 @@ export const TRADE_DOCUMENTS = {
     priced: true,
     accounts: true,
     stockMovementLabel: 'Also acts as delivery note',
+    withholdingTax: WHT_SETTINGS.receivable,
     statuses: INVOICE_STATUS,
     copyTargets: [DOC_TYPES.creditNote],
     columns: [
@@ -220,6 +228,7 @@ export const TRADE_DOCUMENTS = {
     priced: true,
     accounts: true,
     stockMovementLabel: 'Also acts as delivery note',
+    withholdingTax: WHT_SETTINGS.receivable,
     statuses: NOTE_STATUS,
     copyTargets: [],
     columns: [
@@ -303,6 +312,8 @@ export const TRADE_DOCUMENTS = {
     accounts: true,
     stockMovementLabel: 'Also acts as goods receipt',
     closable: true,
+    withholdingTax: WHT_SETTINGS.payable,
+    freightIn: true,
     statuses: INVOICE_STATUS,
     copyTargets: [DOC_TYPES.debitNote],
     columns: [

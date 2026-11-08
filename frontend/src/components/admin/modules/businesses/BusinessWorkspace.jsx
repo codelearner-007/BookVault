@@ -25,7 +25,7 @@ import BusinessJournalEntries from './tabs/BusinessJournalEntries';
 import BusinessReports from './tabs/BusinessReports';
 import {
   BusinessCreditNotes, BusinessCustomers, BusinessDeliveryNotes, BusinessLatePaymentFees, BusinessSalesInvoices,
-  BusinessSalesOrders, BusinessSalesQuotes,
+  BusinessSalesOrders, BusinessSalesQuotes, BusinessWithholdingTaxReceipts,
 } from './tabs/BusinessSalesTabs';
 import {
   BusinessDebitNotes, BusinessGoodsReceipts, BusinessPurchaseInvoices, BusinessPurchaseOrders, BusinessPurchaseQuotes,
@@ -39,6 +39,7 @@ import InventoryLocationsPage from './inventory/InventoryLocationsPage';
 import NonInventoryItemsPage from './sales/NonInventoryItemsPage';
 import SalesSettingsPage from './sales/SalesSettingsPage';
 import TaxCodesPage from './sales/TaxCodesPage';
+import WithholdingTaxSettingsPage from './sales/WithholdingTaxSettingsPage';
 
 // Sidebar tabs (?tab=X): each must exist in admin_tabs (CLAUDE.md rule 18).
 const TAB_COMPONENTS = {
@@ -52,6 +53,7 @@ const TAB_COMPONENTS = {
   'credit-notes': BusinessCreditNotes,
   'late-payment-fees': BusinessLatePaymentFees,
   'delivery-notes': BusinessDeliveryNotes,
+  'withholding-tax-receipts': BusinessWithholdingTaxReceipts,
   suppliers: BusinessSuppliers,
   'purchase-quotes': BusinessPurchaseQuotes,
   'purchase-orders': BusinessPurchaseOrders,
@@ -82,6 +84,7 @@ const SETTINGS_PAGE_COMPONENTS = {
   'inventory-locations': InventoryLocationsPage,
   'inventory-kits': InventoryKitsPage,
   sales: SalesSettingsPage,
+  'withholding-tax': WithholdingTaxSettingsPage,
 };
 
 export function WorkspaceSkeleton() {

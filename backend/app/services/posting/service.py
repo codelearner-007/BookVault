@@ -41,7 +41,7 @@ MIN_POSTED_LINES = 2
 # takes; control accounts of later phases (assets: B9, employees: B10, ...) are not postable yet.
 SUBLEDGER_NONE, SUBLEDGER_BANK, SUBLEDGER_PARTY, SUBLEDGER_ITEM = "none", "bank_account", "party", "item"
 PARTY_KIND_OF_CONTROL = {"capital_control": "capital_account", "accounts_receivable": "customer",
-                         "accounts_payable": "supplier"}
+                         "accounts_payable": "supplier", "wht_receivable": "customer", "wht_payable": "supplier"}
 
 
 @dataclass(frozen=True)
@@ -55,15 +55,16 @@ class LineInput:
     invoice_document_id: str | None = None
     item_id: str | None = None
     tax_code_id: str | None = None
+    tax_component_id: str | None = None
 
     def ledger_key(self) -> tuple:
         return (self.account_id, self.debit, self.credit, self.bank_account_id, self.party_id,
-                self.invoice_document_id, self.item_id, self.tax_code_id)
+                self.invoice_document_id, self.item_id, self.tax_code_id, self.tax_component_id)
 
     def dimensions(self) -> dict:
         return {"bank_account_id": self.bank_account_id, "party_id": self.party_id,
                 "invoice_document_id": self.invoice_document_id, "item_id": self.item_id,
-                "tax_code_id": self.tax_code_id}
+                "tax_code_id": self.tax_code_id, "tax_component_id": self.tax_component_id}
 
 
 @dataclass(frozen=True)
@@ -320,6 +321,7 @@ class PostingService:
                 debit=x.debit, credit=x.credit, document_line_id=x.id, description=x.description,
                 bank_account_id=x.bank_account_id, party_id=x.party_id,
                 invoice_document_id=x.invoice_document_id, item_id=x.item_id, tax_code_id=x.tax_code_id,
+                tax_component_id=x.tax_component_id,
             )
             for x in lines
         ])
@@ -345,7 +347,7 @@ class PostingService:
             return []
         return [
             LineInput(x.account_id, x.debit, x.credit, x.description, x.bank_account_id, x.party_id,
-                      x.invoice_document_id, x.item_id, x.tax_code_id)
+                      x.invoice_document_id, x.item_id, x.tax_code_id, x.tax_component_id)
             for x in await self.repo.entry_lines(document.business_id, entry.id)
         ]
 
@@ -365,6 +367,7 @@ class PostingService:
                 line_date=x.line_date, description=x.description,
                 bank_account_id=x.bank_account_id, party_id=x.party_id,
                 invoice_document_id=x.invoice_document_id, item_id=x.item_id, tax_code_id=x.tax_code_id,
+                tax_component_id=x.tax_component_id,
             )
             for x in originals
         ])

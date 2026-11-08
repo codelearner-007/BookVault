@@ -4,7 +4,7 @@ Flow (story): validate the form -> store document, extension and lines -> on pos
 amounts back from the database views and post the ledger image (invoices, credit / debit
 notes) -> audit. Drafts never reach the ledger; an edit of a posted posting document is
 reversal + new entry (PR-73) unless its ledger inputs are unchanged; void = reversal (PR-74).
-Lines snapshot the tax rate and account (BUG-08). Starting-balance invoices (PR-61, D-36) post
+Lines snapshot the tax rate, account and components (BUG-08, B7). Starting-balance invoices (PR-61, D-36) post
 no revenue / expense line, only their own opening balance. A closed purchase invoice (PR-41c)
 has no ledger effect; it is only left out of allocation.
 
@@ -12,6 +12,10 @@ Inventory (B6): a posted invoice, note, delivery note or goods receipt moves sto
 stock ledger (owned qty for invoices and notes, on-hand qty for stock documents and documents that
 act as one; kits move their components); sales documents get a separate COGS entry at moving
 average. A new invoice absorbs its party's unapplied credit, oldest first (T58).
+
+Tax and withholding tax (B7): multi-rate codes, reverse charge on purchases (PR-40), freight-in on
+purchase invoices (PR-41b) and withholding tax on invoices and credit notes (PR-21, PR-29, PR-41a).
+The WHT settings only show the fields (BUG-01): a sent WHT always posts.
 """
 
 from datetime import date
@@ -25,7 +29,13 @@ from app.core.money import round_money
 from app.core.pagination import PageParams
 from app.models.customer import Customer
 from app.models.ledger import Document
-from app.models.sales import InvoiceTerms, TradeDocument, TradeDocumentLine
+from app.models.sales import (
+    InvoiceTerms,
+    TradeDocument,
+    TradeDocumentFreightLine,
+    TradeDocumentLine,
+    TradeDocumentLineTax,
+)
 from app.models.supplier import Supplier
 from app.repositories.business_settings_repository import BusinessSettingsRepository
 from app.repositories.coa_repository import CoaRepository
@@ -49,6 +59,7 @@ from app.services.invoice_opening_service import InvoiceOpeningService
 from app.services.posting import DRAFT, POSTED, VOID, DocumentHeader, PostingService
 from app.services.trade_ledger import TradeLedger
 from app.services.trade_stock import TradeStock
+from app.services.trade_tax import withholding_amount
 from app.services.trade_types import ROLE_INVOICE, ROLE_NOTE, ROLE_STOCK, SALES, TRADE_TYPES, TradeType
 from app.services.trade_view import TradeView, linked_invoice, tax_breakdown
 from app.services.versioning import check_version
@@ -98,15 +109,26 @@ class TradeDocumentService:
             [(x.qty, x.unit_price, x.discount, rates[x.tax_code_id].rate if x.tax_code_id else None)
              for x in body.lines], body.discount_type, body.amounts_include_tax, dp)
         zero = round_money(Decimal(0), dp)
-        gross = sum((r.net + r.tax for r in rows), zero)
+        taxes = [ZERO if x.tax_code_id and self._reverse_charge(rates[x.tax_code_id]) else r.tax
+                 for x, r in zip(body.lines, rows)]
+        freight = sum((x.amount for x in body.freight_in), zero) if self.side is not SALES else zero
+        subtotal = sum((r.net for r in rows), zero) + freight
+        gross = subtotal + sum(taxes, zero)
         rounding = await self.repo.rounding(body.rounding, gross)
-        breakdown_rows = [_TaxRow(x.tax_code_id, rates[x.tax_code_id].name, rates[x.tax_code_id].rate, r.tax)
-                          for x, r in zip(body.lines, rows) if x.tax_code_id]
+        gross_total = round_money(gross + rounding, dp)
+        wht = withholding_amount(body.withholding_tax, await self.repo.wht_base(business_id), subtotal,
+                                 gross_total, dp)
+        breakdown_rows = [_TaxRow(x.tax_code_id, rates[x.tax_code_id].name, rates[x.tax_code_id].rate, tax)
+                          for x, tax in zip(body.lines, taxes) if x.tax_code_id]
         return TradeTotalsResponse(
-            lines=[TradeTotalsLine(net=r.net, tax=r.tax, total=r.net + r.tax) for r in rows],
-            subtotal=sum((r.net for r in rows), zero), tax_total=sum((r.tax for r in rows), zero),
-            rounding=round_money(rounding, dp), total=round_money(gross + rounding, dp),
+            lines=[TradeTotalsLine(net=r.net, tax=tax, total=r.net + tax) for r, tax in zip(rows, taxes)],
+            subtotal=subtotal, tax_total=sum(taxes, zero), rounding=round_money(rounding, dp), freight=freight,
+            gross_total=gross_total, withholding_tax=wht, total=gross_total - wht,
             tax_breakdown=tax_breakdown(breakdown_rows, dp))
+
+    def _reverse_charge(self, tax_row) -> bool:
+        """PR-40: a reverse-charge code is self-assessed on purchases only."""
+        return bool(tax_row.is_reverse_charge) and self.side is not SALES
 
     async def lines_report(self, business_id: str, params: PageParams) -> TradeLineReportResponse:
         dp = await self.posting.decimals(business_id)
@@ -152,7 +174,7 @@ class TradeDocumentService:
         if self.kind.role == ROLE_INVOICE:
             await self.repo.add(InvoiceTerms(document_id=document.id, business_id=ctx.business_id,
                                              **_terms(body)))
-        await self._store_lines(document, lines)
+        await self._store_lines(document, lines, body)
         await self._link_source(ctx, document, body)
         warnings = await self._post(ctx, document, body) if body.post else []
         after = await self.view.response(self.kind, document, warnings)
@@ -176,7 +198,7 @@ class TradeDocumentService:
         await self.stock.check_location(ctx.business_id, body)
         await self.posting.update_header(ctx, document, _header(body), starting_balance=starting)
         await self._apply_extension(document, body, party.id)
-        await self._store_lines(document, lines)
+        await self._store_lines(document, lines, body)
         await self._relink_invoice(ctx, document, body)
         warnings = []
         if posted and (self.kind.posts or starting) and not (
@@ -343,7 +365,8 @@ class TradeDocumentService:
                 business_id=business_id, line_no=no, item_id=x.item_id, account_id=account_id,
                 description=x.description, qty=x.qty, unit_price=x.unit_price, discount=x.discount,
                 tax_code_id=x.tax_code_id, tax_rate=tax.rate if tax else None,
-                tax_account_id=tax.account_id if tax else None))
+                tax_account_id=tax.account_id if tax else None,
+                tax_reverse_charge=bool(tax) and self._reverse_charge(tax)))
         accounts = {x.account_id for x in lines if x.account_id}
         found = await self.master.account_types(business_id, accounts)
         if set(found) != accounts or any(not a.is_active for a in found.values()):
@@ -395,10 +418,22 @@ class TradeDocumentService:
                 setattr(terms, key, value)
         await self.repo.save()
 
-    async def _store_lines(self, document: Document, lines: list[TradeDocumentLine]) -> None:
+    async def _store_lines(self, document: Document, lines: list[TradeDocumentLine], body=None) -> None:
+        """Lines with their tax component snapshots, and the freight-in lines (purchase invoices)."""
+        business_id = document.business_id
         for line in lines:
             line.document_id = document.id
-        await self.repo.replace_lines(document.business_id, document.id, lines)
+        await self.repo.replace_lines(business_id, document.id, lines)
+        components = await self.master.component_rows(business_id, {x.tax_code_id for x in lines if x.tax_code_id})
+        await self.repo.replace_line_taxes([
+            TradeDocumentLineTax(business_id=business_id, line_id=line.id, line_no=c.line_no, component_id=c.id,
+                                 rate=c.rate, account_id=c.account_id)
+            for line in lines if line.tax_code_id for c in components[line.tax_code_id]])
+        if body is not None and hasattr(body, "freight_in"):
+            await self.repo.replace_freight_lines(business_id, document.id, [
+                TradeDocumentFreightLine(business_id=business_id, document_id=document.id, line_no=no,
+                                         description=x.description, amount=x.amount)
+                for no, x in enumerate(body.freight_in, start=1)])
 
     async def _document(self, business_id: str, document_id: str, *, for_update: bool = False) -> Document:
         document = None
@@ -452,6 +487,9 @@ def _apply(extension: TradeDocument, body) -> None:
     extension.expiry_date = getattr(body, "expiry_date", None)
     extension.acts_as_stock_movement = getattr(body, "acts_as_stock_movement", False)
     extension.location_id = getattr(body, "location_id", None)
+    wht = getattr(body, "withholding_tax", None)
+    extension.wht_type_key = wht.type if wht else None
+    extension.wht_value = wht.value if wht else None
 
 
 def _terms(body) -> dict:
@@ -473,7 +511,16 @@ def _only_descriptions(kind: TradeType, before: TradeDocumentBase, body) -> bool
         for x in body.lines]
     field = kind.side.party_field
     return before.date == body.date and getattr(before, field) == getattr(body, field) \
+        and _same(_amount_terms(before), _amount_terms(body)) \
         and len(lines) == len(wanted) and all(_same(a, b) for a, b in zip(lines, wanted))
+
+
+def _amount_terms(document) -> tuple:
+    """Withholding tax and freight-in of a stored document or a request body, comparable with _same."""
+    wht = getattr(document, "withholding_tax", None)
+    freight = getattr(document, "freight_in", None) or []
+    return (wht.type if wht else None, wht.value if wht else None,
+            sum((x.amount for x in freight), Decimal(0)), len(freight))
 
 
 def _key(line) -> tuple:

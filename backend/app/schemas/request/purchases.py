@@ -21,7 +21,15 @@ from app.schemas.common import (
     ShortText,
     VersionedRequest,
 )
-from app.schemas.request.sales import CreateFlags, DeliveryLineIn, RoundingMethod, TradeBodyFields
+from app.schemas.request.sales import (
+    MAX_FREIGHT_LINES,
+    CreateFlags,
+    DeliveryLineIn,
+    FreightLineIn,
+    RoundingMethod,
+    TradeBodyFields,
+    WithholdingTaxIn,
+)
 
 
 # ---------------------------------------------------------------- suppliers
@@ -56,6 +64,8 @@ class PurchaseInvoiceFields(PurchaseFields):
     location_id: Optional[IdStr] = None  # received into (null = the default location)
     is_starting_balance: bool = False
     paid_before_start: Optional[NonNegativeMoney] = None
+    freight_in: list[FreightLineIn] = Field(default_factory=list, max_length=MAX_FREIGHT_LINES)  # PR-41b
+    withholding_tax: Optional[WithholdingTaxIn] = None  # WHT payable, PR-41a
 
     @model_validator(mode="after")
     def _terms(self) -> "PurchaseInvoiceFields":

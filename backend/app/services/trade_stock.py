@@ -1,7 +1,7 @@
 """Stock side of trade documents (B6; PR-23, PR-26, PR-37, PR-39, PR-42, PR-44).
 
 What a posted invoice, note, delivery note or goods receipt moves: owned qty for invoices and notes
-(purchases and debit notes at their line net), on-hand qty for delivery notes, goods receipts and
+(purchases and debit notes at their line net, plus the freight-in capitalised to the line, PR-41b), on-hand qty for delivery notes, goods receipts and
 documents that "also act as" one; a kit moves its components. Inventory items and kits sell to their
 custom income account (else Inventory - sales) and are bought into Inventory on hand, always.
 """
@@ -17,7 +17,9 @@ from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.master_data_repository import MasterDataRepository
 from app.repositories.sales_repository import SalesRepository
 from app.services.access_service import BusinessContext
+from app.services.posting import PostingService
 from app.services.stock_ledger import Move, StockLedger
+from app.services.trade_ledger import TradeLedger
 from app.services.trade_types import ROLE_INVOICE, ROLE_NOTE, ROLE_STOCK, SALES, TradeType, moves_inbound
 
 NON_INVENTORY, KIT = "non_inventory", "kit"
@@ -34,6 +36,8 @@ class TradeStock:
         self.inventory = InventoryRepository(session)
         self.coa = CoaRepository(session)
         self.ledger = StockLedger(session)
+        self.posting = PostingService(session)
+        self.trade_ledger = TradeLedger(self.repo, self.posting, self.coa)
 
     async def line_account(self, business_id: str, line, item) -> str | None:
         """Non-inventory items name their account; inventory items and kits as in the module docstring."""
@@ -73,6 +77,10 @@ class TradeStock:
         owned = self.kind.role != ROLE_STOCK
         on_hand = self.kind.role == ROLE_STOCK or extension.acts_as_stock_movement
         fixed = self.kind.side is not SALES and owned
+        freight = {}
+        if fixed:  # PR-41b: freight-in raises the cost of the inventory lines it is capitalised to
+            dp = await self.posting.decimals(business_id)
+            freight = {no: part for _, _, part, no in await self.trade_ledger.freight_parts(document, rows, dp)}
         moves = []
         for row in rows:
             item = items.get(row.item_id)
@@ -83,5 +91,5 @@ class TradeStock:
             for item_id, part in parts:
                 moved = sign * part
                 moves.append(Move(item_id, location, row.line_no, qty_owned=moved if owned else ZERO,
-                                  qty_on_hand=moved if on_hand else ZERO, amount=sign * row.net if fixed else ZERO))
+                                  qty_on_hand=moved if on_hand else ZERO, amount=sign * (row.net + freight.get(row.line_no, ZERO)) if fixed else ZERO))
         return moves

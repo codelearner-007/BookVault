@@ -1,4 +1,4 @@
-"""Business settings model (migrations 20261108000020, 20261108000025: ledger columns, 20261108000034: credit limit policy)."""
+"""Business settings model (migrations 20261108000020, 20261108000025: ledger columns, 20261108000034: credit limit policy, 20261108000040: withholding tax)."""
 
 from datetime import date
 
@@ -26,4 +26,8 @@ class BusinessSettings(Base, TimestampMixin):
         Text, nullable=False, server_default=text("'half_away_from_zero'")
     )
     credit_limit_policy_key: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'warn'"))
+    # Withholding tax (B7): the flags only show the form fields (BUG-01); the base is D-27.
+    wht_receivable_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    wht_payable_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    wht_base_key: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'gross'"))
     version: Mapped[int] = mapped_column(nullable=False, server_default=text("1"))

@@ -58,7 +58,10 @@ from app.models.sales import (
     TaxCode,
     TaxCodeComponent,
     TradeDocument,
+    TradeDocumentFreightLine,
     TradeDocumentLine,
+    TradeDocumentLineTax,
+    WithholdingTaxReceipt,
 )
 from app.models.supplier import Supplier
 from app.models.permission import Permission
@@ -106,6 +109,9 @@ __all__ = [
     "TaxCodeComponent",
     "TradeDocument",
     "TradeDocumentLine",
+    "TradeDocumentLineTax",
+    "TradeDocumentFreightLine",
+    "WithholdingTaxReceipt",
     "CoaGroup",
     "Customer",
     "Attachment",

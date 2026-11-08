@@ -34,6 +34,7 @@ from app.api.v1 import (
     transfers,
     user_roles,
     users,
+    withholding_tax,
 )
 from app.core.dependencies import enforce_rate_limit
 
@@ -44,7 +45,7 @@ for module in (
     auth, profile, roles, permissions, user_roles, users, audit, dashboard, members,
     businesses, coa, bank_accounts, tab_columns, transfers, capital_accounts, parties, attachments, suspense, admin_tabs, countries,
     journal_entries, ledger_reports, starting_balances, country_templates,
-    customers, suppliers, master_data, late_payment_fees, sales, inventory,
+    customers, suppliers, master_data, late_payment_fees, sales, inventory, withholding_tax,
 ):
     api_router.include_router(module.router)
 api_router.include_router(cash_transactions.receipts_router)

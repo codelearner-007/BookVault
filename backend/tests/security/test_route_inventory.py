@@ -29,6 +29,8 @@ CREATE_SUFFIXES = (
     "/inventory-items", "/inventory-kits", "/inventory-locations",
     *(f"/{p}{s}" for p in ("inventory-transfers", "inventory-write-offs", "production-orders")
       for s in ("", "/{document_id}/post", "/{document_id}/void")),
+    # B7
+    *(f"/withholding-tax-receipts{s}" for s in ("", "/{document_id}/post", "/{document_id}/void")),
 )
 
 

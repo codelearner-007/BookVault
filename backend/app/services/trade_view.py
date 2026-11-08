@@ -16,6 +16,7 @@ from app.schemas.response.sales import (
     AppliedDocument,
     DocumentWarning,
     EarlyDiscountTerms,
+    FreightLineOut,
     LateFeeOnInvoice,
     LinkedDocument,
     PurchaseDocumentListItem,
@@ -26,6 +27,7 @@ from app.schemas.response.sales import (
     TradeDocumentListItemBase,
     TradeDocumentResponse,
     TradeLineResponse,
+    WithholdingTaxOut,
 )
 from app.services.posting import POSTED, VOID, PostingService
 from app.services.sales_rules import HUNDRED, invoice_display_status
@@ -65,6 +67,13 @@ def tax_breakdown(rows: list, dp: int) -> list[TaxBreakdownItem]:
         grouped[row.tax_code_id] = TaxBreakdownItem(tax_code_id=row.tax_code_id, name=row.tax_code_name,
                                                     rate=row.tax_rate, amount=round_money(amount, dp))
     return list(grouped.values())
+
+
+def _withholding(extension, detail, dp: int) -> WithholdingTaxOut | None:
+    if extension.wht_type_key is None:
+        return None
+    return WithholdingTaxOut(type=extension.wht_type_key, value=extension.wht_value,
+                             amount=round_money(detail.withholding_tax, dp))
 
 
 def _live_targets(links: list, document_id: str, link_type: str) -> list:
@@ -137,6 +146,9 @@ class TradeView:
             location_id=extension.location_id,
             lines=lines, subtotal=round_money(detail.subtotal, dp), tax_total=round_money(detail.tax_total, dp),
             rounding=round_money(detail.rounding, dp), total=round_money(detail.total, dp),
+            gross_total=round_money(detail.gross_total, dp), freight=round_money(detail.freight, dp),
+            freight_in=[FreightLineOut.model_validate(x) for x in await self.repo.freight_lines(business_id, document.id)],
+            withholding_tax=_withholding(extension, detail, dp),
             tax_breakdown=tax_breakdown(rows, dp), links=self._links(links, document.id),
             warnings=warnings or [], created_at=document.created_at, updated_at=document.updated_at, **extra,
         )

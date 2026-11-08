@@ -13,12 +13,7 @@ import { accountLabel } from '../ledger/ledger-parts';
 import { DOCUMENT_TYPE_LABELS, documentHref } from '../banking/banking-parts';
 import { DOC_TYPES, LATE_FEE_TYPE, ORDER_DELIVERY_STATUS, ORDER_INVOICE_STATUS, ROLES, plainNumber } from './sales-documents';
 import { Field, STICKY_CELL, StatusPill } from './sales-parts';
-
-// Applied receipts / payments / notes reduce what the invoice is owed: shown with a minus like Manager. Text only.
-function asReduction(value) {
-  const text = String(value);
-  return text.startsWith('-') ? text : `-${text}`;
-}
+import { asReduction, totalsOfDoc, totalsRows } from './TradeTotals';
 
 function DocumentLabel({ entry: { document_type: type, reference, date } }) {
   const { dateFormat } = useBusinessFormat();
@@ -51,7 +46,7 @@ function cellValue(key, line) {
   if (key === 'account') return line.account_id ? accountLabel(line) : '';
   if (key === 'description') return line.description;
   if (key === 'qty') return plainNumber(line.qty);
-  if (key === 'tax') return line.tax_code_name;
+  if (key === 'tax') return line.tax_reverse_charge ? `${line.tax_code_name} (reverse charge)` : line.tax_code_name;
   return <Money value={line[key]} />;
 }
 
@@ -66,16 +61,11 @@ function SummaryRow({ span, label, value, strong, children }) {
 
 // Totals under the lines; invoices add what was applied to them, late fees and the balance due.
 function TotalsRows({ doc, config, span }) {
-  const breakdown = doc.tax_breakdown ?? [];
-  const showSubtotal = breakdown.length > 0;
   return (
     <>
-      {showSubtotal && <SummaryRow span={span} label="Subtotal" value={<Money value={doc.subtotal} />} />}
-      {breakdown.map((tax) => (
-        <SummaryRow key={tax.tax_code_id} span={span} label={`${tax.name} ${plainNumber(tax.rate)}%`} value={<Money value={tax.amount} />} />
+      {totalsRows(totalsOfDoc(doc)).map((row) => (
+        <SummaryRow key={row.key} span={span} label={row.label} value={<Money value={row.value} />} strong={row.strong} />
       ))}
-      {!isZeroAmount(doc.rounding) && <SummaryRow span={span} label="Rounding" value={<Money value={doc.rounding} />} />}
-      <SummaryRow span={span} label="Total" value={<Money value={doc.total} />} strong />
       {config.role === ROLES.invoice && (
         <>
           {(doc.applied ?? []).map((entry) => (

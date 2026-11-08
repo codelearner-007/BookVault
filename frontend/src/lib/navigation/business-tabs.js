@@ -134,6 +134,7 @@ export const NEW_ACTIONS = [
   { tab: 'sales-invoices', label: 'Sales Invoice', href: '?tab=sales-invoices&new=1', icon: FileText },
   { tab: 'credit-notes', label: 'Credit Note', href: '?tab=credit-notes&new=1', icon: FileMinus },
   { tab: 'late-payment-fees', label: 'Late Payment Fee', href: '?tab=late-payment-fees&new=1', icon: AlarmClock },
+  { tab: 'withholding-tax-receipts', label: 'Withholding Tax Receipt', href: '?tab=withholding-tax-receipts&new=1', icon: Percent },
   { tab: 'delivery-notes', label: 'Delivery Note', href: '?tab=delivery-notes&new=1', icon: PackageCheck },
   { tab: 'suppliers', label: 'Supplier', href: '?tab=suppliers&new=1', icon: Truck },
   { tab: 'purchase-quotes', label: 'Purchase Quote', href: '?tab=purchase-quotes&new=1', icon: FileSearch },

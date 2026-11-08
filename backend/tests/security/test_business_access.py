@@ -156,6 +156,18 @@ ROUTE_MAP.update({
     "PUT /starting-balances/inventory-items/{item_id}": [("settings.starting_balances", E)],
 })
 
+# B7: withholding tax receipts and settings (the forms read the flags: membership only)
+ROUTE_MAP.update({
+    "GET /withholding-tax-receipts": [("withholding_tax_receipts", V)],
+    "POST /withholding-tax-receipts": [("withholding_tax_receipts", C)],
+    "GET /withholding-tax-receipts/{document_id}": [("withholding_tax_receipts", V)],
+    "PUT /withholding-tax-receipts/{document_id}": [("withholding_tax_receipts", E)],
+    "POST /withholding-tax-receipts/{document_id}/post": [("withholding_tax_receipts", E)],
+    "POST /withholding-tax-receipts/{document_id}/void": [("withholding_tax_receipts", D)],
+    "GET /settings/withholding-tax": "member",
+    "PUT /settings/withholding-tax": [("settings.business_details", E)],
+})
+
 ROUTES = business_routes()
 PAIR_CASES = [
     (route, pair) for route in ROUTES if guard_kind(route.route) == "pairs"
