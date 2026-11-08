@@ -1,9 +1,7 @@
-"""User role request schemas for input validation."""
+"""User role request schemas."""
 
-from pydantic import BaseModel, Field
+from app.schemas.common import IdStr, RequestModel
 
 
-class AssignUserRoleRequest(BaseModel):
-    """Request body for assigning a role to a user."""
-
-    role_id: str = Field(..., description="Role ID to assign")
+class AssignUserRoleRequest(RequestModel):
+    role_id: IdStr

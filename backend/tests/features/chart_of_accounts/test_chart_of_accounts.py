@@ -33,8 +33,13 @@ async def test_coa_group_and_account_crud(client, users):
         headers=owner.headers,
     )
     account_url = _url(business_id, f"accounts/{account.json()['id']}")
-    renamed = await client.put(account_url, json={"name": "Petty cash"}, headers=owner.headers)
-    removed = await client.delete(account_url, headers=owner.headers)
+    renamed = await client.put(
+        account_url, json={"name": "Petty cash", "version": account.json()["version"]},
+        headers=owner.headers,
+    )
+    removed = await client.delete(
+        account_url, params={"version": renamed.json()["version"]}, headers=owner.headers
+    )
 
     assert group.status_code == 201, group.text
     assert account.json()["group_id"] == group.json()["id"]
@@ -75,7 +80,8 @@ async def test_coa_system_rows_are_protected(client, users):
     system = next(a for a in accounts["items"] if a["is_system"])
 
     response = await client.delete(
-        _url(business_id, f"accounts/{system['id']}"), headers=owner.headers
+        _url(business_id, f"accounts/{system['id']}"), params={"version": system["version"]},
+        headers=owner.headers,
     )
 
     assert response.status_code == 403

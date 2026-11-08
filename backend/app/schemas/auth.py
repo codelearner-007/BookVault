@@ -19,6 +19,7 @@ class CurrentUser(BaseModel):
     email: EmailStr
     user_role: str
     hierarchy_level: int
+    aal: str | None = None
     must_change_password: bool = False
 
     def has_role(self, role: str) -> bool:

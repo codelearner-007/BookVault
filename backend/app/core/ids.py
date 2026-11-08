@@ -12,3 +12,8 @@ def is_uuid(value: object) -> bool:
     except ValueError:
         return False
     return True
+
+
+def canonical_uuid(value: str) -> str:
+    """Pydantic validator: a well-formed UUID, returned in canonical lowercase form."""
+    return str(uuid.UUID(value))

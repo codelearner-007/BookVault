@@ -67,6 +67,7 @@ import {
   reorderCoaGroups,
   reorderCoaAccounts,
 } from '@/lib/services/coa.service';
+import { isVersionConflict } from '@/lib/services/api-client';
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 
@@ -722,9 +723,18 @@ function CoaPanel({
     setAccountDialog({ open: true, data: account });
   }
 
+  // A version conflict reloads the chart (with the message) so the next edit uses fresh versions.
+  async function reloadOnConflict(err) {
+    if (isVersionConflict(err)) await onRefresh(err.message);
+    throw err;
+  }
+
   async function handleGroupSave(payload) {
-    if (groupDialog.data) {
-      await updateCoaGroup(businessId, groupDialog.data.id, payload);
+    const group = groupDialog.data;
+    if (group) {
+      // The group panel type is fixed after creation; updates take name + version only.
+      await updateCoaGroup(businessId, group.id, { name: payload.name, version: group.version })
+        .catch(reloadOnConflict);
     } else {
       await createCoaGroup(businessId, payload);
     }
@@ -732,8 +742,10 @@ function CoaPanel({
   }
 
   async function handleAccountSave(payload) {
-    if (accountDialog.data) {
-      await updateCoaAccount(businessId, accountDialog.data.id, payload);
+    const account = accountDialog.data;
+    if (account) {
+      await updateCoaAccount(businessId, account.id, { ...payload, version: account.version })
+        .catch(reloadOnConflict);
     } else {
       await createCoaAccount(businessId, payload);
     }
@@ -754,13 +766,18 @@ function CoaPanel({
   }
 
   async function confirmDelete() {
-    if (deleteTarget.type === 'group') {
-      await deleteCoaGroup(businessId, deleteTarget.item.id);
-    } else {
-      await deleteCoaAccount(businessId, deleteTarget.item.id);
-    }
+    const { type, item } = deleteTarget;
     setDeleteTarget(null);
-    await onRefresh();
+    try {
+      if (type === 'group') {
+        await deleteCoaGroup(businessId, item.id, item.version);
+      } else {
+        await deleteCoaAccount(businessId, item.id, item.version);
+      }
+      await onRefresh();
+    } catch (err) {
+      await onRefresh(err?.message ?? 'Failed to delete.');
+    }
   }
 
   async function handleReorderGroupsSave(ordered) {
@@ -977,17 +994,20 @@ export default function BusinessChartOfAccounts({ business }) {
   const [accounts, setAccounts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
 
-  const fetchData = useCallback(async () => {
+  // notice: message of a failed change, shown above the reloaded chart.
+  const fetchData = useCallback(async (nextNotice = null) => {
     setIsLoading(true);
     setError(null);
+    setNotice(nextNotice);
     try {
       const [groupsData, accountsData] = await Promise.all([
         listCoaGroups(business.id),
         listCoaAccounts(business.id),
       ]);
-      setGroups(Array.isArray(groupsData) ? groupsData : (groupsData?.items ?? []));
-      setAccounts(Array.isArray(accountsData) ? accountsData : (accountsData?.items ?? []));
+      setGroups(groupsData.items);
+      setAccounts(accountsData.items);
     } catch (err) {
       setError(err?.message ?? 'Failed to load chart of accounts.');
     } finally {
@@ -1020,6 +1040,12 @@ export default function BusinessChartOfAccounts({ business }) {
           </p>
         </div>
       </div>
+
+      {notice && (
+        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {notice}
+        </div>
+      )}
 
       {/* Two-panel layout */}
       <div className="grid grid-cols-1 xl:grid-cols-2 divide-y xl:divide-y-0 xl:divide-x divide-border gap-0">

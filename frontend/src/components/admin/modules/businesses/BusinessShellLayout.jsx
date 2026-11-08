@@ -43,7 +43,7 @@ const TAB_ICONS = {
   'bank-and-cash-accounts': Landmark,
   'journal-entries': ScrollText,
   reports: BarChart2,
-  receipt: Receipt,
+  receipts: Receipt,
   payments: CreditCard,
   'chart-of-accounts': ListTree,
   customers: Users,
@@ -62,8 +62,11 @@ const TAB_COMPONENTS = {
   'bank-and-cash-accounts': BusinessBankAndCashAccounts,
   customers: BusinessCustomers,
   suppliers: BusinessSuppliers,
-  receipt: BusinessReceipts,
+  receipts: BusinessReceipts,
 };
+
+// Renamed tab keys (NA-13): old bookmarks / restored URLs are rewritten to the new key.
+const RENAMED_TABS = { receipt: 'receipts' };
 
 // Sub-pages rendered under the Settings tab via ?tab=settings&page=<key>
 const SETTINGS_PAGE_COMPONENTS = {
@@ -170,7 +173,8 @@ export default function BusinessShellLayout({ business: initialBusiness, initial
   const [business, setBusiness] = useState(initialBusiness);
   const [bankRefreshKey, setBankRefreshKey] = useState(0);
 
-  const activeTab = searchParams.get('tab') || 'summary';
+  const rawTab = searchParams.get('tab');
+  const activeTab = RENAMED_TABS[rawTab] || rawTab || 'summary';
   const activePage = searchParams.get('page') || null;
 
   const [mountedTabs, setMountedTabs] = useState(() => new Set([activeTab].filter(Boolean)));
@@ -208,6 +212,14 @@ export default function BusinessShellLayout({ business: initialBusiness, initial
       router.replace(`?tab=summary`);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const renamed = RENAMED_TABS[rawTab];
+    if (!renamed) return;
+    const next = new URLSearchParams(searchParams.toString());
+    next.set('tab', renamed);
+    router.replace(`?${next.toString()}`);
+  }, [rawTab, searchParams, router]);
 
   useEffect(() => {
     if (activeTab) {

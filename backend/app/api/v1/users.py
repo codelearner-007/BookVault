@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db, require_live_super_admin
-from app.schemas.common import PaginatedResponse
+from app.core.pagination import SEARCH_MAX, PageParams, page_params
+from app.schemas.common import KEY_MAX, PaginatedResponse
 from app.schemas.response.user import (
     UserAccessSummaryResponse,
     UserStatsResponse,
@@ -37,18 +38,17 @@ async def get_user_stats(
     dependencies=[Depends(require_live_super_admin)],
 )
 async def list_users_with_roles(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    role: Optional[str] = Query(None),
+    params: PageParams = Depends(page_params),
+    role: Optional[str] = Query(None, max_length=KEY_MAX),
     email_verified: Optional[bool] = Query(None),
-    status: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None, max_length=KEY_MAX),
+    search: Optional[str] = Query(None, max_length=SEARCH_MAX),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedResponse[UserWithRolesResponse]:
     """List users with pagination, filtering, and embedded roles. Requires: users:read_all"""
     service = UserService(db)
     return await service.list_users_with_roles(
-        page=page, page_size=page_size,
+        page=params.page, page_size=params.page_size,
         role=role, email_verified=email_verified,
         status=status, search=search,
     )

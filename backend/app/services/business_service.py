@@ -1,258 +1,107 @@
-"""Business service — business logic layer for the businesses feature."""
+"""Business service: create (with default COA), update, soft delete, restore, purge, audit."""
 
 from datetime import datetime, timezone
 
-from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.admin_tab import AdminTab
+from app.core.exceptions import AppException, ResourceNotFoundError
+from app.core.pagination import PageParams
 from app.models.business import Business
-from app.models.business_tab import BusinessTab
 from app.repositories.business_repository import BusinessRepository
 from app.repositories.coa_repository import CoaRepository
-from app.schemas.request.tab import AdminTabUpsertItem, BusinessTabUpdateItem
-from app.schemas.response.business import BusinessListResponse, BusinessResponse
-from app.schemas.response.tab import (
-    AdminTabListResponse,
-    AdminTabResponse,
-    BusinessTabListResponse,
-    BusinessTabResponse,
-)
+from app.schemas.common import PaginatedResponse
+from app.schemas.request.business import CreateBusinessRequest, UpdateBusinessRequest
+from app.schemas.response.business import BusinessResponse
+from app.services.access_service import BusinessContext
+from app.services.audit_service import AuditService
+from app.services.versioning import check_version
+
+ENTITY = "Business"
 
 
 class BusinessService:
-    """Service containing all business logic for the businesses feature."""
-
     def __init__(self, session: AsyncSession) -> None:
         self.repo = BusinessRepository(session)
+        self.audit = AuditService(session)
+        self.session = session
 
-    async def list_deleted_by_owner(self, owner_id: str) -> BusinessListResponse:
-        """Return soft-deleted businesses owned by the given user with total count."""
-        items = await self.repo.list_deleted_by_owner(owner_id)
-        total = await self.repo.count_deleted_by_owner(owner_id)
-        return BusinessListResponse(
-            items=[BusinessResponse.model_validate(b) for b in items],
-            total=total,
+    async def _owned(self, business_id: str, owner_id: str, include_deleted: bool = False) -> Business:
+        business = await self.repo.get_by_owner(business_id, owner_id, include_deleted)
+        if business is None:
+            raise ResourceNotFoundError(ENTITY, business_id)
+        return business
+
+    async def _response(self, business: Business) -> BusinessResponse:
+        details = await self.repo.get_details(business.id)
+        return BusinessResponse.model_validate(business).model_copy(
+            update={"address": details.address if details else None}
         )
 
-    async def create(
-        self,
-        owner_id: str,
-        name: str,
-        country: str | None,
-    ) -> BusinessResponse:
-        """Create a new business, seed its default COA, and return its representation."""
-        business = Business(name=name, country=country, owner_id=owner_id)
-        created = await self.repo.create(business)
-        await CoaRepository(self.repo.session).seed_default_coa(str(created.id))
-        return BusinessResponse.model_validate(created)
+    async def list_deleted(self, owner_id: str, params: PageParams) -> PaginatedResponse[BusinessResponse]:
+        rows, total = await self.repo.list_deleted_page(owner_id, params.offset, params.page_size)
+        items = [BusinessResponse.model_validate(b) for b in rows]
+        return PaginatedResponse.build(items, total, params.page, params.page_size)
 
-    async def get(self, business_id: str, owner_id: str) -> BusinessResponse:
-        """Return a single business by ID if it belongs to owner, raising 404 otherwise."""
-        business = await self.repo.get_by_owner(business_id, owner_id)
-        if not business:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Business not found",
-            )
-        return BusinessResponse.model_validate(business)
+    async def create(self, owner_id: str, body: CreateBusinessRequest) -> BusinessResponse:
+        """Create a business with its default COA."""
+        business = Business(name=body.name, country=body.country, owner_id=owner_id)
+        await self.repo.add(business)
+        await CoaRepository(self.session).seed_default_coa(business.id)
+        after = BusinessResponse.model_validate(business)
+        await self.audit.record(owner_id, "create", ENTITY, business.id, business.id, after=after)
+        return after
 
-    async def update(
-        self,
-        business_id: str,
-        owner_id: str,
-        name: str,
-        country: str | None,
-        address: str | None,
-    ) -> BusinessResponse:
-        """Update business name/country and upsert address in business_details."""
-        business = await self.repo.get_by_owner(business_id, owner_id)
-        if not business:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Business not found",
-            )
-        business.name = name
-        business.country = country
-        business.updated_at = datetime.now(timezone.utc)
-        await self.repo.session.flush()
-        details = await self.repo.upsert_details(business_id, address)
-        response = BusinessResponse.model_validate(business)
-        response.address = details.address
-        return response
+    async def get(self, ctx: BusinessContext) -> BusinessResponse:
+        return await self._response(await self._owned(ctx.business_id, ctx.owner_id))
 
-    async def reset(self, business_id: str, owner_id: str) -> BusinessResponse:
-        """Reset business country and address to null (name is preserved)."""
-        business = await self.repo.get_by_owner(business_id, owner_id)
-        if not business:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Business not found",
-            )
+    async def update(self, ctx: BusinessContext, body: UpdateBusinessRequest) -> BusinessResponse:
+        business = await self._owned(ctx.business_id, ctx.owner_id)
+        check_version(business, body.version)
+        before = await self._response(business)
+        business.name = body.name
+        business.country = body.country
+        await self.repo.save(business)
+        await self.repo.upsert_details(business.id, body.address)
+        after = await self._response(business)
+        await self.audit.record(ctx.user_id, "update", ENTITY, business.id, business.id,
+                                before=before, after=after)
+        return after
+
+    async def reset(self, ctx: BusinessContext) -> BusinessResponse:
+        """Clear country and address (the name stays)."""
+        business = await self._owned(ctx.business_id, ctx.owner_id)
+        before = await self._response(business)
         business.country = None
-        business.updated_at = datetime.now(timezone.utc)
-        await self.repo.session.flush()
-        await self.repo.upsert_details(business_id, None)
-        return BusinessResponse.model_validate(business)
+        await self.repo.save(business)
+        await self.repo.upsert_details(business.id, None)
+        after = await self._response(business)
+        await self.audit.record(ctx.user_id, "reset", ENTITY, business.id, business.id,
+                                before=before, after=after)
+        return after
 
-    async def delete(self, business_id: str, owner_id: str) -> str:
-        """Soft-delete a business owned by owner, raising 404 if absent or not owned. Returns the business name."""
-        business = await self.repo.get_by_owner(business_id, owner_id)
-        if not business:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Business not found",
-            )
-        name = business.name
+    async def soft_delete(self, ctx: BusinessContext) -> None:
+        business = await self._owned(ctx.business_id, ctx.owner_id)
+        before = BusinessResponse.model_validate(business)
+        # Audited before the row leaves the caller's membership view.
+        await self.audit.record(ctx.user_id, "delete", ENTITY, business.id, business.id, before=before)
         business.deleted_at = datetime.now(timezone.utc)
-        await self.repo.session.flush()
-        return name
+        await self.repo.save(business)
 
-    async def hard_delete(self, business_id: str, owner_id: str) -> str:
-        """Permanently delete a soft-deleted business owned by owner. Raises 404 if not found or not owned, 400 if not soft-deleted."""
-        business = await self.repo.get_by_owner(business_id, owner_id, include_deleted=True)
-        if not business:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Business not found",
-            )
-        if business.deleted_at is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Business must be soft-deleted before it can be permanently deleted",
-            )
-        name = business.name
-        await self.repo.hard_delete(business_id, owner_id)
-        return name
-
-    async def restore(self, business_id: str, owner_id: str) -> BusinessResponse:
-        """Restore a soft-deleted business owned by owner, raising 404 if absent or not owned."""
-        business = await self.repo.get_by_owner(business_id, owner_id, include_deleted=True)
-        if not business:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Business not found",
-            )
+    async def restore(self, ctx: BusinessContext) -> BusinessResponse:
+        business = await self._owned(ctx.business_id, ctx.owner_id, include_deleted=True)
+        before = BusinessResponse.model_validate(business)
         business.deleted_at = None
-        await self.repo.session.flush()
-        await self.repo.session.refresh(business)
-        return BusinessResponse.model_validate(business)
+        await self.repo.save(business)
+        after = BusinessResponse.model_validate(business)
+        await self.audit.record(ctx.user_id, "restore", ENTITY, business.id, business.id,
+                                before=before, after=after)
+        return after
 
-    async def list_admin_tabs(self) -> AdminTabListResponse:
-        """Return all global admin tabs."""
-        rows = await self.repo.list_admin_tabs()
-        return AdminTabListResponse(items=[AdminTabResponse.model_validate(r) for r in rows])
-
-    async def upsert_admin_tabs(self, items: list[AdminTabUpsertItem]) -> AdminTabListResponse:
-        """Create or update global admin tabs, preserving insertion order as order_index."""
-        for idx, item in enumerate(items):
-            row = await self.repo.get_admin_tab_by_key(item.key)
-            if not row:
-                row = AdminTab(
-                    key=item.key,
-                    label=item.label,
-                    enabled=item.enabled,
-                    order_index=idx,
-                )
-                self.repo.session.add(row)
-            else:
-                row.label = item.label
-                row.enabled = item.enabled
-                row.order_index = idx
-        await self.repo.session.flush()
-        return await self.list_admin_tabs()
-
-    async def delete_admin_tab(self, key: str) -> None:
-        """Delete a global admin tab by key, raising 404 if not found."""
-        deleted = await self.repo.delete_admin_tab_by_key(key)
-        if not deleted:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Tab not found",
-            )
-
-    # Tabs that are ON by default for every new business.
-    DEFAULT_ENABLED_TABS = frozenset({"summary", "settings"})
-
-    async def list_business_tabs(self, business_id: str, owner_id: str) -> BusinessTabListResponse:
-        """Return tabs for a business owned by owner, merged from global admin tabs and per-business overrides.
-
-        All globally-enabled admin tabs are shown. If the business has a saved row for
-        a tab, its enabled state is used; otherwise summary and settings default to
-        enabled, all other tabs default to disabled.
-        """
-        business = await self.repo.get_by_owner(business_id, owner_id)
-        if not business:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Business not found",
-            )
-        admin_tabs = await self.repo.list_admin_tabs()
-        biz_rows = await self.repo.list_business_tabs(business_id)
-        biz_map = {r.key: r for r in biz_rows}
-        admin_map = {t.key: (i, t) for i, t in enumerate(admin_tabs)}
-
-        items = []
-        for admin_tab in admin_tabs:
-            if not admin_tab.enabled:
-                continue
-            biz_row = biz_map.get(admin_tab.key)
-            if biz_row:
-                items.append((biz_row.order_index, BusinessTabResponse(
-                    id=str(biz_row.id),
-                    business_id=business_id,
-                    key=biz_row.key,
-                    label=admin_tab.label,
-                    enabled=biz_row.enabled,
-                    order_index=biz_row.order_index,
-                )))
-            else:
-                fallback_idx = admin_map[admin_tab.key][0]
-                items.append((fallback_idx, BusinessTabResponse(
-                    id=str(admin_tab.id),
-                    business_id=business_id,
-                    key=admin_tab.key,
-                    label=admin_tab.label,
-                    enabled=admin_tab.key in self.DEFAULT_ENABLED_TABS,
-                    order_index=fallback_idx,
-                )))
-        items.sort(key=lambda x: x[0])
-        return BusinessTabListResponse(items=[r for _, r in items])
-
-    async def upsert_business_tabs(
-        self,
-        business_id: str,
-        owner_id: str,
-        items: list[BusinessTabUpdateItem],
-    ) -> BusinessTabListResponse:
-        """Update enabled/order configuration for a business's tabs owned by owner, skipping globally-disabled keys."""
-        business = await self.repo.get_by_owner(business_id, owner_id)
-        if not business:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Business not found",
-            )
-        admin_tabs = await self.repo.list_admin_tabs()
-        admin_tab_map = {t.key: t for t in admin_tabs}
-        allowed = {t.key: t.enabled for t in admin_tabs}
-        for idx, item in enumerate(items):
-            if not allowed.get(item.key, True):
-                continue
-            admin_tab = admin_tab_map.get(item.key)
-            canonical_label = admin_tab.label if admin_tab else item.key
-            row = await self.repo.get_business_tab_by_key(business_id, item.key)
-            if not row:
-                row = BusinessTab(
-                    business_id=business_id,
-                    key=item.key,
-                    label=canonical_label,
-                    enabled=item.enabled,
-                    order_index=idx,
-                )
-                self.repo.session.add(row)
-            else:
-                row.label = canonical_label
-                row.enabled = item.enabled
-                row.order_index = idx
-        await self.repo.session.flush()
-        return await self.list_business_tabs(business_id, owner_id)
+    async def hard_delete(self, ctx: BusinessContext) -> None:
+        """Permanently delete a business that is in Trash (audited first; the row outlives it)."""
+        business = await self._owned(ctx.business_id, ctx.owner_id, include_deleted=True)
+        if business.deleted_at is None:
+            raise AppException("Business must be in Trash before it can be permanently deleted", 400)
+        before = BusinessResponse.model_validate(business)
+        await self.audit.record(ctx.user_id, "purge", ENTITY, business.id, business.id, before=before)
+        await self.repo.delete(business)

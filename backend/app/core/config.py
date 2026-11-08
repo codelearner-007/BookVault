@@ -51,9 +51,30 @@ class Settings(BaseSettings):
     USER_MANAGEMENT_RATE_LIMIT: str = "30/minute"
     USER_CREATE_REFUSAL_RATE_LIMIT: str = "10/hour"
 
-    # Pagination
+    # Pagination (the frontend reads the same max from its config module)
     PAGE_SIZE_DEFAULT: int = 50
     PAGE_SIZE_MAX: int = 100
+
+    # Rate limits per user (slowapi syntax), B0.5 / AC-25
+    MUTATION_RATE_LIMIT: str = "120/minute"
+    LIST_RATE_LIMIT: str = "300/minute"
+    EXPORT_RATE_LIMIT: str = "10/minute"
+    # Use the first X-Forwarded-For hop as the client IP (only behind a trusted proxy)
+    TRUST_FORWARDED_FOR: bool = False
+
+    # Idempotency-Key replay window (AC-19)
+    IDEMPOTENCY_TTL_HOURS: int = 24
+
+    # CSRF (AC-28): mutating requests need an allowed Origin or this header
+    CSRF_HEADER: str = "X-BookVault-Client"
+
+    # Logging SQL statements (never on by default, CS-15)
+    DB_ECHO: bool = False
+
+    @property
+    def docs_enabled(self) -> bool:
+        """OpenAPI docs only in development (AC-27)."""
+        return self.ENVIRONMENT == "development"
 
     @field_validator("ALLOWED_ORIGINS")
     @classmethod

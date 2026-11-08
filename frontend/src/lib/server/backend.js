@@ -1,3 +1,5 @@
+import { CLIENT_HEADER } from '@/lib/config';
+
 const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8000';
 
 /**
@@ -7,7 +9,9 @@ const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8000';
  */
 export async function fetchBackendAsCaller(request, path, { method = 'GET', body } = {}) {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || DEFAULT_BACKEND_URL;
-  const headers = { cookie: request.headers.get('cookie') ?? '' };
+  const headers = { cookie: request.headers.get('cookie') ?? '', ...CLIENT_HEADER };
+  // Create routes (e.g. POST /members) require an Idempotency-Key; other POSTs tolerate it.
+  if (method === 'POST') headers['Idempotency-Key'] = crypto.randomUUID();
   if (body !== undefined) headers['content-type'] = 'application/json';
   return fetch(`${baseUrl}${path}`, {
     method,

@@ -5,6 +5,9 @@
 - [Redesign v2 status](project_redesign_v2.md) — round 1 rejected; v2 options A/B/C await owner pick
 - NOTE: "Section headers: uppercase label above heading" (Key Conventions below) is superseded for the redesign: no kicker above headings.
 
+## API contract
+- [B0.5 contract](project_b05_contract.md) — envelopes, money strings, versions, CSRF/idempotency headers, 'receipts' tab key
+
 ## Pre-existing Build Issues
 - Turbopack build error when running `npx next build` outside project dir; always `cd frontend` first.
 - `frontend/src/app/api/users/[userId]/ban/route.ts` - type error: async params pattern

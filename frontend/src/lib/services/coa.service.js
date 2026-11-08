@@ -1,9 +1,10 @@
 import { apiClient } from './api-client';
+import { listAllPages } from './list-all-pages';
 
 const base = (businessId) => `/v1/businesses/${businessId}/chart-of-accounts`;
 
 export async function listCoaGroups(businessId) {
-  return apiClient.get(`${base(businessId)}/groups`);
+  return listAllPages(`${base(businessId)}/groups`);
 }
 
 export async function createCoaGroup(businessId, data) {
@@ -14,8 +15,8 @@ export async function updateCoaGroup(businessId, groupId, data) {
   return apiClient.put(`${base(businessId)}/groups/${groupId}`, data);
 }
 
-export async function deleteCoaGroup(businessId, groupId) {
-  return apiClient.delete(`${base(businessId)}/groups/${groupId}`);
+export async function deleteCoaGroup(businessId, groupId, version) {
+  return apiClient.delete(`${base(businessId)}/groups/${groupId}?version=${version}`);
 }
 
 export async function reorderCoaGroups(businessId, data) {
@@ -23,7 +24,7 @@ export async function reorderCoaGroups(businessId, data) {
 }
 
 export async function listCoaAccounts(businessId) {
-  return apiClient.get(`${base(businessId)}/accounts`);
+  return listAllPages(`${base(businessId)}/accounts`);
 }
 
 export async function createCoaAccount(businessId, data) {
@@ -34,8 +35,8 @@ export async function updateCoaAccount(businessId, accountId, data) {
   return apiClient.put(`${base(businessId)}/accounts/${accountId}`, data);
 }
 
-export async function deleteCoaAccount(businessId, accountId) {
-  return apiClient.delete(`${base(businessId)}/accounts/${accountId}`);
+export async function deleteCoaAccount(businessId, accountId, version) {
+  return apiClient.delete(`${base(businessId)}/accounts/${accountId}?version=${version}`);
 }
 
 export async function reorderCoaAccounts(businessId, data) {

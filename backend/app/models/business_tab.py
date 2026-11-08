@@ -23,8 +23,9 @@ class BusinessTab(Base):
         nullable=False,
         index=True,
     )
-    key: Mapped[str] = mapped_column(Text, nullable=False)
-    label: Mapped[str] = mapped_column(Text, nullable=False)
+    key: Mapped[str] = mapped_column(
+        Text, ForeignKey("admin_tabs.key", onupdate="CASCADE", ondelete="CASCADE"), nullable=False
+    )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 

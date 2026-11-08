@@ -43,7 +43,7 @@ export default function AdminAuditPage() {
       try {
         setLoadingModules(true);
         const data = await getModules();
-        setModules(data);
+        setModules(data.items);
       } catch (err) {
         console.error('Failed to load modules:', err);
       } finally {
@@ -111,6 +111,8 @@ export default function AdminAuditPage() {
   };
 
   const getDetailsSummary = (log) => {
+    const name = log.after?.name ?? log.before?.name;
+    if (name) return name;
     if (!log.details) return null;
     if (log.details.name) return log.details.name;
     if (log.details.role_name) return log.details.role_name;
@@ -148,7 +150,7 @@ export default function AdminAuditPage() {
   const handleModuleChange = (value) => {
     setFilters((prev) => ({
       ...prev,
-      module: value === 'all' ? undefined : value,
+      entity_type: value === 'all' ? undefined : value,
       page: 1,
     }));
   };
@@ -252,7 +254,7 @@ export default function AdminAuditPage() {
                   Module
                 </Label>
                 <Select
-                  value={filters.module || 'all'}
+                  value={filters.entity_type || 'all'}
                   onValueChange={handleModuleChange}
                   disabled={loadingModules}
                 >
@@ -300,7 +302,7 @@ export default function AdminAuditPage() {
                     } else if (key === 'end_date') {
                       displayValue = format(new Date(value), 'MMM d, yyyy');
                       displayKey = 'To';
-                    } else if (key === 'module') {
+                    } else if (key === 'entity_type') {
                       displayKey = 'Module';
                     }
 
@@ -392,7 +394,7 @@ export default function AdminAuditPage() {
                               variant="secondary"
                               className="bg-primary/10 text-primary border-primary/20 font-medium"
                             >
-                              {log.module.charAt(0).toUpperCase() + log.module.slice(1)}
+                              {log.entity_type.charAt(0).toUpperCase() + log.entity_type.slice(1)}
                             </Badge>
                           </TableCell>
                           <TableCell className="font-medium text-sm">
@@ -406,9 +408,9 @@ export default function AdminAuditPage() {
                             )}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
-                            {log.resource_id ? (
+                            {log.entity_id ? (
                               <code className="bg-muted px-2 py-1 rounded text-xs">
-                                {log.resource_id.slice(0, 12)}
+                                {log.entity_id.slice(0, 12)}
                               </code>
                             ) : (
                               <span className="text-muted-foreground/60">—</span>

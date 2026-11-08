@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { listCoaGroups, listCoaAccounts } from '@/lib/services/coa.service';
 import { getSuspenseBalance } from '@/lib/services/suspense.service';
 import { listBankAccounts } from '@/lib/services/bank-accounts.service';
+import { formatMoney } from '@/lib/utils/money';
 import BusinessSuspense from './BusinessSuspense';
 
 const CASH_ACCOUNT_KEYWORDS = ['cash', 'bank', 'cash and cash equivalents', 'cash & cash equivalents', 'cash equilent', 'cash equivalent'];
@@ -12,11 +13,6 @@ const CASH_ACCOUNT_KEYWORDS = ['cash', 'bank', 'cash and cash equivalents', 'cas
 function isCashAccount(accountName) {
   const lower = (accountName ?? '').toLowerCase().trim();
   return CASH_ACCOUNT_KEYWORDS.some((kw) => lower === kw || lower.includes(kw));
-}
-
-function formatAmount(value) {
-  const num = typeof value === 'number' ? value : parseFloat(value ?? 0);
-  return isNaN(num) ? '—' : num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function CoaSkeleton() {
@@ -49,7 +45,7 @@ function GroupCard({ group, accounts, bankTotal }) {
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
         <span className="text-sm font-bold text-foreground">{group.name}</span>
         <span className="text-sm font-semibold text-foreground tabular-nums">
-          {groupTotal !== null ? formatAmount(groupTotal) : '—'}
+          {groupTotal !== null ? formatMoney(groupTotal) : '—'}
         </span>
       </div>
       {groupAccounts.length === 0 ? (
@@ -76,7 +72,7 @@ function GroupCard({ group, accounts, bankTotal }) {
                   : 'text-sm text-foreground tabular-nums'
               }
             >
-              {isCashAccount(account.name) && bankTotal !== null ? formatAmount(bankTotal) : '—'}
+              {isCashAccount(account.name) && bankTotal !== null ? formatMoney(bankTotal) : '—'}
             </span>
           </div>
         ))
@@ -101,7 +97,7 @@ export default function BusinessFinancialSummary({ business, bankRefreshKey = 0 
   const [accounts, setAccounts] = useState([]);
   const [bankTotal, setBankTotal] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [suspenseBalance, setSuspenseBalance] = useState(0);
+  const [suspenseBalance, setSuspenseBalance] = useState('0');
   const [showSuspense, setShowSuspense] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -110,16 +106,14 @@ export default function BusinessFinancialSummary({ business, bankRefreshKey = 0 
       const [groupsData, accountsData, suspenseData, bankData] = await Promise.all([
         listCoaGroups(business.id),
         listCoaAccounts(business.id),
-        getSuspenseBalance(business.id).catch(() => ({ suspense_balance: 0 })),
+        getSuspenseBalance(business.id).catch(() => ({ suspense_balance: '0' })),
         listBankAccounts(business.id).catch(() => null),
       ]);
-      setGroups(groupsData.items || groupsData || []);
-      setAccounts(accountsData.items || accountsData || []);
-      setSuspenseBalance(parseFloat(suspenseData?.suspense_balance ?? 0));
-
-      const bankList = Array.isArray(bankData) ? bankData : (bankData?.items ?? []);
-      const total = bankList.reduce((sum, a) => sum + (parseFloat(a.current_balance) || 0), 0);
-      setBankTotal(bankList.length > 0 ? total : null);
+      setGroups(groupsData.items);
+      setAccounts(accountsData.items);
+      setSuspenseBalance(suspenseData.suspense_balance);
+      // coa_total: server-side balance of all bank and cash accounts
+      setBankTotal(bankData?.items.length > 0 ? bankData.coa_total : null);
     } catch {
       setGroups([]);
       setAccounts([]);
@@ -153,7 +147,7 @@ export default function BusinessFinancialSummary({ business, bankRefreshKey = 0 
           {bsGroups.map((group) => (
             <GroupCard key={group.id} group={group} accounts={accounts} bankTotal={bankTotal} />
           ))}
-          {suspenseBalance !== 0 && (
+          {Number(suspenseBalance) !== 0 && (
             <button
               onClick={() => setShowSuspense(true)}
               className="w-full rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 shadow-sm overflow-hidden hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors cursor-pointer"
@@ -161,7 +155,7 @@ export default function BusinessFinancialSummary({ business, bankRefreshKey = 0 
               <div className="flex items-center justify-between px-4 py-3">
                 <span className="text-sm font-bold text-amber-700 dark:text-amber-400">Suspense</span>
                 <span className="text-sm font-semibold text-amber-700 dark:text-amber-400 tabular-nums">
-                  {suspenseBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {formatMoney(suspenseBalance)}
                 </span>
               </div>
             </button>

@@ -1,20 +1,27 @@
-"""Bank account request schemas for input validation."""
+"""Bank account request schemas."""
 
-from decimal import Decimal
+from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from app.schemas.common import (
+    NAME_MAX,
+    NonNegativeMoney,
+    OptionalText,
+    RequestModel,
+    ShortText,
+    VersionedRequest,
+)
 
 
-class BankAccountCreate(BaseModel):
-    """Request body for creating a new bank account."""
-
-    name: str = Field(..., min_length=1)
-    opening_balance: Decimal = Field(default=Decimal("0"), ge=0)
-    description: str | None = None
+class BankAccountCreate(RequestModel):
+    name: ShortText
+    opening_balance: NonNegativeMoney = 0
+    description: OptionalText = None
 
 
-class BankAccountUpdate(BaseModel):
-    """Request body for updating a bank account's name and description."""
+class BankAccountUpdate(VersionedRequest):
+    """Name and description only; balances are derived (receipts) and never sent."""
 
-    name: str | None = Field(None, min_length=1)
-    description: str | None = None
+    name: Optional[str] = Field(None, min_length=1, max_length=NAME_MAX)
+    description: OptionalText = None

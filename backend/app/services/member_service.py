@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.pagination import PageParams
 from app.core.access_rights import AccessMode, AreaRight, MemberStatus
 from app.core.exceptions import AppException, ImmutableResourceError, ResourceNotFoundError
 from app.core.ids import is_uuid
@@ -17,7 +18,7 @@ from app.schemas.request.member import (
     UpdateMemberRequest,
 )
 from app.schemas.response.business import BusinessResponse
-from app.schemas.response.tab import BusinessTabListResponse
+from app.schemas.response.tab import BusinessTabResponse
 from app.schemas.response.member import (
     AccessPresetListResponse,
     AccessPresetResponse,
@@ -87,8 +88,8 @@ class MemberService:
         )
 
     async def visible_tabs(
-        self, ctx: BusinessContext, tabs: BusinessTabListResponse
-    ) -> BusinessTabListResponse:
+        self, ctx: BusinessContext, tabs: list[BusinessTabResponse]
+    ) -> list[BusinessTabResponse]:
         """Owners and full members see every tab; a custom member only tabs whose area it can view."""
         if not AccessService.is_custom(ctx):
             return tabs
@@ -100,14 +101,15 @@ class MemberService:
                 return any(area.startswith(SETTINGS_AREA_PREFIX) for area in viewable)
             return tab_areas.get(tab_key) in viewable
 
-        return BusinessTabListResponse(items=[t for t in tabs.items if visible(t.key)])
+        return [t for t in tabs if visible(t.key)]
 
-    async def list_presets(self) -> AccessPresetListResponse:
+    async def list_presets(self, params: PageParams) -> AccessPresetListResponse:
+        presets = [
+            AccessPresetResponse(key=key, label=label, areas=_grid(pairs))
+            for key, label, pairs in await self.repo.list_presets()
+        ]
         return AccessPresetListResponse(
-            items=[
-                AccessPresetResponse(key=key, label=label, areas=_grid(pairs))
-                for key, label, pairs in await self.repo.list_presets()
-            ]
+            items=params.slice(presets), total=len(presets), page=params.page, page_size=params.page_size
         )
 
     async def list_my_businesses(self, user_id: str, page: int, page_size: int) -> MyBusinessListResponse:

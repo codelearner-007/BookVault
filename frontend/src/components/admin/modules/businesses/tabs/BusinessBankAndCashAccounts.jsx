@@ -16,24 +16,20 @@ import {
 } from '@/components/ui/dialog';
 import {
   listBankAccounts,
+  getBankAccount,
   createBankAccount,
   updateBankAccount,
   deleteBankAccount,
 } from '@/lib/services/bank-accounts.service';
+import { isVersionConflict } from '@/lib/services/api-client';
 import { getTabColumns, updateTabColumns } from '@/lib/services/business.service';
+import { formatMoney } from '@/lib/utils/money';
 import ColEditorDialog from '../ColEditorDialog';
 
 const DEFAULT_COLS = [
   { key: 'name',           label: 'Name',           visible: true, locked: true  },
   { key: 'actual_balance', label: 'Actual balance', visible: true, locked: false },
 ];
-
-/* ── Helpers ────────────────────────────────────────────────────────────── */
-
-function formatBalance(value) {
-  const num = typeof value === 'number' ? value : parseFloat(value ?? 0);
-  return isNaN(num) ? '0.00' : num.toFixed(2);
-}
 
 /* ── Loading skeleton ────────────────────────────────────────────────────── */
 
@@ -84,7 +80,7 @@ function CreateDialog({ open, onOpenChange, businessId, onCreated }) {
     try {
       await createBankAccount(businessId, {
         name: name.trim(),
-        opening_balance: parseFloat(openingBalance) || 0,
+        opening_balance: String(openingBalance).trim() || '0',
         description: description.trim() || null,
       });
       onCreated();
@@ -181,13 +177,28 @@ function EditDialog({ open, onOpenChange, businessId, account, onUpdated, onDele
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState(null);
+  const [version, setVersion] = useState(null);
 
   const busy = saving || deleting;
 
+  function fillForm(record) {
+    setName(record.name ?? '');
+    setDescription(record.description ?? '');
+    setVersion(record.version);
+  }
+
+  // Version conflict: keep the message, reload the record and the list so a retry uses fresh data.
+  async function handleFailure(err, fallback) {
+    setError(err?.message ?? fallback);
+    if (!isVersionConflict(err)) return;
+    const fresh = await getBankAccount(businessId, account.id).catch(() => null);
+    if (fresh) fillForm(fresh);
+    onUpdated();
+  }
+
   useEffect(() => {
     if (open && account) {
-      setName(account.name ?? '');
-      setDescription(account.description ?? '');
+      fillForm(account);
       setError(null);
       setConfirmDelete(false);
     }
@@ -201,11 +212,12 @@ function EditDialog({ open, onOpenChange, businessId, account, onUpdated, onDele
       await updateBankAccount(businessId, account.id, {
         name: name.trim(),
         description: description.trim() || null,
+        version,
       });
       onUpdated();
       onOpenChange(false);
     } catch (err) {
-      setError(err?.message ?? 'Failed to update account.');
+      await handleFailure(err, 'Failed to update account.');
     } finally {
       setSaving(false);
     }
@@ -215,11 +227,11 @@ function EditDialog({ open, onOpenChange, businessId, account, onUpdated, onDele
     setDeleting(true);
     setError(null);
     try {
-      await deleteBankAccount(businessId, account.id);
+      await deleteBankAccount(businessId, account.id, version);
       onDeleted();
       onOpenChange(false);
     } catch (err) {
-      setError(err?.message ?? 'Failed to delete account.');
+      await handleFailure(err, 'Failed to delete account.');
       setConfirmDelete(false);
     } finally {
       setDeleting(false);
@@ -337,11 +349,11 @@ function ViewDialog({ open, onOpenChange, account }) {
             </tr>
             <tr className="border-b border-border">
               <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap">Opening Balance</td>
-              <td className="py-2.5 text-foreground tabular-nums">{formatBalance(account.opening_balance)}</td>
+              <td className="py-2.5 text-foreground tabular-nums">{formatMoney(account.opening_balance)}</td>
             </tr>
             <tr className={account.description ? 'border-b border-border' : ''}>
               <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap">Current Balance</td>
-              <td className="py-2.5 text-primary font-medium tabular-nums">{formatBalance(account.current_balance)}</td>
+              <td className="py-2.5 text-primary font-medium tabular-nums">{formatMoney(account.current_balance)}</td>
             </tr>
             {account.description && (
               <tr>
@@ -386,8 +398,8 @@ export default function BusinessBankAndCashAccounts({ business, bankRefreshKey =
         listBankAccounts(business.id),
         getTabColumns(business.id, 'bank-and-cash-accounts').catch(() => null),
       ]);
-      setAccounts(Array.isArray(data) ? data : (data?.items ?? []));
-      setCoaTotal(data?.coa_total ?? 0);
+      setAccounts(data.items);
+      setCoaTotal(data.coa_total);
       const saved = colRes?.columns;
       if (Array.isArray(saved) && saved.length > 0) {
         const sorted = [...saved].sort((a, b) => a.order_index - b.order_index);
@@ -418,7 +430,7 @@ export default function BusinessBankAndCashAccounts({ business, bankRefreshKey =
         const q = search.toLowerCase();
         return (
           a.name.toLowerCase().includes(q) ||
-          formatBalance(a.current_balance).includes(q)
+          formatMoney(a.current_balance).includes(q)
         );
       })
     : accounts;
@@ -546,7 +558,7 @@ export default function BusinessBankAndCashAccounts({ business, bankRefreshKey =
                     );
                     if (col.key === 'actual_balance') return (
                       <td key="actual_balance" className="px-4 py-2.5 text-right text-primary font-medium tabular-nums">
-                        {formatBalance(account.current_balance)}
+                        {formatMoney(account.current_balance)}
                       </td>
                     );
                     return null;
@@ -560,7 +572,7 @@ export default function BusinessBankAndCashAccounts({ business, bankRefreshKey =
               <tr className="border-t border-border bg-muted/20">
                 <td colSpan={2 + cols.filter((c) => c.visible && c.key !== 'actual_balance').length} className="border-r border-border" />
                 <td className="px-4 py-2.5 text-right text-sm font-semibold text-foreground tabular-nums">
-                  {formatBalance(coaTotal)}
+                  {formatMoney(coaTotal)}
                 </td>
               </tr>
             </tfoot>

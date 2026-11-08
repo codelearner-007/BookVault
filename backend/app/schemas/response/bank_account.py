@@ -1,9 +1,10 @@
-"""Bank account response schemas for API output serialization."""
+"""Bank account response schemas (money as decimal strings)."""
 
 from datetime import datetime
-from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
+
+from app.schemas.common import MoneyOut, PaginatedResponse
 
 
 class BankAccountResponse(BaseModel):
@@ -12,14 +13,15 @@ class BankAccountResponse(BaseModel):
     id: str
     business_id: str
     name: str
-    opening_balance: Decimal
-    current_balance: Decimal
+    opening_balance: MoneyOut
+    current_balance: MoneyOut
     description: str | None
+    version: int
     created_at: datetime
     updated_at: datetime
 
 
-class BankAccountListResponse(BaseModel):
-    items: list[BankAccountResponse]
-    total: int
-    coa_total: Decimal
+class BankAccountListResponse(PaginatedResponse[BankAccountResponse]):
+    """Page of accounts plus the balance of all accounts of the business."""
+
+    coa_total: MoneyOut

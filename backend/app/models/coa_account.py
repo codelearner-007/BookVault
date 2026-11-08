@@ -4,10 +4,10 @@ from sqlalchemy import Boolean, ForeignKey, Integer, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, TimestampMixin
+from app.models.base import Base, TimestampMixin, VersionedMixin
 
 
-class CoaAccount(Base, TimestampMixin):
+class CoaAccount(Base, TimestampMixin, VersionedMixin):
     """A leaf account in the Chart of Accounts."""
 
     __tablename__ = "coa_accounts"

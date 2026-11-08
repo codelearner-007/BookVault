@@ -5,6 +5,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import AppException, InvalidTokenError
 from app.repositories.business_repository import BusinessRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.user_role_repository import UserRoleRepository
@@ -18,6 +19,9 @@ from app.services.user_role_service import UserRoleService
 from app.schemas.response.user_role import UserRoleResponse
 
 
+MFA_AAL = "aal2"
+
+
 class UserService:
     """Service for user management operations."""
 
@@ -26,6 +30,17 @@ class UserService:
         self.user_role_repo = UserRoleRepository(session)
         self.user_role_service = UserRoleService(session)
         self.business_repo = BusinessRepository(session)
+
+    async def assert_account_usable(self, aal: str | None) -> None:
+        """Live identity (CS-26, AC-12, AC-13): banned or deleted accounts and AAL1
+        sessions of users with a verified MFA factor are refused, whatever the JWT says."""
+        state = await self.user_repo.my_account_state()
+        if state is None or state[0]:
+            raise InvalidTokenError("Account is not active")
+        if state[1] and aal != MFA_AAL:
+            raise AppException(
+                "Two-factor verification required", status_code=403, details={"code": "mfa_required"}
+            )
 
     async def get_access_summary(self, user_id: str) -> UserAccessSummaryResponse:
         """Live platform role and owned-business count of a user (CS-04, CS-10)."""

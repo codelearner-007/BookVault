@@ -131,6 +131,8 @@ async def test_identical_404_for_non_member_removed_and_unknown(client, users):
         (await client.get(f"/api/v1/businesses/{unknown}/receipts", headers=owner.headers)).json(),
     ]
 
+    for body in bodies:
+        body.pop("request_id")
     assert bodies[0] == bodies[1] == bodies[2]
 
 
@@ -145,7 +147,7 @@ async def test_member_sees_member_of_business_and_my_rights(client, users):
     assert [(b["id"], b["is_owner"]) for b in listed.json()["items"]] == [(business_id, False)]
     assert me.json()["areas"] == [{"area_key": "summary", "rights": [V]},
                                   {"area_key": "receipts", "rights": [V, C]}]
-    assert {t["key"] for t in tabs.json()["items"]} <= {"summary", "receipt"}
+    assert {t["key"] for t in tabs.json()["items"]} <= {"summary", "receipts"}
 
 
 async def test_member_cannot_create_business(client, users):

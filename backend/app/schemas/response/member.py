@@ -56,6 +56,9 @@ class AccessPresetResponse(BaseModel):
 
 class AccessPresetListResponse(BaseModel):
     items: list[AccessPresetResponse]
+    total: int
+    page: int
+    page_size: int
 
 
 class MyBusinessResponse(BusinessResponse):

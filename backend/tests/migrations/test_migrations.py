@@ -32,7 +32,6 @@ VALUES ('{BANK}', '{BUSINESS}', 'Bank', 100);
 INSERT INTO public.receipts (business_id, date, received_in_account_id, lines)
 VALUES ('{BUSINESS}', current_date, '{BANK}',
     '[{{"account_id": "suspense", "amount": 30, "total": 30}}]');
-REFRESH MATERIALIZED VIEW public.business_suspense_balance;
 """
 
 
@@ -55,12 +54,13 @@ def test_new_migrations_apply_over_baseline_data():
     run_sql(f"SELECT public.recalculate_bank_account_balance('{BANK}');")
 
     assert query(f"SELECT current_balance FROM public.bank_accounts WHERE id = '{BANK}'") == [
-        ["130.00"]
+        ["130.0000"]
     ]
     assert query(
-        f"SELECT suspense_balance FROM private.business_suspense_balance"
-        f" WHERE business_id = '{BUSINESS}'"
+        "SELECT sum((l->>'amount')::numeric) FROM public.receipts r, jsonb_array_elements(r.lines) l"
+        f" WHERE r.business_id = '{BUSINESS}' AND l->>'account_id' = 'suspense'"
     ) == [["30"]]
+    assert query("SELECT key FROM public.admin_tabs WHERE key LIKE 'receipt%'") == [["receipts"]]
     assert query(
         "SELECT confdeltype FROM pg_constraint WHERE conname = 'businesses_owner_id_fkey'"
     ) == [["r"]]

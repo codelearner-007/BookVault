@@ -4,10 +4,10 @@ from sqlalchemy import ForeignKey, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, TimestampMixin
+from app.models.base import Base, TimestampMixin, VersionedMixin
 
 
-class Customer(Base, TimestampMixin):
+class Customer(Base, TimestampMixin, VersionedMixin):
     """A customer record belonging to a business."""
 
     __tablename__ = "customers"

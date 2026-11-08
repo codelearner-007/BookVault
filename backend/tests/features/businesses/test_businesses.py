@@ -22,10 +22,11 @@ async def test_businesses_update_and_reset(client, users):
 
     updated = await client.put(
         f"{BASE}/{business['id']}",
-        json={"name": "Renamed", "country": "PK", "address": "Main St"},
+        json={"name": "Renamed", "country": "PK", "address": "Main St",
+              "version": business["version"]},
         headers=owner.headers,
     )
-    reset = await client.post(f"{BASE}/{business['id']}/reset", json={}, headers=owner.headers)
+    reset = await client.post(f"{BASE}/{business['id']}/reset", headers=owner.headers)
 
     assert updated.status_code == 200, updated.text
     assert (updated.json()["name"], updated.json()["address"]) == ("Renamed", "Main St")

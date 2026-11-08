@@ -4,10 +4,10 @@ from sqlalchemy import ForeignKey, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, TimestampMixin
+from app.models.base import Base, TimestampMixin, VersionedMixin
 
 
-class Supplier(Base, TimestampMixin):
+class Supplier(Base, TimestampMixin, VersionedMixin):
     """A supplier record belonging to a business."""
 
     __tablename__ = "suppliers"

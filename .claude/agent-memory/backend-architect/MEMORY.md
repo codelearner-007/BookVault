@@ -31,7 +31,8 @@
 - `session_manager.session()` handles commit/rollback automatically
 - `get_db()` dependency yields session from session_manager
 - `require_permission()` is a factory that returns a dependency function
-- Audit logging done in routes after service calls (not in services)
+- Since B0.5: audit written in SERVICES via `AuditService.record(actor, action, entity_type, entity_id, business_id, before, after)` (append-only table; business scope when business_id given)
+- B0.5 primitives: `RequestModel`/`VersionedRequest` (extra=forbid) + field types in `schemas/common.py`; `PageParams`/`page_params` (`core/pagination.py`) on every list; `PaginatedResponse.build`; `VersionedMixin` (SQLAlchemy version_id_col) + `services/versioning.py`; `IdempotencyService.run` + `require_idempotency_key` on create POSTs; money = Decimal in, `MoneyOut` strings out, `core/money.round_money`
 - `is_system` flag on roles prevents modification of system roles
 
 ## Imports

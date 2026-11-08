@@ -1,117 +1,76 @@
-"""Audit log repository."""
+"""Audit log repository (append-only: insert and read, nothing else)."""
 
+from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
-from sqlalchemy import func, or_, select, distinct
+from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import AuditLog
 from app.models.user_profile import UserProfile
-from app.repositories.base_repository import BaseRepository
 
 
-class AuditRepository(BaseRepository[AuditLog]):
-    """Repository for AuditLog model."""
+@dataclass(frozen=True)
+class AuditFilter:
+    user_id: Optional[str] = None
+    business_id: Optional[str] = None
+    entity_type: Optional[str] = None
+    action: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
 
-    def __init__(self, session: AsyncSession):
-        super().__init__(AuditLog, session)
 
-    def _apply_filters(
-        self,
-        query,
-        module: Optional[str] = None,
-        action: Optional[str] = None,
-        user_id: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        business_id: Optional[str] = None,
-    ):
-        if module:
-            query = query.where(AuditLog.module == module)
-        if action:
-            query = query.where(AuditLog.action == action)
-        if user_id:
-            query = query.where(AuditLog.user_id == user_id)
-        if start_date:
-            query = query.where(AuditLog.created_at >= start_date)
-        if end_date:
-            query = query.where(AuditLog.created_at <= end_date)
-        if business_id:
-            query = query.where(
-                or_(
-                    AuditLog.resource_id == business_id,
-                    AuditLog.details["business_id"].as_string() == business_id,
-                )
-            )
-        return query
+def _where(query, f: AuditFilter):
+    if f.user_id is not None:
+        query = query.where(AuditLog.user_id == f.user_id)
+    if f.business_id is not None:
+        query = query.where(AuditLog.business_id == f.business_id)
+    if f.entity_type is not None:
+        query = query.where(AuditLog.entity_type == f.entity_type)
+    if f.action is not None:
+        query = query.where(AuditLog.action == f.action)
+    if f.start_date is not None:
+        query = query.where(AuditLog.created_at >= f.start_date)
+    if f.end_date is not None:
+        query = query.where(AuditLog.created_at <= f.end_date)
+    return query
 
-    async def count_filtered(
-        self,
-        module: Optional[str] = None,
-        action: Optional[str] = None,
-        user_id: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        business_id: Optional[str] = None,
-    ) -> int:
-        query = self._apply_filters(
-            select(func.count()).select_from(AuditLog),
-            module, action, user_id, start_date, end_date, business_id,
-        )
-        result = await self.session.execute(query)
-        return result.scalar() or 0
 
-    async def list_filtered(
-        self,
-        offset: int = 0,
-        limit: int = 20,
-        module: Optional[str] = None,
-        action: Optional[str] = None,
-        user_id: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        business_id: Optional[str] = None,
-    ) -> List[tuple]:
-        query = self._apply_filters(
+class AuditRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def count(self, f: AuditFilter) -> int:
+        result = await self.session.execute(_where(select(func.count()).select_from(AuditLog), f))
+        return result.scalar_one()
+
+    async def list_page(
+        self, f: AuditFilter, offset: int, limit: int
+    ) -> list[tuple[AuditLog, str | None]]:
+        query = _where(
             select(AuditLog, UserProfile.full_name).outerjoin(
                 UserProfile, UserProfile.user_id == AuditLog.user_id
             ),
-            module, action, user_id, start_date, end_date, business_id,
+            f,
         )
-        query = query.order_by(AuditLog.created_at.desc()).limit(limit).offset(offset)
-        result = await self.session.execute(query)
-        return list(result.all())
-
-    async def list_distinct_modules(self) -> List[str]:
-        query = select(distinct(AuditLog.module)).order_by(AuditLog.module)
-        result = await self.session.execute(query)
-        return list(result.scalars().all())
-
-    async def count_since(self, since: datetime) -> int:
-        query = select(func.count()).select_from(AuditLog).where(
-            AuditLog.created_at >= since
+        result = await self.session.execute(
+            query.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).offset(offset).limit(limit)
         )
-        result = await self.session.execute(query)
-        return result.scalar() or 0
+        return [(row[0], row[1]) for row in result.all()]
 
-    async def create_log(
-        self,
-        user_id: Optional[str],
-        action: str,
-        module: str,
-        resource_id: Optional[str] = None,
-        details: Optional[dict] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
-    ) -> AuditLog:
-        audit_log = AuditLog(
-            user_id=user_id,
-            action=action,
-            module=module,
-            resource_id=resource_id,
-            details=details,
-            ip_address=ip_address,
-            user_agent=user_agent,
+    async def list_entity_types(self, offset: int, limit: int) -> tuple[list[str], int]:
+        total = (
+            await self.session.execute(select(func.count(distinct(AuditLog.entity_type))))
+        ).scalar_one()
+        result = await self.session.execute(
+            select(distinct(AuditLog.entity_type))
+            .order_by(AuditLog.entity_type)
+            .offset(offset)
+            .limit(limit)
         )
-        return await self.create(audit_log)
+        return list(result.scalars().all()), total
+
+    async def add(self, row: AuditLog) -> None:
+        self.session.add(row)
+        await self.session.flush()

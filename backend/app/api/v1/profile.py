@@ -7,6 +7,7 @@ from app.core.dependencies import get_current_user, get_db
 from app.schemas.auth import CurrentUser
 from app.schemas.request.profile import UpdateProfileRequest
 from app.schemas.response.profile import ProfileResponse
+from app.services.audit_service import AuditService
 from app.services.profile_service import ProfileService
 
 router = APIRouter(prefix="/profile", tags=["Profile"])
@@ -31,5 +32,7 @@ async def update_profile(
 ) -> ProfileResponse:
     """Update the current user's profile."""
     service = ProfileService(db)
-    profile = await service.update_profile(current_user.user_id, data)
-    return ProfileResponse.model_validate(profile)
+    profile = ProfileResponse.model_validate(await service.update_profile(current_user.user_id, data))
+    await AuditService(db).record(current_user.user_id, "update", "Profile", current_user.user_id,
+                                  after=profile)
+    return profile

@@ -1,5 +1,7 @@
 """Baseline: receipts CRUD with resolved names, and the suspense balance (features #16, #17)."""
 
+from decimal import Decimal
+
 from tests.support.factories import create_bank_account, create_business, first_coa_account_id
 
 SUSPENSE_LINE = {"account_id": "suspense", "amount": 40, "total": 40}
@@ -23,9 +25,14 @@ async def test_receipts_crud_with_names(client, users):
         headers=owner.headers,
     )
     receipt_id = created.json()["id"]
-    updated = await client.put(f"{base}/{receipt_id}", json={"reference": "R-2"}, headers=owner.headers)
+    updated = await client.put(
+        f"{base}/{receipt_id}", json={"reference": "R-2", "version": created.json()["version"]},
+        headers=owner.headers,
+    )
     listed = await client.get(base, headers=owner.headers)
-    removed = await client.delete(f"{base}/{receipt_id}", headers=owner.headers)
+    removed = await client.delete(
+        f"{base}/{receipt_id}", params={"version": updated.json()["version"]}, headers=owner.headers
+    )
 
     assert created.status_code == 201, created.text
     assert created.json()["received_in_account_name"] == account["name"]
@@ -51,5 +58,5 @@ async def test_suspense_balance_and_entries(client, users):
         f"/api/v1/businesses/{business_id}/suspense/entries", headers=owner.headers
     )
 
-    assert balance.json()["suspense_balance"] == 40.0
+    assert Decimal(balance.json()["suspense_balance"]) == Decimal("40")
     assert entries.json()["total"] == 1

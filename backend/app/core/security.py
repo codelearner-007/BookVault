@@ -166,6 +166,7 @@ def extract_user_claims(payload: Dict[str, Any]) -> Dict[str, Any]:
         "email": payload.get("email"),
         "user_role": payload.get("user_role", "user"),
         "hierarchy_level": payload.get("hierarchy_level", 100),
+        "aal": payload.get("aal"),
         "must_change_password": bool(
             (payload.get("app_metadata") or {}).get("must_change_password", False)
         ),

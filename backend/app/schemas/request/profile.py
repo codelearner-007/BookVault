@@ -1,13 +1,15 @@
-"""Profile request schemas for input validation."""
+"""Profile request schemas."""
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from app.schemas.common import URL_MAX, RequestModel
 
 
-class UpdateProfileRequest(BaseModel):
-    """Request body for updating a user profile (partial update)."""
+class UpdateProfileRequest(RequestModel):
+    """Partial update of the caller's profile."""
 
     full_name: Optional[str] = Field(default=None, max_length=255)
-    avatar_url: Optional[str] = Field(default=None, max_length=2048)
+    avatar_url: Optional[str] = Field(default=None, max_length=URL_MAX)
     department: Optional[str] = Field(default=None, max_length=100)

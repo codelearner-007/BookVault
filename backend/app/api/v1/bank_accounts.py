@@ -1,103 +1,69 @@
-"""Bank accounts endpoints."""
+"""Bank and cash accounts endpoints."""
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.access_rights import AreaRight
-from app.core.dependencies import get_current_user, get_db, require_business_access
-from app.schemas.auth import CurrentUser
+from app.core.dependencies import get_db, require_business_access, require_idempotency_key
+from app.core.pagination import PageParams, page_params
 from app.schemas.request.bank_account import BankAccountCreate, BankAccountUpdate
 from app.schemas.response.bank_account import BankAccountListResponse, BankAccountResponse
-from app.services.audit_service import AuditService
+from app.services.access_service import BusinessContext
 from app.services.bank_account_service import BankAccountService
+from app.services.idempotency_service import IdempotencyService, business_scope
 
-router = APIRouter(
-    prefix="/businesses/{business_id}/bank-accounts",
-    tags=["Bank Accounts"],
-)
+AREA = "bank_cash_accounts"
+
+router = APIRouter(prefix="/businesses/{business_id}/bank-accounts", tags=["Bank Accounts"])
 
 
-
-@router.get("", response_model=BankAccountListResponse, dependencies=[Depends(require_business_access("bank_cash_accounts", AreaRight.VIEW))])
+@router.get("", response_model=BankAccountListResponse)
 async def list_bank_accounts(
-    business_id: str,
+    params: PageParams = Depends(page_params),
+    ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.VIEW)),
     db: AsyncSession = Depends(get_db),
 ) -> BankAccountListResponse:
-    return await BankAccountService(db).list_accounts(business_id)
+    return await BankAccountService(db).list_page(ctx.business_id, params)
 
 
-@router.post("", response_model=BankAccountResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_business_access("bank_cash_accounts", AreaRight.CREATE))])
+@router.post("", response_model=BankAccountResponse, status_code=status.HTTP_201_CREATED)
 async def create_bank_account(
-    business_id: str,
     body: BankAccountCreate,
+    key: str = Depends(require_idempotency_key),
+    ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.CREATE)),
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
 ) -> BankAccountResponse:
-    result = await BankAccountService(db).create_account(
-        business_id=business_id,
-        name=body.name,
-        opening_balance=body.opening_balance,
-        description=body.description,
+    return await IdempotencyService(db).run(
+        business_scope(ctx, key, AREA, "POST bank-accounts"),
+        body,
+        lambda: BankAccountService(db).create(ctx, body),
     )
-    await AuditService(db).log_action(
-        user_id=current_user.user_id,
-        action="Create",
-        module="BalanceSheetCashAtBankAccount",
-        resource_id=str(result.id),
-        details={"business_id": business_id, "name": result.name},
-    )
-    return result
 
 
-
-@router.get("/{bank_account_id}", response_model=BankAccountResponse, dependencies=[Depends(require_business_access("bank_cash_accounts", AreaRight.VIEW))])
+@router.get("/{bank_account_id}", response_model=BankAccountResponse)
 async def get_bank_account(
-    business_id: str,
     bank_account_id: str,
+    ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.VIEW)),
     db: AsyncSession = Depends(get_db),
 ) -> BankAccountResponse:
-    return await BankAccountService(db).get_account(business_id, bank_account_id)
+    return await BankAccountService(db).get(ctx.business_id, bank_account_id)
 
 
-@router.put("/{bank_account_id}", response_model=BankAccountResponse, dependencies=[Depends(require_business_access("bank_cash_accounts", AreaRight.EDIT))])
+@router.put("/{bank_account_id}", response_model=BankAccountResponse)
 async def update_bank_account(
-    business_id: str,
     bank_account_id: str,
     body: BankAccountUpdate,
+    ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.EDIT)),
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
 ) -> BankAccountResponse:
-    result = await BankAccountService(db).update_account(
-        business_id=business_id,
-        bank_account_id=bank_account_id,
-        name=body.name,
-        description=body.description,
-        update_description="description" in body.model_fields_set,
-    )
-    await AuditService(db).log_action(
-        user_id=current_user.user_id,
-        action="Update",
-        module="BalanceSheetCashAtBankAccount",
-        resource_id=str(result.id),
-        details={"business_id": business_id, "name": result.name},
-    )
-    return result
+    return await BankAccountService(db).update(ctx, bank_account_id, body)
 
 
-@router.delete("/{bank_account_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_business_access("bank_cash_accounts", AreaRight.DELETE))])
+@router.delete("/{bank_account_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_bank_account(
-    business_id: str,
     bank_account_id: str,
+    version: int = Query(..., ge=1),
+    ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.DELETE)),
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
 ) -> None:
-    service = BankAccountService(db)
-    account = await service.get_account(business_id, bank_account_id)
-    await service.delete_account(business_id, bank_account_id)
-    await AuditService(db).log_action(
-        user_id=current_user.user_id,
-        action="Delete",
-        module="BalanceSheetCashAtBankAccount",
-        resource_id=bank_account_id,
-        details={"business_id": business_id, "name": account.name},
-    )
+    await BankAccountService(db).delete(ctx, bank_account_id, version)

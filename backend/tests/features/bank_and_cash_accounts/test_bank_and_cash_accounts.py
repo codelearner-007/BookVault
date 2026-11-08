@@ -12,10 +12,13 @@ async def test_bank_accounts_crud(client, users):
 
     account = await create_bank_account(client, owner, business_id, "50.00")
     renamed = await client.put(
-        f"{base}/{account['id']}", json={"name": "Renamed"}, headers=owner.headers
+        f"{base}/{account['id']}", json={"name": "Renamed", "version": account["version"]},
+        headers=owner.headers,
     )
     listed = await client.get(base, headers=owner.headers)
-    removed = await client.delete(f"{base}/{account['id']}", headers=owner.headers)
+    removed = await client.delete(
+        f"{base}/{account['id']}", params={"version": renamed.json()["version"]}, headers=owner.headers
+    )
 
     assert renamed.json()["name"] == "Renamed"
     assert listed.json()["total"] == 1

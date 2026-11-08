@@ -6,23 +6,29 @@ import base64
 import json
 from typing import AsyncGenerator, Callable, Optional
 
-from fastapi import Depends, Request
+from fastapi import Depends, Header, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.access_rights import AreaRight
+from app.core.config import settings
 from app.core.exceptions import (
     AppException,
+    IdempotencyKeyRequiredError,
     InvalidTokenError,
     ResourceNotFoundError,
     RoleDeniedError,
 )
+from app.core.rate_limit import USER_KEY_STATE, enforce_user_limit, rate_limit_key
 from app.core.security import extract_user_claims, verify_token
 from app.db.session import get_session_manager
 from app.schemas.auth import CurrentUser
 from app.services.access_service import AccessService, BusinessContext
 from app.services.entitlements import can_create_business
 from app.services.user_role_service import UserRoleService
+from app.services.user_service import UserService
+
+IDEMPOTENCY_KEY_MAX = 255
 
 SUPER_ADMIN_ROLE = "super_admin"
 # Reachable while app_metadata.must_change_password is set (D-30); the change itself is Next.js.
@@ -156,7 +162,19 @@ async def get_verified_claims(
         token = extract_token_from_cookies(request)
     if not token:
         return None
-    return extract_user_claims(await verify_token(token))
+    claims = extract_user_claims(await verify_token(token))
+    setattr(request.state, USER_KEY_STATE, claims.get("user_id"))
+    return claims
+
+
+async def enforce_rate_limit(
+    request: Request, _claims: Optional[dict] = Depends(get_verified_claims)
+) -> None:
+    """Router-wide per-user limit (CS-16, AC-25): reads vs mutations, values from settings."""
+    if request.method == "GET":
+        enforce_user_limit("read", rate_limit_key(request), settings.LIST_RATE_LIMIT)
+    else:
+        enforce_user_limit("mutation", rate_limit_key(request), settings.MUTATION_RATE_LIMIT)
 
 
 async def get_db(
@@ -171,11 +189,16 @@ async def get_db(
 async def get_current_user(
     request: Request,
     claims: Optional[dict] = Depends(get_verified_claims),
+    db: AsyncSession = Depends(get_db),
 ) -> CurrentUser:
-    """The authenticated caller (user_id, email, role, permissions); 401 without a valid token."""
+    """The authenticated caller; 401 without a valid token or for a banned/deleted account.
+
+    The account state is read live once per request (FastAPI caches this dependency).
+    """
     if claims is None:
         raise InvalidTokenError("Missing authentication token (header or Supabase SSR cookie)")
     user = CurrentUser(**claims)
+    await UserService(db).assert_account_usable(user.aal)
     if user.must_change_password and request.url.path not in PASSWORD_CHANGE_EXEMPT_PATHS:
         raise AppException(
             "You must change your password before continuing",
@@ -291,3 +314,14 @@ async def require_business_creator(
     if not decision.allowed:
         raise AppException(decision.reason, status_code=403)
     return current_user
+
+
+async def require_idempotency_key(
+    idempotency_key: Optional[str] = Header(
+        None, alias="Idempotency-Key", max_length=IDEMPOTENCY_KEY_MAX
+    ),
+) -> str:
+    """Create/post routes need a client-generated key per submit (AC-19); missing -> 400."""
+    if not idempotency_key or not idempotency_key.strip():
+        raise IdempotencyKeyRequiredError()
+    return idempotency_key.strip()

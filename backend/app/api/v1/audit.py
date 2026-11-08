@@ -1,40 +1,84 @@
-"""Audit log endpoints."""
+"""Audit log endpoints: my own actions, and the history of a business."""
 
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db, require_role
+from app.core.access_rights import AreaRight
+from app.core.dependencies import get_current_user, get_db, require_business_access, require_role
+from app.core.pagination import PageParams, page_params
+from app.repositories.audit_repository import AuditFilter
 from app.schemas.auth import CurrentUser
-from app.schemas.common import PaginatedResponse
+from app.schemas.common import KEY_MAX, PaginatedResponse
 from app.schemas.response.audit import AuditLogResponse
+from app.services.access_service import BusinessContext
 from app.services.audit_service import AuditService
 
-router = APIRouter(prefix="/audit", tags=["Audit"])
+router = APIRouter(tags=["Audit"])
 
 
 @router.get(
-    "/logs",
+    "/audit/logs",
     response_model=PaginatedResponse[AuditLogResponse],
     dependencies=[Depends(require_role("admin", "super_admin"))],
 )
 async def list_audit_logs(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    module: Optional[str] = None,
-    action: Optional[str] = None,
+    params: PageParams = Depends(page_params),
+    entity_type: Optional[str] = Query(None, max_length=KEY_MAX),
+    action: Optional[str] = Query(None, max_length=KEY_MAX),
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    business_id: Optional[str] = Query(None),
+    business_id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> PaginatedResponse[AuditLogResponse]:
-    """List the current user's own audit logs. Always scoped to the requesting user's ID."""
-    service = AuditService(db)
-    return await service.list_logs_paginated(
-        page=page, page_size=page_size,
-        module=module, action=action, user_id=current_user.user_id,
-        start_date=start_date, end_date=end_date, business_id=business_id,
+    """Audit rows of the caller (always scoped to the caller)."""
+    f = AuditFilter(
+        user_id=current_user.user_id,
+        business_id=str(business_id) if business_id else None,
+        entity_type=entity_type,
+        action=action,
+        start_date=start_date,
+        end_date=end_date,
     )
+    return await AuditService(db).list_page(f, params)
+
+
+@router.get(
+    "/businesses/{business_id}/history",
+    response_model=PaginatedResponse[AuditLogResponse],
+)
+async def list_business_history(
+    params: PageParams = Depends(page_params),
+    entity_type: Optional[str] = Query(None, max_length=KEY_MAX),
+    action: Optional[str] = Query(None, max_length=KEY_MAX),
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    ctx: BusinessContext = Depends(require_business_access("history", AreaRight.VIEW)),
+    db: AsyncSession = Depends(get_db),
+) -> PaginatedResponse[AuditLogResponse]:
+    """Every audited change of the business (history:view)."""
+    f = AuditFilter(
+        business_id=ctx.business_id,
+        entity_type=entity_type,
+        action=action,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return await AuditService(db).list_page(f, params)
+
+
+@router.get(
+    "/modules",
+    response_model=PaginatedResponse[str],
+    dependencies=[Depends(require_role("admin", "super_admin"))],
+)
+async def list_audit_entity_types(
+    params: PageParams = Depends(page_params),
+    db: AsyncSession = Depends(get_db),
+) -> PaginatedResponse[str]:
+    """Distinct entity types in the audit trail (filter of the audit page)."""
+    return await AuditService(db).list_entity_types(params)

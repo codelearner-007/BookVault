@@ -125,8 +125,7 @@ export default function BusinessesPage() {
       setLoading(true);
       setError(null);
       const data = await listBusinesses();
-      const items = Array.isArray(data) ? data : (data?.items ?? []);
-      setBusinesses(items);
+      setBusinesses(data.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load businesses');
     } finally {
@@ -202,7 +201,7 @@ export default function BusinessesPage() {
     try {
       setTrashLoading(true);
       const data = await listDeletedBusinesses();
-      setDeletedBusinesses(Array.isArray(data) ? data : (data?.items ?? []));
+      setDeletedBusinesses(data.items);
     } catch {
       setDeletedBusinesses([]);
     } finally {
@@ -218,11 +217,7 @@ export default function BusinessesPage() {
       setPermanentDeleteId(null);
       setPermanentDeleteName('');
       const deletedData = await listDeletedBusinesses();
-      setDeletedBusinesses(
-        Array.isArray(deletedData)
-          ? deletedData
-          : (deletedData?.items ?? deletedData?.businesses ?? [])
-      );
+      setDeletedBusinesses(deletedData.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to permanently delete business');
       setPermanentDeleteOpen(false);
@@ -240,16 +235,8 @@ export default function BusinessesPage() {
         listBusinesses(),
         listDeletedBusinesses(),
       ]);
-      setBusinesses(
-        Array.isArray(activeData)
-          ? activeData
-          : (activeData?.items ?? [])
-      );
-      setDeletedBusinesses(
-        Array.isArray(deletedData)
-          ? deletedData
-          : (deletedData?.items ?? [])
-      );
+      setBusinesses(activeData.items);
+      setDeletedBusinesses(deletedData.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to restore business');
     } finally {

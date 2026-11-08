@@ -50,12 +50,13 @@ ROUTE_MAP = {
     **{f"DELETE /chart-of-accounts/{p}": [(COA, D)] for p in ("groups/{group_id}", "accounts/{account_id}")},
     "GET /receipts/upload-authorization": [("receipts", C)],
     "GET /suspense/balance": [("suspense", V)], "GET /suspense/entries": [("suspense", V)],
-    "GET /customers/{customer_id}/receipts": [("customers", V), ("receipts", V)],
-    "GET /suppliers/{supplier_id}/receipts": [("suppliers", V), ("receipts", V)],
+    "GET /customers/{contact_id}/receipts": [("customers", V), ("receipts", V)],
+    "GET /suppliers/{contact_id}/receipts": [("suppliers", V), ("receipts", V)],
+    "GET /history": [("history", V)],
 }
 for _path, _area, _id in (("bank-accounts", "bank_cash_accounts", "bank_account_id"),
-                          ("customers", "customers", "customer_id"),
-                          ("suppliers", "suppliers", "supplier_id"),
+                          ("customers", "customers", "contact_id"),
+                          ("suppliers", "suppliers", "contact_id"),
                           ("receipts", "receipts", "receipt_id")):
     ROUTE_MAP.update({
         f"GET /{_path}": [(_area, V)], f"POST /{_path}": [(_area, C)],
@@ -166,14 +167,22 @@ async def _receipt_fixture(client, owner, business_id):
     return body, created.json()["id"]
 
 
-async def _receipt_calls(client, member, business_id, body, receipt_id) -> dict[str, int]:
+async def _receipt_calls(client, owner, member, business_id, body, receipt_id) -> dict[str, int]:
     base = f"/api/v1/businesses/{business_id}/receipts"
-    return {
+
+    async def version() -> int:
+        return (await client.get(f"{base}/{receipt_id}", headers=owner.headers)).json()["version"]
+
+    codes = {
         V: (await client.get(base, headers=member.headers)).status_code,
         C: (await client.post(base, json=body, headers=member.headers)).status_code,
-        E: (await client.put(f"{base}/{receipt_id}", json={"reference": "X"}, headers=member.headers)).status_code,
-        D: (await client.delete(f"{base}/{receipt_id}", headers=member.headers)).status_code,
     }
+    edit = {"reference": "X", "version": await version()}
+    codes[E] = (await client.put(f"{base}/{receipt_id}", json=edit, headers=member.headers)).status_code
+    codes[D] = (await client.delete(
+        f"{base}/{receipt_id}", params={"version": await version()}, headers=member.headers
+    )).status_code
+    return codes
 
 
 async def _receipts_member(client, users, rights):
@@ -184,7 +193,7 @@ async def _receipts_member(client, users, rights):
     await add_member(client, owner, business_id, member, "custom",
                      [{"area_key": "receipts", "rights": [V, *rights]},
                       {"area_key": "bank_cash_accounts", "rights": [V]}])
-    return await _receipt_calls(client, member, business_id, body, receipt_id)
+    return await _receipt_calls(client, owner, member, business_id, body, receipt_id)
 
 
 SUCCESS = {V: 200, C: 201, E: 200, D: 204}

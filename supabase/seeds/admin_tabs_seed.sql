@@ -1,19 +1,19 @@
 -- ==============================================
 -- ADMIN TABS SEED DATA
 -- Run after migrations to populate default global tabs.
--- `enabled` here means the tab is globally available to all businesses.
--- Per-business default state is controlled by DEFAULT_ENABLED_TABS in
--- business_service.py — only 'summary' and 'settings' are ON by default
--- for new businesses; all other tabs start OFF until explicitly enabled.
+-- `enabled`         the tab is globally available to all businesses.
+-- `default_enabled` the tab is ON for a business that has not saved its own choice
+--                   (only 'summary' and 'settings'; B0.5 moved this from code to data).
 -- ==============================================
 
-INSERT INTO public.admin_tabs (key, label, enabled, order_index) VALUES
-    ('summary',         'Summary',          TRUE, 0),
-    ('settings',        'Settings',         TRUE, 1),
-    ('journal-entries', 'Journal Entries',  TRUE, 2),
-    ('reports',         'Reports',          TRUE, 3),
-    ('members',         'Members',          TRUE, 4)
+INSERT INTO public.admin_tabs (key, label, enabled, default_enabled, order_index) VALUES
+    ('summary',         'Summary',          TRUE, TRUE,  0),
+    ('settings',        'Settings',         TRUE, TRUE,  1),
+    ('journal-entries', 'Journal Entries',  TRUE, FALSE, 2),
+    ('reports',         'Reports',          TRUE, FALSE, 3),
+    ('members',         'Members',          TRUE, FALSE, 4)
 ON CONFLICT (key) DO UPDATE SET
-    label       = EXCLUDED.label,
-    enabled     = EXCLUDED.enabled,
-    order_index = EXCLUDED.order_index;
+    label           = EXCLUDED.label,
+    enabled         = EXCLUDED.enabled,
+    default_enabled = EXCLUDED.default_enabled,
+    order_index     = EXCLUDED.order_index;

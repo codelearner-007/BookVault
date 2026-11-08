@@ -1,29 +1,64 @@
 """COA repository — data access layer for coa_groups and coa_accounts tables."""
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.coa_account import CoaAccount
 from app.models.coa_group import CoaGroup
-from app.repositories.base_repository import BaseRepository
+
+# One statement per reorder (CS-13): position = ordinal in the submitted id list.
+_REORDER_GROUPS = text("""
+    UPDATE coa_groups AS g SET sort_order = o.idx - 1
+    FROM unnest(CAST(:ids AS uuid[])) WITH ORDINALITY AS o(id, idx)
+    WHERE g.id = o.id AND g.business_id = CAST(:business_id AS uuid) AND g.type = :type
+      AND g.parent_group_id IS NOT DISTINCT FROM CAST(:parent_id AS uuid)
+""")
+_REORDER_ACCOUNTS = text("""
+    UPDATE coa_accounts AS a SET sort_order = o.idx - 1
+    FROM unnest(CAST(:ids AS uuid[])) WITH ORDINALITY AS o(id, idx)
+    WHERE a.id = o.id AND a.business_id = CAST(:business_id AS uuid)
+      AND a.group_id IS NOT DISTINCT FROM CAST(:group_id AS uuid)
+""")
 
 
-class CoaRepository(BaseRepository[CoaGroup]):
+class CoaRepository:
     """Repository for Chart of Accounts group and account operations."""
 
     def __init__(self, session: AsyncSession) -> None:
-        super().__init__(CoaGroup, session)
+        self.session = session
+
+    async def _page(self, model, business_id: str, offset: int, limit: int) -> tuple[list, int]:
+        total = (
+            await self.session.execute(
+                select(func.count()).select_from(model).where(model.business_id == business_id)
+            )
+        ).scalar_one()
+        result = await self.session.execute(
+            select(model)
+            .where(model.business_id == business_id)
+            .order_by(model.sort_order.asc(), model.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars().all()), total
+
+    async def list_groups_page(self, business_id: str, offset: int, limit: int) -> tuple[list[CoaGroup], int]:
+        return await self._page(CoaGroup, business_id, offset, limit)
+
+    async def list_accounts_page(
+        self, business_id: str, offset: int, limit: int
+    ) -> tuple[list[CoaAccount], int]:
+        return await self._page(CoaAccount, business_id, offset, limit)
+
+    async def save(self, row: CoaGroup | CoaAccount) -> None:
+        await self.session.flush()
+        await self.session.refresh(row)
+
+    async def delete(self, row: CoaGroup | CoaAccount) -> None:
+        await self.session.delete(row)
+        await self.session.flush()
 
     # ------------------------------------------------------------------ Groups
-
-    async def list_groups(self, business_id: str) -> list[CoaGroup]:
-        """Return all COA groups for the given business, ordered by sort_order then id."""
-        result = await self.session.execute(
-            select(CoaGroup)
-            .where(CoaGroup.business_id == business_id)
-            .order_by(CoaGroup.sort_order.asc(), CoaGroup.id.asc())
-        )
-        return list(result.scalars().all())
 
     async def get_group(self, business_id: str, group_id: str) -> CoaGroup | None:
         """Return a single COA group matching both business_id and group_id."""
@@ -58,68 +93,7 @@ class CoaRepository(BaseRepository[CoaGroup]):
         await self.session.refresh(group)
         return group
 
-    async def update_group(
-        self,
-        business_id: str,
-        group_id: str,
-        name: str | None,
-        parent_group_id: str | None,
-    ) -> CoaGroup | None:
-        """Update mutable fields on a COA group. Returns None if not found."""
-        group = await self.get_group(business_id, group_id)
-        if group is None:
-            return None
-        if name is not None:
-            group.name = name
-        if parent_group_id is not None and parent_group_id != group.parent_group_id:
-            group.parent_group_id = parent_group_id
-        await self.session.flush()
-        await self.session.refresh(group)
-        return group
-
-    async def delete_group(self, business_id: str, group_id: str) -> bool:
-        """Delete a COA group. Returns True if deleted, False if not found."""
-        group = await self.get_group(business_id, group_id)
-        if group is None:
-            return False
-        await self.session.delete(group)
-        await self.session.flush()
-        return True
-
-    async def reorder_groups(
-        self,
-        business_id: str,
-        type_: str,
-        parent_group_id: str | None,
-        ids: list[str],
-    ) -> bool:
-        """Assign sort_order for each group id based on its position in ids list."""
-        for idx, group_id in enumerate(ids):
-            await self.session.execute(
-                update(CoaGroup)
-                .where(
-                    CoaGroup.id == group_id,
-                    CoaGroup.business_id == business_id,
-                    CoaGroup.type == type_,
-                    CoaGroup.parent_group_id == parent_group_id
-                    if parent_group_id is not None
-                    else CoaGroup.parent_group_id.is_(None),
-                )
-                .values(sort_order=idx)
-            )
-        await self.session.flush()
-        return True
-
     # ---------------------------------------------------------------- Accounts
-
-    async def list_accounts(self, business_id: str) -> list[CoaAccount]:
-        """Return all COA accounts for the given business, ordered by sort_order then id."""
-        result = await self.session.execute(
-            select(CoaAccount)
-            .where(CoaAccount.business_id == business_id)
-            .order_by(CoaAccount.sort_order.asc(), CoaAccount.id.asc())
-        )
-        return list(result.scalars().all())
 
     async def get_account(self, business_id: str, account_id: str) -> CoaAccount | None:
         """Return a single COA account matching both business_id and account_id."""
@@ -190,77 +164,6 @@ class CoaRepository(BaseRepository[CoaGroup]):
         await self.session.refresh(account)
         return account
 
-    async def update_account(
-        self,
-        business_id: str,
-        account_id: str,
-        name: str | None,
-        group_id: str | None,
-        update_group_id: bool,
-        cash_flow_category: str | None,
-        update_cash_flow: bool,
-        code: str | None,
-        update_code: bool,
-        type_: str | None,
-        is_system: bool | None = None,
-        description: str | None = None,
-        is_active: bool | None = None,
-    ) -> CoaAccount | None:
-        """Update mutable fields on a COA account. Returns None if not found."""
-        account = await self.get_account(business_id, account_id)
-        if account is None:
-            return None
-        if name is not None:
-            account.name = name
-        if update_group_id:
-            account.group_id = group_id
-        if update_cash_flow:
-            account.cash_flow_category = cash_flow_category
-        if update_code:
-            account.code = code
-        if type_ is not None:
-            account.type = type_
-        if is_system is not None:
-            account.is_system = is_system
-        if description is not None:
-            account.description = description
-        if is_active is not None:
-            account.is_active = is_active
-        await self.session.flush()
-        await self.session.refresh(account)
-        return account
-
-    async def delete_account(self, business_id: str, account_id: str) -> bool:
-        """Delete a COA account. Returns True if deleted, False if not found."""
-        account = await self.get_account(business_id, account_id)
-        if account is None:
-            return False
-        await self.session.delete(account)
-        await self.session.flush()
-        return True
-
-    async def reorder_accounts(
-        self,
-        business_id: str,
-        group_id: str | None,
-        ids: list[str],
-    ) -> bool:
-        """Assign sort_order for each account id based on its position in ids list."""
-        for idx, account_id in enumerate(ids):
-            await self.session.execute(
-                update(CoaAccount)
-                .where(
-                    CoaAccount.id == account_id,
-                    CoaAccount.business_id == business_id,
-                    CoaAccount.group_id == group_id
-                    if group_id is not None
-                    else CoaAccount.group_id.is_(None),
-                )
-                .values(sort_order=idx)
-            )
-        await self.session.flush()
-        return True
-
     async def seed_default_coa(self, business_id: str) -> None:
         """Seed the default system COA structure for a newly created business.
 
@@ -274,7 +177,7 @@ class CoaRepository(BaseRepository[CoaGroup]):
           - Net Profit (Loss) (account, is_system, type=total, no group, sort 0)
         """
         # Balance Sheet system groups
-        assets = await self.create_group(
+        await self.create_group(
             business_id, "Assets", "balance_sheet", None, is_system=True, sort_order=0
         )
         await self.create_group(
@@ -295,9 +198,6 @@ class CoaRepository(BaseRepository[CoaGroup]):
             sort_order=0,
         )
 
-        # Suppress unused variable warning — assets group is seeded but has no default accounts
-        _ = assets
-
         # Net Profit (Loss) — system P&L total account (ungrouped)
         await self.create_account(
             business_id=business_id,
@@ -308,3 +208,15 @@ class CoaRepository(BaseRepository[CoaGroup]):
             is_system=True,
             sort_order=0,
         )
+
+    async def reorder_groups(
+        self, business_id: str, type_: str, parent_group_id: str | None, ids: list[str]
+    ) -> None:
+        await self.session.execute(_REORDER_GROUPS, {
+            "ids": ids, "business_id": business_id, "type": type_, "parent_id": parent_group_id,
+        })
+
+    async def reorder_accounts(self, business_id: str, group_id: str | None, ids: list[str]) -> None:
+        await self.session.execute(_REORDER_ACCOUNTS, {
+            "ids": ids, "business_id": business_id, "group_id": group_id,
+        })

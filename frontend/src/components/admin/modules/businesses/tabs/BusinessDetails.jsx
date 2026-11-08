@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { COUNTRIES } from '@/lib/data/countries';
-import { updateBusiness, resetBusiness } from '@/lib/services/business.service';
+import { isVersionConflict } from '@/lib/services/api-client';
+import { getBusiness, updateBusiness, resetBusiness } from '@/lib/services/business.service';
+import { listCountries } from '@/lib/services/countries.service';
 
 function Spinner({ className = '' }) {
   return (
@@ -27,6 +28,21 @@ export default function BusinessDetails({ business, onBusinessUpdated }) {
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [error, setError] = useState(null);
+  const [countries, setCountries] = useState([]);
+
+  useEffect(() => {
+    listCountries()
+      .then((data) => setCountries(data.items))
+      .catch(() => setCountries([]));
+  }, []);
+
+  async function reloadBusiness() {
+    const fresh = await getBusiness(business.id);
+    setName(fresh.name ?? '');
+    setAddress(fresh.address ?? '');
+    setCountry(fresh.country ?? '');
+    if (onBusinessUpdated) onBusinessUpdated(fresh);
+  }
 
   async function handleUpdate() {
     if (!name.trim()) {
@@ -42,11 +58,13 @@ export default function BusinessDetails({ business, onBusinessUpdated }) {
         name: name.trim(),
         address: address.trim() || null,
         country: country || null,
+        version: business.version,
       });
       if (onBusinessUpdated) onBusinessUpdated(updated);
       router.push('?tab=settings');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update business.');
+      if (isVersionConflict(err)) await reloadBusiness().catch(() => {});
     } finally {
       setSaving(false);
     }
@@ -129,8 +147,8 @@ export default function BusinessDetails({ business, onBusinessUpdated }) {
               className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring text-foreground"
             >
               <option value="">Select a country...</option>
-              {COUNTRIES.map((c) => (
-                <option key={c.code} value={c.name}>{c.name}</option>
+              {countries.map((c) => (
+                <option key={c.id} value={c.name}>{c.name}</option>
               ))}
             </select>
           </div>

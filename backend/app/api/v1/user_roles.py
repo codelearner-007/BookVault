@@ -1,6 +1,6 @@
 """User role assignment endpoints."""
 
-from typing import List
+
 
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,8 +12,10 @@ from app.core.dependencies import (
     require_live_super_admin,
 )
 from app.core.exceptions import RoleDeniedError
+from app.core.pagination import PageParams, page_params
 from app.core.rate_limit import limiter
 from app.schemas.auth import CurrentUser
+from app.schemas.common import PaginatedResponse
 from app.schemas.request.user_role import AssignUserRoleRequest
 from app.schemas.response.user_role import UserRoleResponse
 from app.services.audit_service import AuditService
@@ -24,13 +26,14 @@ router = APIRouter(prefix="/users", tags=["User Roles"])
 
 @router.get(
     "/{user_id}/roles",
-    response_model=List[UserRoleResponse],
+    response_model=PaginatedResponse[UserRoleResponse],
 )
 async def list_user_roles(
     user_id: str,
+    params: PageParams = Depends(page_params),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
-) -> List[UserRoleResponse]:
+) -> PaginatedResponse[UserRoleResponse]:
     """
     List all roles assigned to a user.
 
@@ -40,9 +43,8 @@ async def list_user_roles(
     if user_id != current_user.user_id and not await service.is_super_admin(current_user.user_id):
         raise RoleDeniedError(SUPER_ADMIN_ROLE)
 
-    user_roles = await service.list_user_roles(user_id)
-
-    return [UserRoleResponse.model_validate(ur) for ur in user_roles]
+    roles = [UserRoleResponse.model_validate(ur) for ur in await service.list_user_roles(user_id)]
+    return PaginatedResponse.build(params.slice(roles), len(roles), params.page, params.page_size)
 
 
 @router.post(
@@ -64,18 +66,10 @@ async def assign_role_to_user(
     old_role = await service.get_live_role_name(user_id)
     user_role = await service.assign_role(user_id, role_data.role_id, current_user)
 
-    audit_service = AuditService(db)
-    await audit_service.log_action(
-        user_id=current_user.user_id,
-        action="user_role_assigned",
-        module="user_roles",
-        resource_id=user_role.id,
-        details={
-            "target_user_id": user_id,
-            "role_id": role_data.role_id,
-            "old_role": old_role,
-            "new_role": await service.get_live_role_name(user_id),
-        },
+    await AuditService(db).record(
+        current_user.user_id, "user_role_assigned", "UserRole", user_role.id,
+        details={"target_user_id": user_id, "role_id": role_data.role_id, "old_role": old_role,
+                 "new_role": await service.get_live_role_name(user_id)},
     )
 
     # Refresh to load role relationship
@@ -103,16 +97,8 @@ async def remove_role_from_user(
     deleted = await service.remove_role(user_id, role_id, current_user)
 
     if deleted:
-        audit_service = AuditService(db)
-        await audit_service.log_action(
-            user_id=current_user.user_id,
-            action="user_role_removed",
-            module="user_roles",
-            resource_id=None,
-            details={
-                "target_user_id": user_id,
-                "role_id": role_id,
-                "old_role": old_role,
-                "new_role": await service.get_live_role_name(user_id),
-            },
+        await AuditService(db).record(
+            current_user.user_id, "user_role_removed", "UserRole", role_id,
+            details={"target_user_id": user_id, "role_id": role_id, "old_role": old_role,
+                     "new_role": await service.get_live_role_name(user_id)},
         )

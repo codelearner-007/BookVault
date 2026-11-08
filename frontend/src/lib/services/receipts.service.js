@@ -1,9 +1,10 @@
 import { apiClient } from './api-client';
+import { listAllPages } from './list-all-pages';
 
 const base = (businessId) => `/v1/businesses/${businessId}/receipts`;
 
 export async function listReceipts(businessId) {
-  return apiClient.get(base(businessId));
+  return listAllPages(base(businessId));
 }
 
 export async function createReceipt(businessId, data) {
@@ -18,6 +19,6 @@ export async function updateReceipt(businessId, receiptId, data) {
   return apiClient.put(`${base(businessId)}/${receiptId}`, data);
 }
 
-export async function deleteReceipt(businessId, receiptId) {
-  return apiClient.delete(`${base(businessId)}/${receiptId}`);
+export async function deleteReceipt(businessId, receiptId, version) {
+  return apiClient.delete(`${base(businessId)}/${receiptId}?version=${version}`);
 }

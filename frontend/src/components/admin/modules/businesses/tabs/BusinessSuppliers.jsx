@@ -17,11 +17,14 @@ import {
 import {
   listSuppliers,
   createSupplier,
+  getSupplier,
   updateSupplier,
   deleteSupplier,
   listSupplierReceipts,
 } from '@/lib/services/suppliers.service';
+import { isVersionConflict } from '@/lib/services/api-client';
 import { getTabColumns, updateTabColumns } from '@/lib/services/business.service';
+import { formatMoney } from '@/lib/utils/money';
 import ColEditorDialog from '../ColEditorDialog';
 
 const DEFAULT_COLS = [
@@ -219,16 +222,31 @@ function EditDialog({ open, onOpenChange, businessId, supplier, onUpdated, onDel
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState(null);
+  const [version, setVersion] = useState(null);
 
   const busy = saving || deleting;
 
+  function fillForm(record) {
+    setName(record.name ?? '');
+    setCode(record.code ?? '');
+    setBillingAddress(record.billing_address ?? '');
+    setDeliveryAddress(record.delivery_address ?? '');
+    setEmail(record.email ?? '');
+    setVersion(record.version);
+  }
+
+  // Version conflict: keep the message, reload the record and the list so a retry uses fresh data.
+  async function handleFailure(err, fallback) {
+    setError(err?.message ?? fallback);
+    if (!isVersionConflict(err)) return;
+    const fresh = await getSupplier(businessId, supplier.id).catch(() => null);
+    if (fresh) fillForm(fresh);
+    onUpdated();
+  }
+
   useEffect(() => {
     if (open && supplier) {
-      setName(supplier.name ?? '');
-      setCode(supplier.code ?? '');
-      setBillingAddress(supplier.billing_address ?? '');
-      setDeliveryAddress(supplier.delivery_address ?? '');
-      setEmail(supplier.email ?? '');
+      fillForm(supplier);
       setError(null);
       setConfirmDelete(false);
     }
@@ -245,11 +263,12 @@ function EditDialog({ open, onOpenChange, businessId, supplier, onUpdated, onDel
         billing_address: billingAddress.trim() || null,
         delivery_address: deliveryAddress.trim() || null,
         email: email.trim() || null,
+        version,
       });
       onUpdated();
       onOpenChange(false);
     } catch (err) {
-      setError(err?.message ?? 'Failed to update supplier.');
+      await handleFailure(err, 'Failed to update supplier.');
     } finally {
       setSaving(false);
     }
@@ -259,11 +278,11 @@ function EditDialog({ open, onOpenChange, businessId, supplier, onUpdated, onDel
     setDeleting(true);
     setError(null);
     try {
-      await deleteSupplier(businessId, supplier.id);
+      await deleteSupplier(businessId, supplier.id, version);
       onDeleted();
       onOpenChange(false);
     } catch (err) {
-      setError(err?.message ?? 'Failed to delete supplier.');
+      await handleFailure(err, 'Failed to delete supplier.');
       setConfirmDelete(false);
     } finally {
       setDeleting(false);
@@ -479,18 +498,15 @@ function ViewDialog({ open, onOpenChange, supplier, businessId }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {receipts.map((r) => {
-                    const total = (r.lines ?? []).reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0);
-                    return (
+                  {receipts.map((r) => (
                       <tr key={r.id} className="hover:bg-muted/20">
                         <td className="px-3 py-2 text-foreground">{formatDate(r.date)}</td>
                         <td className="px-3 py-2 text-muted-foreground">{r.reference || '—'}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                          {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {formatMoney(r.total)}
                         </td>
                       </tr>
-                    );
-                  })}
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -529,7 +545,7 @@ export default function BusinessSuppliers({ business }) {
         listSuppliers(business.id),
         getTabColumns(business.id, 'suppliers').catch(() => null),
       ]);
-      setSuppliers(Array.isArray(data) ? data : (data?.items ?? []));
+      setSuppliers(data.items);
       const saved = colRes?.columns;
       if (Array.isArray(saved) && saved.length > 0) {
         const sorted = [...saved].sort((a, b) => a.order_index - b.order_index);

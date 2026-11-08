@@ -106,7 +106,7 @@ export function useUserManagement() {
       try {
         setLoadingRoles(true);
         const data = await listRoles();
-        setRoles(data.filter((r) => r.name !== 'super_admin'));
+        setRoles(data.items.filter((r) => r.name !== 'super_admin'));
       } catch (err) {
         toast.error('Failed to load roles');
         console.error('Failed to load roles:', err);

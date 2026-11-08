@@ -1,4 +1,4 @@
-"""COA response schemas for API output serialization."""
+"""COA response schemas."""
 
 from pydantic import BaseModel, ConfigDict
 
@@ -13,11 +13,7 @@ class CoaGroupResponse(BaseModel):
     parent_group_id: str | None
     is_system: bool
     sort_order: int
-
-
-class CoaGroupListResponse(BaseModel):
-    items: list[CoaGroupResponse]
-    total: int
+    version: int
 
 
 class CoaAccountResponse(BaseModel):
@@ -35,8 +31,4 @@ class CoaAccountResponse(BaseModel):
     is_system: bool
     is_active: bool
     sort_order: int
-
-
-class CoaAccountListResponse(BaseModel):
-    items: list[CoaAccountResponse]
-    total: int
+    version: int

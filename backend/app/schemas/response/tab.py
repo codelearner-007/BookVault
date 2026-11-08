@@ -10,11 +10,13 @@ class AdminTabResponse(BaseModel):
     key: str
     label: str
     enabled: bool
+    default_enabled: bool
+    parent_key: str | None = None
     order_index: int
 
 
 class BusinessTabResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    """A tab of one business; the label always comes from the admin_tabs catalog."""
 
     id: str
     business_id: str
@@ -22,11 +24,4 @@ class BusinessTabResponse(BaseModel):
     label: str
     enabled: bool
     order_index: int
-
-
-class AdminTabListResponse(BaseModel):
-    items: list[AdminTabResponse]
-
-
-class BusinessTabListResponse(BaseModel):
-    items: list[BusinessTabResponse]
+    parent_key: str | None = None

@@ -1,20 +1,22 @@
-"""Receipt response schemas for API output serialization."""
+"""Receipt response schemas (money as decimal strings)."""
 
 import datetime as dt
+from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
+
+from app.core.money import round_money
+from app.schemas.common import MoneyOut
 
 
 class ReceiptLineItem(BaseModel):
-    """A single line item within a receipt response."""
-
     account_id: str
     account_name: str | None = None
     line_description: str | None = None
-    qty: float | None = None
-    discount: float | None = None
-    amount: float
-    total: float
+    qty: MoneyOut | None = None
+    discount: MoneyOut | None = None
+    amount: MoneyOut
+    total: MoneyOut
 
 
 class ReceiptResponse(BaseModel):
@@ -38,10 +40,12 @@ class ReceiptResponse(BaseModel):
     show_qty: bool
     show_discount: bool
     image_url: str | None
+    version: int
     created_at: dt.datetime
     updated_at: dt.datetime
 
-
-class ReceiptListResponse(BaseModel):
-    items: list[ReceiptResponse]
-    total: int
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def total(self) -> MoneyOut:
+        """Receipt total, computed by the server from the stored line totals."""
+        return round_money(sum((line.total for line in self.lines), Decimal("0")))

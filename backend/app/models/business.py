@@ -6,10 +6,10 @@ from sqlalchemy import DateTime, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, TimestampMixin
+from app.models.base import Base, TimestampMixin, VersionedMixin
 
 
-class Business(Base, TimestampMixin):
+class Business(Base, TimestampMixin, VersionedMixin):
     """Top-level business entity owned by an auth user."""
 
     __tablename__ = "businesses"

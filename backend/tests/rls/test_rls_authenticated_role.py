@@ -73,9 +73,11 @@ async def test_api_roles_cannot_call_security_definer_functions(db_conn, role):
 
 
 @pytest.mark.parametrize("role", API_ROLES)
-async def test_suspense_view_not_exposed(db_conn, role):
+async def test_suspense_balance_not_exposed(db_conn, role):
     await _as_role(db_conn, role)
-    assert await _denied(db_conn, "SELECT business_id FROM private.business_suspense_balance")
+    assert await _denied(
+        db_conn, "SELECT public.business_suspense_balance_for(:id)", {"id": str(uuid.uuid4())}
+    )
 
 
 async def test_future_tables_get_no_api_privileges(db_conn):

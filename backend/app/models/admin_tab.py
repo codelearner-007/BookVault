@@ -1,6 +1,6 @@
 """AdminTab model."""
 
-from sqlalchemy import Boolean, Integer, Text, text
+from sqlalchemy import Boolean, ForeignKey, Integer, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,6 +21,10 @@ class AdminTab(Base):
     label: Mapped[str] = mapped_column(Text, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    parent_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("admin_tabs.id", ondelete="RESTRICT"), nullable=True
+    )
+    default_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     def __repr__(self) -> str:
         return f"<AdminTab(id={self.id}, key={self.key})>"

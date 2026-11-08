@@ -4,10 +4,10 @@ from sqlalchemy import Date, ForeignKey, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, TimestampMixin
+from app.models.base import Base, TimestampMixin, VersionedMixin
 
 
-class Receipt(Base, TimestampMixin):
+class Receipt(Base, TimestampMixin, VersionedMixin):
     """A receipt record belonging to a business."""
 
     __tablename__ = "receipts"

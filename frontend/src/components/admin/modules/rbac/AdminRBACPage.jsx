@@ -56,7 +56,8 @@ export default function AdminRBACPage({ claims }) {
         listPermissionsGrouped(),
       ]);
 
-      const sortedRoles = [...rolesData].sort((a, b) => {
+      const permsByModule = permsData.items;
+      const sortedRoles = [...rolesData.items].sort((a, b) => {
         if (a.hierarchy_level !== b.hierarchy_level) {
           return b.hierarchy_level - a.hierarchy_level;
         }
@@ -64,9 +65,9 @@ export default function AdminRBACPage({ claims }) {
       });
 
       setRoles(sortedRoles);
-      setPermissionsByModule(permsData);
+      setPermissionsByModule(permsByModule);
       setSelectedRoleId((prev) => prev ?? sortedRoles[0]?.id ?? null);
-      setExpandedModules(new Set(permsData.map(m => m.module)));
+      setExpandedModules(new Set(permsByModule.map(m => m.module)));
     } catch (err) {
       console.error('Error loading RBAC data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -89,7 +90,7 @@ export default function AdminRBACPage({ claims }) {
       try {
         setLoadingRolePerms(true);
         const permissions = await getRolePermissions(roleId);
-        const permIds = new Set(permissions.map(p => p.id));
+        const permIds = new Set(permissions.items.map(p => p.id));
         setOriginalPermissionIds(permIds);
         setDraftPermissionIds(new Set(permIds));
       } catch (err) {

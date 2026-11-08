@@ -102,17 +102,24 @@ async def test_rls_helpers_are_security_definer_with_empty_search_path(db_conn):
         assert (secdef, volatility, config, owner) == (True, "s", ["search_path=\"\""], "bookvault_rls_owner"), name
 
 
+APPEND_ONLY = {"audit_logs"}
+
+
 async def test_business_tables_have_policies_for_every_command(db_conn):
     rows = await db_conn.execute(text(
         "SELECT c.relname FROM pg_class c JOIN pg_attribute a ON a.attrelid = c.oid"
         " WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'"
         "   AND a.attname = 'business_id' AND NOT a.attisdropped"))
     for table in rows.scalars().all():
-        commands = (await db_conn.execute(text(
+        commands = set((await db_conn.execute(text(
             "SELECT array_agg(DISTINCT cmd) FROM pg_policies"
             " WHERE schemaname = 'public' AND tablename = :t AND :r = ANY(roles)"),
-            {"t": table, "r": API_ROLE})).scalar_one()
-        assert {"SELECT", "INSERT", "DELETE"} <= set(commands or []), table
+            {"t": table, "r": API_ROLE})).scalar_one() or [])
+        if "ALL" in commands:
+            continue
+        # audit_logs is append-only (B0.5): read and insert, never update or delete.
+        expected = {"SELECT", "INSERT"} if table in APPEND_ONLY else {"SELECT", "INSERT", "DELETE"}
+        assert expected <= commands, table
 
 
 # ------------------------------------------------------------------ context

@@ -6,12 +6,13 @@
  */
 
 import { apiClient } from './api-client';
+import { listAllPages } from './list-all-pages';
 
 /**
  * List all roles
  */
 export async function listRoles() {
-  return apiClient.get('/v1/roles');
+  return listAllPages('/v1/roles');
 }
 
 /**
@@ -25,7 +26,7 @@ export async function getRoleWithPermissions(roleId) {
  * Get role permissions
  */
 export async function getRolePermissions(roleId) {
-  return apiClient.get(`/v1/roles/${roleId}/permissions`);
+  return listAllPages(`/v1/roles/${roleId}/permissions`);
 }
 
 /**
@@ -41,7 +42,7 @@ export async function updateRolePermissions(roleId, permissionIds) {
  * List all permissions grouped by module
  */
 export async function listPermissionsGrouped() {
-  return apiClient.get('/v1/permissions');
+  return listAllPages('/v1/permissions');
 }
 
 /**
@@ -93,7 +94,7 @@ export async function listUsersWithRoles(filters) {
  * Get user's assigned roles
  */
 export async function getUserRoles(userId) {
-  return apiClient.get(`/v1/users/${userId}/roles`);
+  return listAllPages(`/v1/users/${userId}/roles`);
 }
 
 /**

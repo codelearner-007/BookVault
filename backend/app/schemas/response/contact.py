@@ -1,11 +1,11 @@
-"""Customer response schemas for API output serialization."""
+"""Customer and supplier response schema."""
 
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
 
-class CustomerResponse(BaseModel):
+class ContactResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -15,10 +15,6 @@ class CustomerResponse(BaseModel):
     billing_address: str | None
     delivery_address: str | None
     email: str | None
+    version: int
     created_at: datetime
     updated_at: datetime
-
-
-class CustomerListResponse(BaseModel):
-    items: list[CustomerResponse]
-    total: int

@@ -1,87 +1,66 @@
-"""Audit logging service."""
+"""Audit trail: one append-only row per mutation, in the same transaction (B0.5, AC-24)."""
 
-from datetime import datetime
-from typing import List, Optional
+from typing import Any, Optional
 
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.audit_log import AuditLog
-from app.repositories.audit_repository import AuditRepository
-from app.schemas.response.audit import AuditLogResponse
+from app.core.pagination import PageParams
+from app.core.request_context import current_request_id
+from app.models.audit_log import SCOPE_BUSINESS, SCOPE_PLATFORM, AuditLog
+from app.repositories.audit_repository import AuditFilter, AuditRepository
 from app.schemas.common import PaginatedResponse
+from app.schemas.response.audit import AuditLogResponse
+
+Snapshot = BaseModel | dict[str, Any] | None
+
+
+def _snapshot(value: Snapshot) -> dict[str, Any] | None:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    return value
 
 
 class AuditService:
-    """Service for audit logging and querying."""
-
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession) -> None:
         self.repository = AuditRepository(session)
 
-    async def list_logs_paginated(
+    async def record(
         self,
-        page: int = 1,
-        page_size: int = 20,
-        module: Optional[str] = None,
-        action: Optional[str] = None,
-        user_id: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        business_id: Optional[str] = None,
-    ) -> PaginatedResponse[AuditLogResponse]:
-        total = await self.repository.count_filtered(
-            module=module, action=action, user_id=user_id,
-            start_date=start_date, end_date=end_date, business_id=business_id,
-        )
-        offset = (page - 1) * page_size
-        total_pages = (total + page_size - 1) // page_size
-
-        rows = await self.repository.list_filtered(
-            offset=offset, limit=page_size,
-            module=module, action=action, user_id=user_id,
-            start_date=start_date, end_date=end_date, business_id=business_id,
-        )
-
-        items = []
-        for row in rows:
-            audit_log, full_name = row[0], row[1]
-            items.append(AuditLogResponse(
-                id=str(audit_log.id),
-                created_at=audit_log.created_at,
-                user_id=str(audit_log.user_id) if audit_log.user_id else None,
-                action=audit_log.action,
-                module=audit_log.module,
-                resource_id=audit_log.resource_id,
-                details=audit_log.details,
-                performed_by=full_name,
-            ))
-
-        return PaginatedResponse(
-            items=items,
-            total=total,
-            page=page,
-            page_size=page_size,
-            total_pages=total_pages,
-        )
-
-    async def list_distinct_modules(self) -> List[str]:
-        return await self.repository.list_distinct_modules()
-
-    async def log_action(
-        self,
-        user_id: Optional[str],
+        actor_id: Optional[str],
         action: str,
-        module: str,
-        resource_id: Optional[str] = None,
-        details: Optional[dict] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
-    ) -> AuditLog:
-        return await self.repository.create_log(
-            user_id=user_id,
+        entity_type: str,
+        entity_id: Optional[str] = None,
+        business_id: Optional[str] = None,
+        before: Snapshot = None,
+        after: Snapshot = None,
+        details: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Write one audit row; business-scoped whenever a business id is given."""
+        await self.repository.add(AuditLog(
+            scope=SCOPE_BUSINESS if business_id else SCOPE_PLATFORM,
+            business_id=business_id,
+            user_id=actor_id,
             action=action,
-            module=module,
-            resource_id=resource_id,
+            entity_type=entity_type,
+            entity_id=str(entity_id) if entity_id else None,
+            before=_snapshot(before),
+            after=_snapshot(after),
             details=details,
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
+            request_id=current_request_id(),
+        ))
+
+    async def list_page(
+        self, f: AuditFilter, params: PageParams
+    ) -> PaginatedResponse[AuditLogResponse]:
+        total = await self.repository.count(f)
+        rows = await self.repository.list_page(f, params.offset, params.page_size)
+        items = [
+            AuditLogResponse.model_validate(row).model_copy(update={"performed_by": full_name})
+            for row, full_name in rows
+        ]
+        return PaginatedResponse.build(items, total, params.page, params.page_size)
+
+    async def list_entity_types(self, params: PageParams) -> PaginatedResponse[str]:
+        items, total = await self.repository.list_entity_types(params.offset, params.page_size)
+        return PaginatedResponse.build(items, total, params.page, params.page_size)

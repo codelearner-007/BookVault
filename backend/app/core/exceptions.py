@@ -43,10 +43,10 @@ class PermissionDeniedError(AppException):
 class RoleDeniedError(AppException):
     def __init__(self, required_role: str) -> None:
         super().__init__(
-            message=f"You do not have the required role: {required_role}",
+            message="You do not have access to this action",
             status_code=403,
-            details={"required_role": required_role},
         )
+        self.required_role = required_role  # server logs only (AC-31)
 
 
 class InvalidTokenError(AppException):
@@ -77,14 +77,9 @@ class HierarchyViolationError(AppException):
     def __init__(
         self, user_level: int, target_level: int, message: Optional[str] = None
     ) -> None:
-        default_message = f"Cannot assign role with higher hierarchy level ({target_level}) than your own ({user_level})"
         super().__init__(
-            message=message or default_message,
+            message=message or "Cannot assign a role above your own",
             status_code=403,
-            details={
-                "user_hierarchy_level": user_level,
-                "target_hierarchy_level": target_level,
-            },
         )
 
 
@@ -93,9 +88,9 @@ class DuplicateResourceError(AppException):
 
     def __init__(self, resource: str, field: str, value: str) -> None:
         super().__init__(
-            message=f"{resource} with {field}='{value}' already exists",
+            message=f"{resource} with this {field} already exists",
             status_code=409,
-            details={"resource": resource, "field": field, "value": value},
+            details={"resource": resource, "field": field},
         )
 
 
@@ -116,4 +111,38 @@ class ImmutableResourceError(AppException):
                 "identifier": identifier,
                 "reason": reason,
             },
+        )
+
+
+class ConflictError(AppException):
+    """409 with a machine-readable code."""
+
+    def __init__(self, message: str, code: str) -> None:
+        super().__init__(message=message, status_code=409, details={"code": code})
+
+
+class VersionConflictError(ConflictError):
+    """The record changed since the client read it (optimistic locking, AC-20)."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "This record was changed by someone else. Reload it and try again.",
+            "version_conflict",
+        )
+
+
+class IdempotencyKeyRequiredError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            message="Idempotency-Key header is required",
+            status_code=400,
+            details={"code": "idempotency_key_required"},
+        )
+
+
+class IdempotencyKeyReusedError(ConflictError):
+    def __init__(self) -> None:
+        super().__init__(
+            "This Idempotency-Key was already used with a different request",
+            "idempotency_key_reused",
         )

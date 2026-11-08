@@ -14,6 +14,7 @@ development database. It is rebuilt once per session unless TEST_DB_REUSE=1.
 from __future__ import annotations
 
 import os
+import uuid
 
 # Settings are read when app.* is imported, so the test environment is set first.
 TEST_DATABASE_URL = os.environ.get(
@@ -41,6 +42,14 @@ from tests.support.factories import UserFactory  # noqa: E402
 from tests.support.test_db import build_test_database  # noqa: E402
 
 API_DB_ROLE = "bookvault_api"
+CSRF_HEADER = "X-BookVault-Client"
+IDEMPOTENCY_HEADER = "Idempotency-Key"
+
+
+async def _add_idempotency_key(request: httpx.Request) -> None:
+    """Like the frontend api client: a fresh key per POST unless the test sets one."""
+    if request.method == "POST" and IDEMPOTENCY_HEADER not in request.headers:
+        request.headers[IDEMPOTENCY_HEADER] = str(uuid.uuid4())
 ASYNC_TEST_DATABASE_URL = TEST_DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 
 
@@ -100,7 +109,12 @@ async def client(db_conn: AsyncConnection) -> AsyncGenerator[httpx.AsyncClient, 
     app.dependency_overrides[get_db] = _get_test_db
     transport = httpx.ASGITransport(app=app)
     try:
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://test",
+            headers={CSRF_HEADER: "web"},
+            event_hooks={"request": [_add_idempotency_key]},
+        ) as http:
             yield http
     finally:
         app.dependency_overrides.pop(get_db, None)

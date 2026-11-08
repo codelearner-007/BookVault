@@ -50,6 +50,11 @@ async def _live_role(db_conn, user_id):
         " ORDER BY r.hierarchy_level DESC LIMIT 1"), {"u": user_id})).scalar_one_or_none()
 
 
+def _without_request_id(body: dict) -> dict:
+    """Error bodies carry a per-request id; the rest must be identical."""
+    return {k: v for k, v in body.items() if k != "request_id"}
+
+
 async def _audit_rows(db_conn, actor_id, action):
     rows = await db_conn.execute(text(
         "SELECT details FROM audit_logs WHERE user_id = CAST(:u AS uuid) AND action = :a"
@@ -115,7 +120,7 @@ async def test_create_user_refused_response_same_for_existing_bootstrap_and_bloc
     ), {"u": blocked.id})
     await _set_bootstrap(db_conn, "boss@bookvault-test.dev")
 
-    bodies = [(await _email_check(client, owner, business_id, email)).json()
+    bodies = [_without_request_id((await _email_check(client, owner, business_id, email)).json())
               for email in (owner.email, "Boss@BookVault-test.dev", blocked.email)]
 
     assert bodies[0] == bodies[1] == bodies[2]
@@ -162,7 +167,8 @@ async def test_edit_member_email_to_existing_or_bootstrap_email_refused(client, 
     bootstrap = await _action(client, owner, member.id, "edit", email="boss@bookvault-test.dev")
     same = await _action(client, owner, member.id, "edit", email=member.email)
 
-    assert existing.json() == bootstrap.json() and existing.json()["error"] == REFUSED
+    assert _without_request_id(existing.json()) == _without_request_id(bootstrap.json())
+    assert existing.json()["error"] == REFUSED
     assert same.status_code == 200
     assert len(await _audit_rows(db_conn, owner.id, "user_email_change_refused")) == 2
 

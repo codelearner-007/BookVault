@@ -1,53 +1,40 @@
-"""Business repository — data access layer for the businesses table."""
+"""Business repository: businesses and business_details."""
 
-from datetime import datetime, timezone
-
-from sqlalchemy import text, func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.admin_tab import AdminTab
 from app.models.business import Business
 from app.models.business_details import BusinessDetails
-from app.models.business_tab import BusinessTab
-from app.repositories.base_repository import BaseRepository
 
 
-class BusinessRepository(BaseRepository[Business]):
-    """Repository for Business CRUD and query operations."""
-
+class BusinessRepository:
     def __init__(self, session: AsyncSession) -> None:
-        super().__init__(Business, session)
+        self.session = session
 
-    async def list_deleted_by_owner(self, owner_id: str) -> list[Business]:
-        """Return all soft-deleted businesses owned by the given auth user."""
+    async def list_deleted_page(
+        self, owner_id: str, offset: int, limit: int
+    ) -> tuple[list[Business], int]:
+        """Soft-deleted businesses (Trash) of the owner."""
+        where = (Business.owner_id == owner_id, Business.deleted_at.is_not(None))
+        total = (
+            await self.session.execute(select(func.count()).select_from(Business).where(*where))
+        ).scalar_one()
         result = await self.session.execute(
-            select(Business)
-            .where(Business.owner_id == owner_id, Business.deleted_at.is_not(None))
-            .order_by(Business.deleted_at.desc())
+            select(Business).where(*where)
+            .order_by(Business.deleted_at.desc(), Business.id.desc())
+            .offset(offset)
+            .limit(limit)
         )
-        return list(result.scalars().all())
-
-    async def count_deleted_by_owner(self, owner_id: str) -> int:
-        """Return total count of soft-deleted businesses owned by the given auth user."""
-        result = await self.session.execute(
-            select(func.count()).select_from(Business).where(
-                Business.owner_id == owner_id, Business.deleted_at.is_not(None)
-            )
-        )
-        return result.scalar_one()
+        return list(result.scalars().all()), total
 
     async def get_by_owner(
         self, business_id: str, owner_id: str, include_deleted: bool = False
     ) -> Business | None:
-        """Return the owner's business, None otherwise. Soft-deleted ones only if include_deleted."""
-        query = select(Business).where(
-            Business.id == business_id,
-            Business.owner_id == owner_id,
-        )
+        """The owner's business; soft-deleted ones only if include_deleted."""
+        query = select(Business).where(Business.id == business_id, Business.owner_id == owner_id)
         if not include_deleted:
             query = query.where(Business.deleted_at.is_(None))
-        result = await self.session.execute(query)
-        return result.scalar_one_or_none()
+        return (await self.session.execute(query)).scalar_one_or_none()
 
     async def count_all_by_owner(self, owner_id: str) -> int:
         """How many businesses (active or soft-deleted) the user owns; caller is self or super admin.
@@ -60,69 +47,31 @@ class BusinessRepository(BaseRepository[Business]):
         )
         return int(result.scalar() or 0)
 
-    async def hard_delete(self, business_id: str, owner_id: str) -> None:
-        """Permanently delete a business from the database if it belongs to the given owner."""
-        business = await self.get_by_owner(business_id, owner_id, include_deleted=True)
-        if business:
-            await self.delete(business)
+    async def add(self, business: Business) -> None:
+        self.session.add(business)
+        await self.session.flush()
+        await self.session.refresh(business)
+
+    async def save(self, business: Business) -> None:
+        await self.session.flush()
+        await self.session.refresh(business)
+
+    async def delete(self, business: Business) -> None:
+        await self.session.delete(business)
+        await self.session.flush()
 
     async def get_details(self, business_id: str) -> BusinessDetails | None:
-        """Return the business_details row for the given business, or None."""
         result = await self.session.execute(
             select(BusinessDetails).where(BusinessDetails.business_id == business_id)
         )
         return result.scalar_one_or_none()
 
     async def upsert_details(self, business_id: str, address: str | None) -> BusinessDetails:
-        """Insert or update the business_details row for the given business."""
         details = await self.get_details(business_id)
         if details is None:
             details = BusinessDetails(business_id=business_id, address=address)
             self.session.add(details)
         else:
             details.address = address
-            details.updated_at = datetime.now(timezone.utc)
         await self.session.flush()
         return details
-
-    async def list_admin_tabs(self) -> list[AdminTab]:
-        """Return all admin tabs ordered by order_index then id."""
-        result = await self.session.execute(
-            select(AdminTab).order_by(AdminTab.order_index.asc(), AdminTab.id.asc())
-        )
-        return list(result.scalars().all())
-
-    async def get_admin_tab_by_key(self, key: str) -> AdminTab | None:
-        """Return a single admin tab by its unique key."""
-        result = await self.session.execute(
-            select(AdminTab).where(AdminTab.key == key)
-        )
-        return result.scalar_one_or_none()
-
-    async def delete_admin_tab_by_key(self, key: str) -> bool:
-        """Delete an admin tab by key. Returns True if deleted, False if not found."""
-        row = await self.get_admin_tab_by_key(key)
-        if row is None:
-            return False
-        await self.session.delete(row)
-        await self.session.flush()
-        return True
-
-    async def list_business_tabs(self, business_id: str) -> list[BusinessTab]:
-        """Return all tabs for a specific business ordered by order_index then id."""
-        result = await self.session.execute(
-            select(BusinessTab)
-            .where(BusinessTab.business_id == business_id)
-            .order_by(BusinessTab.order_index.asc(), BusinessTab.id.asc())
-        )
-        return list(result.scalars().all())
-
-    async def get_business_tab_by_key(self, business_id: str, key: str) -> BusinessTab | None:
-        """Return a single business tab matching both business_id and key."""
-        result = await self.session.execute(
-            select(BusinessTab).where(
-                BusinessTab.business_id == business_id,
-                BusinessTab.key == key,
-            )
-        )
-        return result.scalar_one_or_none()

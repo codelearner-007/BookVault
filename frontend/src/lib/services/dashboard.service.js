@@ -4,15 +4,11 @@
  * Handles dashboard statistics API calls
  */
 
-import { handleResponse } from './api-utils';
+import { apiClient } from './api-client';
 
 /**
  * Get dashboard statistics
  */
 export async function getDashboardStats() {
-  const response = await fetch('/api/v1/dashboard/stats', {
-    credentials: 'include',
-  });
-
-  return handleResponse(response);
+  return apiClient.get('/v1/dashboard/stats');
 }

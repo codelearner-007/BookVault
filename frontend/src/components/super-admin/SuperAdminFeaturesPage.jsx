@@ -23,6 +23,17 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { listAdminTabs, updateAdminTabs, deleteAdminTab } from '@/lib/services/business.service';
 
 /* ── Toggle ─────────────────────────────────────────────── */
+// PUT /admin-tabs replaces the catalog: send every field so defaults and parents survive.
+function toUpsertItem(tab) {
+  return {
+    key: tab.key,
+    label: tab.label,
+    enabled: tab.enabled,
+    default_enabled: tab.default_enabled ?? false,
+    parent_key: tab.parent_key ?? null,
+  };
+}
+
 function Toggle({ enabled, onChange, label, disabled }) {
   return (
     <button
@@ -292,7 +303,7 @@ export default function SuperAdminFeaturesPage() {
     setTabs(next); // optimistic
     setToggling(true);
     try {
-      await updateAdminTabs(next.map(t => ({ key: t.key, label: t.label, enabled: t.enabled })));
+      await updateAdminTabs(next.map(toUpsertItem));
     } catch {
       setTabs(tabs); // rollback
       setError('Failed to save. Please try again.');
@@ -307,7 +318,7 @@ export default function SuperAdminFeaturesPage() {
     const next = tabs.map((t, i) => i === idx ? { ...t, label: val } : t);
     setTabs(next);
     try {
-      await updateAdminTabs(next.map(t => ({ key: t.key, label: t.label, enabled: t.enabled })));
+      await updateAdminTabs(next.map(toUpsertItem));
     } catch {
       setTabs(tabs);
       setError('Failed to save label.');
@@ -318,7 +329,7 @@ export default function SuperAdminFeaturesPage() {
   async function handleReorderSave(ordered) {
     setReorderSaving(true);
     try {
-      await updateAdminTabs(ordered.map(t => ({ key: t.key, label: t.label, enabled: t.enabled })));
+      await updateAdminTabs(ordered.map(toUpsertItem));
       const data = await listAdminTabs();
       setTabs(data.items || []);
       setShowReorder(false);
@@ -339,7 +350,7 @@ export default function SuperAdminFeaturesPage() {
     setAdding(true);
     const next = [...tabs, { id: null, key, label, enabled: true, order_index: tabs.length }];
     try {
-      await updateAdminTabs(next.map(t => ({ key: t.key, label: t.label, enabled: t.enabled })));
+      await updateAdminTabs(next.map(toUpsertItem));
       const data = await listAdminTabs();
       setTabs(data.items || []);
       setNewLabel('');

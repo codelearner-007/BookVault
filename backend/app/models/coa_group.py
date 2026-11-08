@@ -4,10 +4,10 @@ from sqlalchemy import Boolean, ForeignKey, Integer, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, TimestampMixin
+from app.models.base import Base, TimestampMixin, VersionedMixin
 
 
-class CoaGroup(Base, TimestampMixin):
+class CoaGroup(Base, TimestampMixin, VersionedMixin):
     """A grouping node in the Chart of Accounts hierarchy."""
 
     __tablename__ = "coa_groups"

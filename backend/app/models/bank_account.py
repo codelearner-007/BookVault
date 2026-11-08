@@ -1,13 +1,15 @@
 """BankAccount model — bank and cash accounts linked to the Chart of Accounts."""
 
+from decimal import Decimal
+
 from sqlalchemy import ForeignKey, Numeric, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, TimestampMixin
+from app.models.base import Base, TimestampMixin, VersionedMixin
 
 
-class BankAccount(Base, TimestampMixin):
+class BankAccount(Base, TimestampMixin, VersionedMixin):
     """A bank or cash account linked to a COA account for a business."""
 
     __tablename__ = "bank_accounts"
@@ -24,11 +26,11 @@ class BankAccount(Base, TimestampMixin):
         index=True,
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
-    opening_balance: Mapped[object] = mapped_column(
-        Numeric(15, 2), nullable=False, default=0
+    opening_balance: Mapped[Decimal] = mapped_column(
+        Numeric(19, 4), nullable=False, default=0
     )
-    current_balance: Mapped[object] = mapped_column(
-        Numeric(15, 2), nullable=False, default=0
+    current_balance: Mapped[Decimal] = mapped_column(
+        Numeric(19, 4), nullable=False, default=0
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 

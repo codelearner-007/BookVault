@@ -12,6 +12,15 @@ class UserRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def my_account_state(self) -> tuple[bool, bool] | None:
+        """(is_banned, has_verified_factor) of the caller, read live; None if no account."""
+        row = (
+            await self.session.execute(
+                text("SELECT is_banned, has_verified_factor FROM public.my_account_state()")
+            )
+        ).first()
+        return (bool(row[0]), bool(row[1])) if row else None
+
     async def get_stats(self) -> Dict[str, int]:
         result = await self.session.execute(
             text("""

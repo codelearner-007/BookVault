@@ -1,65 +1,66 @@
-"""COA request schemas for input validation."""
+"""COA request schemas (strict; server-managed fields such as is_system are not accepted)."""
 
-from typing import Literal
+from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-_GroupPanelType = Literal["balance_sheet", "pl"]
-_AccountType = Literal["asset", "liability", "equity", "income", "expense", "total"]
-_CashFlow = Literal["operating", "investing", "financing", "cash_equivalent"] | None
+from app.schemas.common import (
+    LIST_MAX,
+    NAME_MAX,
+    IdStr,
+    OptionalCode,
+    OptionalText,
+    RequestModel,
+    ShortText,
+    VersionedRequest,
+)
 
-
-class CoaGroupCreate(BaseModel):
-    """Request body for creating a new COA group."""
-
-    name: str = Field(..., min_length=1)
-    type: _GroupPanelType
-    parent_group_id: str | None = None
-
-
-class CoaGroupUpdate(BaseModel):
-    """Request body for updating an existing COA group."""
-
-    name: str | None = Field(None, min_length=1)
-    parent_group_id: str | None = None
+GroupPanelType = Literal["balance_sheet", "pl"]
+AccountType = Literal["asset", "liability", "equity", "income", "expense", "total"]
+CashFlow = Literal["operating", "investing", "financing", "cash_equivalent"]
 
 
-class CoaAccountCreate(BaseModel):
-    """Request body for creating a new COA account."""
+class CoaGroupCreate(RequestModel):
+    name: ShortText
+    type: GroupPanelType
+    parent_group_id: Optional[IdStr] = None
 
-    name: str = Field(..., min_length=1)
-    code: str | None = None
-    group_id: str | None = None
-    cash_flow_category: _CashFlow = None
-    type: _AccountType = "income"
-    description: str | None = None
-    is_system: bool = False
+
+class CoaGroupUpdate(VersionedRequest):
+    """Rename and/or move; a missing or null parent_group_id leaves the parent unchanged."""
+
+    name: Optional[str] = Field(None, min_length=1, max_length=NAME_MAX)
+    parent_group_id: Optional[IdStr] = None
+
+
+class CoaAccountCreate(RequestModel):
+    name: ShortText
+    code: OptionalCode = None
+    group_id: Optional[IdStr] = None
+    cash_flow_category: Optional[CashFlow] = None
+    type: AccountType = "income"
+    description: OptionalText = None
     is_active: bool = True
 
 
-class CoaAccountUpdate(BaseModel):
-    """Request body for updating an existing COA account."""
+class CoaAccountUpdate(VersionedRequest):
+    """Partial update; only the fields sent are changed (code/group/cash flow/description may be cleared)."""
 
-    name: str | None = Field(None, min_length=1)
-    code: str | None = None
-    group_id: str | None = None
-    cash_flow_category: _CashFlow = None
-    type: _AccountType | None = None
-    description: str | None = None
-    is_system: bool | None = None
-    is_active: bool | None = None
-
-
-class CoaGroupsOrderUpdate(BaseModel):
-    """Request body for reordering COA groups within a type/parent bucket."""
-
-    type: _GroupPanelType
-    parent_group_id: str | None = None
-    items: list[str]
+    name: Optional[str] = Field(None, min_length=1, max_length=NAME_MAX)
+    code: OptionalCode = None
+    group_id: Optional[IdStr] = None
+    cash_flow_category: Optional[CashFlow] = None
+    type: Optional[AccountType] = None
+    description: OptionalText = None
+    is_active: Optional[bool] = None
 
 
-class CoaAccountsOrderUpdate(BaseModel):
-    """Request body for reordering COA accounts within a group."""
+class CoaGroupsOrderUpdate(RequestModel):
+    type: GroupPanelType
+    parent_group_id: Optional[IdStr] = None
+    items: list[IdStr] = Field(max_length=LIST_MAX)
 
-    group_id: str | None = None
-    items: list[str]
+
+class CoaAccountsOrderUpdate(RequestModel):
+    group_id: Optional[IdStr] = None
+    items: list[IdStr] = Field(max_length=LIST_MAX)

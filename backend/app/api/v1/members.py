@@ -1,16 +1,17 @@
 """Business members, per-area access (D-39), my access, presets and managed users (D-30)."""
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.access_rights import AREA_MEMBERS, AreaRight
-from app.core.config import settings
 from app.core.dependencies import (
     get_current_user,
     get_db,
     require_business_access,
     require_business_member,
+    require_idempotency_key,
 )
+from app.core.pagination import PageParams, page_params
 from app.schemas.auth import CurrentUser
 from app.schemas.request.member import (
     AddMemberRequest,
@@ -31,21 +32,23 @@ from app.schemas.response.member import (
 )
 from app.services.access_service import BusinessContext
 from app.services.audit_service import AuditService
+from app.services.idempotency_service import IdempotencyService, business_scope
 from app.services.managed_user_service import EmailRefusedError, ManagedUserService, hash_email
 from app.services.member_service import MemberService
 
 router = APIRouter(tags=["Members"])
 
 MEMBERS_PATH = "/businesses/{business_id}/members"
-AUDIT_MODULE = "members"
-
-Page = Query(1, ge=1)
-PageSize = Query(settings.PAGE_SIZE_DEFAULT, ge=1, le=settings.PAGE_SIZE_MAX)
+AUDIT_ENTITY = "Member"
 
 
-async def _audit(db: AsyncSession, actor: str, action: str, resource_id: str | None, **details) -> None:
-    await AuditService(db).log_action(
-        user_id=actor, action=action, module=AUDIT_MODULE, resource_id=resource_id, details=details
+async def _audit(
+    db: AsyncSession, actor: str, action: str, entity_id: str | None,
+    business_id: str | None = None, before=None, after=None, **details,
+) -> None:
+    await AuditService(db).record(
+        actor, action, AUDIT_ENTITY, entity_id, business_id,
+        before=before, after=after, details=details or None,
     )
 
 
@@ -54,25 +57,30 @@ async def _audit(db: AsyncSession, actor: str, action: str, resource_id: str | N
 
 @router.get(MEMBERS_PATH, response_model=MemberListResponse)
 async def list_members(
-    page: int = Page,
-    page_size: int = PageSize,
+    params: PageParams = Depends(page_params),
     ctx: BusinessContext = Depends(require_business_access(AREA_MEMBERS, AreaRight.VIEW)),
     db: AsyncSession = Depends(get_db),
 ) -> MemberListResponse:
-    return await MemberService(db).list_members(ctx, page, page_size)
+    return await MemberService(db).list_members(ctx, params.page, params.page_size)
 
 
 @router.post(MEMBERS_PATH, response_model=MemberResponse, status_code=status.HTTP_201_CREATED)
 async def add_member(
     body: AddMemberRequest,
+    key: str = Depends(require_idempotency_key),
     ctx: BusinessContext = Depends(require_business_access(AREA_MEMBERS, AreaRight.CREATE)),
     db: AsyncSession = Depends(get_db),
 ) -> MemberResponse:
     ManagedUserService(db).count_management_call(ctx.user_id)
-    member = await MemberService(db).add_member(ctx, body)
-    await _audit(db, ctx.user_id, "member_added", member.id, business_id=ctx.business_id,
-                 target_user_id=member.user_id, access_mode=member.access_mode)
-    return member
+
+    async def create() -> MemberResponse:
+        member = await MemberService(db).add_member(ctx, body)
+        await _audit(db, ctx.user_id, "member_added", member.id, ctx.business_id, after=member)
+        return member
+
+    return await IdempotencyService(db).run(
+        business_scope(ctx, key, AREA_MEMBERS, "POST members"), body, create
+    )
 
 
 @router.patch(f"{MEMBERS_PATH}/{{member_id}}", response_model=MemberResponse)
@@ -160,12 +168,13 @@ async def my_business_access(
 
 @router.get("/me/businesses", response_model=MyBusinessListResponse)
 async def my_businesses(
-    page: int = Page,
-    page_size: int = PageSize,
+    params: PageParams = Depends(page_params),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MyBusinessListResponse:
-    return await MemberService(db).list_my_businesses(current_user.user_id, page, page_size)
+    return await MemberService(db).list_my_businesses(
+        current_user.user_id, params.page, params.page_size
+    )
 
 
 @router.get(
@@ -173,8 +182,11 @@ async def my_businesses(
     response_model=AccessPresetListResponse,
     dependencies=[Depends(get_current_user)],
 )
-async def list_access_presets(db: AsyncSession = Depends(get_db)) -> AccessPresetListResponse:
-    return await MemberService(db).list_presets()
+async def list_access_presets(
+    params: PageParams = Depends(page_params),
+    db: AsyncSession = Depends(get_db),
+) -> AccessPresetListResponse:
+    return await MemberService(db).list_presets(params)
 
 
 # ---------------------------------------------------------------- managed users (creator only)
@@ -182,13 +194,14 @@ async def list_access_presets(db: AsyncSession = Depends(get_db)) -> AccessPrese
 
 @router.get("/managed-users", response_model=ManagedUserListResponse)
 async def list_managed_users(
-    page: int = Page,
-    page_size: int = PageSize,
+    params: PageParams = Depends(page_params),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ManagedUserListResponse:
     """The member accounts the caller created (the picker for 'add one of my users')."""
-    return await ManagedUserService(db).list_managed(current_user.user_id, page, page_size)
+    return await ManagedUserService(db).list_managed(
+        current_user.user_id, params.page, params.page_size
+    )
 
 
 @router.post("/managed-users/{user_id}/actions", response_model=ManagedUserResponse)

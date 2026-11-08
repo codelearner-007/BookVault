@@ -49,7 +49,7 @@ async def test_deleted_business_returns_404_on_all_routes(client, users, busines
     owner = await users.create()
     business = await create_business(client, owner)
     deleted = await client.delete(f"/api/v1/businesses/{business['id']}", headers=owner.headers)
-    assert deleted.status_code == 200, deleted.text
+    assert deleted.status_code == 204, deleted.text
 
     response = await request_as(client, owner, business_route, business["id"])
 

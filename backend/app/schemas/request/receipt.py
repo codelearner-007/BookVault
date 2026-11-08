@@ -1,55 +1,77 @@
-"""Receipt request schemas for input validation."""
+"""Receipt request schemas (strict; money as bounded Decimal)."""
 
 import datetime as dt
-from typing import Optional
+from decimal import Decimal
+from typing import Annotated, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from app.schemas.common import (
+    KEY_MAX,
+    LIST_MAX,
+    MONEY_DECIMAL_PLACES,
+    MONEY_LIMIT,
+    MONEY_MAX_DIGITS,
+    IdStr,
+    Money,
+    NonNegativeMoney,
+    OptionalName,
+    OptionalText,
+    OptionalUrl,
+    RequestModel,
+    VersionedRequest,
+)
+
+Quantity = Annotated[
+    Decimal,
+    Field(gt=0, max_digits=MONEY_MAX_DIGITS, decimal_places=MONEY_DECIMAL_PLACES, le=MONEY_LIMIT),
+]
+PaidByType = Literal["Contact", "Other"]
+ContactType = Literal["customer", "supplier"]
 
 
-class ReceiptLineItem(BaseModel):
-    """A single line item within a receipt."""
+class ReceiptLineItem(RequestModel):
+    """One receipt line. `total` is accepted for compatibility but always recomputed (AC-22)."""
 
-    account_id: str
-    line_description: Optional[str] = None
-    qty: Optional[float] = None
-    discount: Optional[float] = None
-    amount: float
-    total: float
+    account_id: str = Field(min_length=1, max_length=KEY_MAX)  # COA account id or "suspense"
+    line_description: OptionalText = None
+    qty: Optional[Quantity] = None
+    discount: Optional[NonNegativeMoney] = None
+    amount: Money
+    total: Optional[Money] = None
 
 
-class ReceiptCreate(BaseModel):
-    """Request body for creating a new receipt."""
-
+class ReceiptCreate(RequestModel):
     date: dt.date
-    reference: Optional[str] = None
-    paid_by_type: str = Field(default="Contact", pattern="^(Contact|Other)$")
-    paid_by_contact_id: Optional[str] = None
-    paid_by_contact_type: Optional[str] = None
-    paid_by_other: Optional[str] = None
-    received_in_account_id: Optional[str] = None
-    description: Optional[str] = None
-    lines: list[ReceiptLineItem] = Field(default_factory=list)
+    reference: OptionalName = None
+    paid_by_type: PaidByType = "Contact"
+    paid_by_contact_id: Optional[IdStr] = None
+    paid_by_contact_type: Optional[ContactType] = None
+    paid_by_other: OptionalName = None
+    received_in_account_id: Optional[IdStr] = None
+    description: OptionalText = None
+    lines: list[ReceiptLineItem] = Field(default_factory=list, max_length=LIST_MAX)
     show_line_number: bool = False
     show_description: bool = False
     show_qty: bool = False
     show_discount: bool = False
-    image_url: Optional[str] = None
+    image_url: OptionalUrl = None
 
 
-class ReceiptUpdate(BaseModel):
-    """Request body for partially updating a receipt's fields."""
+class ReceiptUpdate(VersionedRequest):
+    """Partial update; only the fields sent are changed."""
 
     date: Optional[dt.date] = None
-    reference: Optional[str] = None
-    paid_by_type: Optional[str] = Field(None, pattern="^(Contact|Other)$")
-    paid_by_contact_id: Optional[str] = None
-    paid_by_contact_type: Optional[str] = None
-    paid_by_other: Optional[str] = None
-    received_in_account_id: Optional[str] = None
-    description: Optional[str] = None
-    lines: Optional[list[ReceiptLineItem]] = None
+    reference: OptionalName = None
+    paid_by_type: Optional[PaidByType] = None
+    paid_by_contact_id: Optional[IdStr] = None
+    paid_by_contact_type: Optional[ContactType] = None
+    paid_by_other: OptionalName = None
+    received_in_account_id: Optional[IdStr] = None
+    description: OptionalText = None
+    lines: Optional[list[ReceiptLineItem]] = Field(None, max_length=LIST_MAX)
     show_line_number: Optional[bool] = None
     show_description: Optional[bool] = None
     show_qty: Optional[bool] = None
     show_discount: Optional[bool] = None
-    image_url: Optional[str] = None
+    image_url: OptionalUrl = None

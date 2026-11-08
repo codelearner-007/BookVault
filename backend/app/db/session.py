@@ -48,7 +48,7 @@ class SessionManager:
             pool_timeout=30,
             pool_recycle=1800,
             pool_pre_ping=True,
-            echo=settings.ENVIRONMENT == "development",
+            echo=settings.DB_ECHO,
         )
 
         self.async_session_maker = sessionmaker(

@@ -19,15 +19,15 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { listMyAuditLogs } from '@/lib/services/audit.service';
+import { listBusinessHistory } from '@/lib/services/audit.service';
 
 const PAGE_SIZE = 20;
 
 const ACTION_OPTIONS = [
   { value: '', label: 'All Actions' },
-  { value: 'Create', label: 'Create' },
-  { value: 'Update', label: 'Update' },
-  { value: 'Delete', label: 'Delete' },
+  { value: 'create', label: 'Create' },
+  { value: 'update', label: 'Update' },
+  { value: 'delete', label: 'Delete' },
 ];
 
 const ACTION_BADGE_VARIANTS = {
@@ -100,19 +100,42 @@ const FIELD_LABELS = {
   owner_id: 'Owner ID',
 };
 
+// Bookkeeping columns of the before/after snapshots that are not shown as changes.
+const HIDDEN_FIELDS = new Set(['id', 'business_id', 'owner_id', 'version', 'created_at', 'updated_at', 'deleted_at']);
+
+function formatValue(value) {
+  if (value === null || value === undefined || value === '') return '—';
+  return typeof value === 'object' ? JSON.stringify(value) : String(value);
+}
+
+// One row per field whose value differs between the before and after snapshots.
+function changeRows(log) {
+  const before = log.before ?? {};
+  const after = log.after ?? {};
+  const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])];
+  return keys
+    .filter((key) => !HIDDEN_FIELDS.has(key))
+    .map((key) => ({ key, before: formatValue(before[key]), after: formatValue(after[key]) }))
+    .filter((row) => row.before !== row.after);
+}
+
+function recordName(log) {
+  return log.after?.name ?? log.before?.name ?? log.details?.name ?? null;
+}
+
 function DetailsDialog({ open, onOpenChange, log }) {
   if (!log) return null;
 
   const action = (log.action ?? '').toLowerCase();
   const colors = ACTION_COLORS[action] ?? { bg: 'bg-muted', text: 'text-foreground', border: 'border-border' };
-  const details = log.details ?? {};
-  const { business_id: _biz, description: _desc, owner_id: _owner, ...fields } = details;
-
-  const displayFields = Object.entries(fields).filter(([, v]) => v !== null && v !== undefined && v !== '');
+  const name = recordName(log);
+  const changes = changeRows(log);
+  const displayFields = Object.entries(log.details ?? {})
+    .filter(([key, v]) => !HIDDEN_FIELDS.has(key) && v !== null && v !== undefined && v !== '');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-base">Activity Detail</DialogTitle>
         </DialogHeader>
@@ -121,7 +144,7 @@ function DetailsDialog({ open, onOpenChange, log }) {
         <div className={`rounded-lg border px-4 py-3 ${colors.bg} ${colors.border}`}>
           <p className={`text-xs font-semibold uppercase tracking-wide ${colors.text}`}>{log.action}</p>
           <p className="text-sm font-medium text-foreground mt-0.5">
-            {log.module}{details.name ? ` — ${details.name}` : ''}
+            {log.entity_type}{name ? ` — ${name}` : ''}
           </p>
           <p className="text-xs text-muted-foreground mt-1">{formatTimestamp(log.created_at)}</p>
         </div>
@@ -133,6 +156,32 @@ function DetailsDialog({ open, onOpenChange, log }) {
         </div>
 
         {/* What changed */}
+        {changes.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Changes</p>
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-muted/30 border-b border-border">
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Field</th>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Before</th>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">After</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {changes.map((row) => (
+                    <tr key={row.key}>
+                      <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{FIELD_LABELS[row.key] ?? row.key}</td>
+                      <td className="px-3 py-2 text-muted-foreground break-all">{row.before}</td>
+                      <td className="px-3 py-2 text-foreground break-all">{row.after}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {displayFields.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Details</p>
@@ -143,7 +192,7 @@ function DetailsDialog({ open, onOpenChange, log }) {
                     {FIELD_LABELS[key] ?? key}
                   </span>
                   <span className="text-xs text-foreground text-right break-all">
-                    {typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                    {formatValue(val)}
                   </span>
                 </div>
               ))}
@@ -162,10 +211,10 @@ function DetailsDialog({ open, onOpenChange, log }) {
 }
 
 function buildDescription(log) {
-  const name = log.details?.name;
-  if (name) return `${log.module} — ${name}`;
-  if (log.details?.description) return `${log.module} — ${log.details.description}`;
-  return log.module ?? '—';
+  const name = recordName(log);
+  if (name) return `${log.entity_type} — ${name}`;
+  if (log.details?.description) return `${log.entity_type} — ${log.details.description}`;
+  return log.entity_type ?? '—';
 }
 
 export default function BusinessHistory({ business }) {
@@ -183,11 +232,9 @@ export default function BusinessHistory({ business }) {
     setIsLoading(true);
     setError(null);
     try {
-      const params = { business_id: business.id, page: p, page_size: PAGE_SIZE };
-      if (action) params.action = action;
-      const data = await listMyAuditLogs(params);
-      setLogs(data?.items ?? []);
-      setTotal(data?.total ?? 0);
+      const data = await listBusinessHistory(business.id, { page: p, page_size: PAGE_SIZE, action });
+      setLogs(data.items);
+      setTotal(data.total);
     } catch (err) {
       setError(err?.message ?? 'Failed to load history.');
     } finally {

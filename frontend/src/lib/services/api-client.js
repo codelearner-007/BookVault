@@ -1,3 +1,4 @@
+import { CLIENT_HEADER } from '@/lib/config';
 import { toErrorMessage } from '@/lib/utils/api-errors';
 import { createSPAClient } from '@/lib/supabase/client';
 
@@ -18,6 +19,34 @@ async function getAccessToken() {
   }
 }
 
+export const VERSION_CONFLICT = 'version_conflict';
+const VERSION_CONFLICT_MESSAGE = 'This record was changed by someone else. Reload and try again.';
+
+function errorMessage(error) {
+  if (error?.details?.code === VERSION_CONFLICT) return VERSION_CONFLICT_MESSAGE;
+  const fieldErrors = error?.details?.errors;
+  if (Array.isArray(fieldErrors) && fieldErrors.length > 0) {
+    return fieldErrors.map((e) => `${(e.loc ?? []).filter((part) => part !== 'body').join('.')}: ${e.msg}`).join('; ');
+  }
+  if (typeof error?.error === 'string') return error.error;
+  if (typeof error?.message === 'string') return error.message;
+  return toErrorMessage(error?.error ?? error);
+}
+
+// Error body: { error, status_code, details, request_id }; details.code names the failure kind.
+function toApiError(error, status) {
+  const errorObj = new Error(errorMessage(error));
+  errorObj.status = status;
+  errorObj.code = error?.details?.code;
+  errorObj.details = error?.details;
+  if (error?.requiresMFA) errorObj.requiresMFA = true;
+  return errorObj;
+}
+
+export function isVersionConflict(err) {
+  return err?.code === VERSION_CONFLICT;
+}
+
 class APIClient {
   baseUrl = '/api';
 
@@ -29,6 +58,7 @@ class APIClient {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...CLIENT_HEADER,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options?.headers,
       },
@@ -36,22 +66,7 @@ class APIClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Request failed' }));
-      let errorMessage;
-      if (typeof error?.error === 'string') {
-        errorMessage = error.error;
-      } else if (typeof error?.message === 'string') {
-        errorMessage = error.message;
-      } else {
-        errorMessage = toErrorMessage(error?.error ?? error);
-      }
-      const errorObj = new Error(errorMessage);
-
-      // Pass through requiresMFA flag if present
-      if (error.requiresMFA) {
-        errorObj.requiresMFA = true;
-      }
-
-      throw errorObj;
+      throw toApiError(error, response.status);
     }
 
     if (response.status === 204 || response.headers.get('content-length') === '0') {
@@ -64,10 +79,12 @@ class APIClient {
     return this.request(path, { method: 'GET' });
   }
 
-  async post(path, data) {
+  // Create routes require an Idempotency-Key; pass { idempotencyKey } to retry the same create safely.
+  async post(path, data, { idempotencyKey = crypto.randomUUID() } = {}) {
     return this.request(path, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
+      headers: { 'Idempotency-Key': idempotencyKey },
     });
   }
 

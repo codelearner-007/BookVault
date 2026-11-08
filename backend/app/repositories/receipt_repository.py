@@ -1,10 +1,9 @@
-"""Receipt repository — data access layer for the receipts table."""
+"""Receipt repository: the receipts table (lines in jsonb until B3)."""
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.receipt import Receipt
-from app.repositories.base_repository import BaseRepository
 
 # Columns selected for enriched read queries (no SELECT *)
 _RECEIPT_COLS = """
@@ -24,6 +23,7 @@ _RECEIPT_COLS = """
     r.show_qty,
     r.show_discount,
     r.image_url,
+    r.version,
     r.created_at,
     r.updated_at,
     ba.name  AS received_in_account_name,
@@ -42,89 +42,42 @@ _ENRICHED_JOINS = """
                                 AND r.paid_by_contact_type = 'supplier'
 """
 
+_CONTACT_FILTER = (
+    " AND r.paid_by_contact_type = :contact_type AND r.paid_by_contact_id = CAST(:contact_id AS uuid)"
+)
 
-class ReceiptRepository(BaseRepository[Receipt]):
-    """Repository for Receipt CRUD and query operations."""
 
+class ReceiptRepository:
     def __init__(self, session: AsyncSession) -> None:
-        super().__init__(Receipt, session)
-
-    async def list_by_business(self, business_id: str) -> list[Receipt]:
-        """Return all receipts for the given business, ordered by date DESC then created_at DESC."""
-        result = await self.session.execute(
-            select(Receipt)
-            .where(Receipt.business_id == business_id)
-            .order_by(Receipt.date.desc(), Receipt.created_at.desc())
-        )
-        return list(result.scalars().all())
+        self.session = session
 
     async def get(self, business_id: str, receipt_id: str) -> Receipt | None:
-        """Return a single receipt matching both business_id and receipt_id."""
         result = await self.session.execute(
-            select(Receipt).where(
-                Receipt.business_id == business_id,
-                Receipt.id == receipt_id,
-            )
+            select(Receipt).where(Receipt.business_id == business_id, Receipt.id == receipt_id)
         )
         return result.scalar_one_or_none()
 
-    async def create(self, business_id: str, **fields: object) -> Receipt:
-        """Insert a new receipt and return the persisted instance."""
-        receipt = Receipt(business_id=business_id, **fields)
+    async def add(self, receipt: Receipt) -> None:
         self.session.add(receipt)
         await self.session.flush()
-        await self.session.refresh(receipt)
-        return receipt
 
-    async def update(
-        self,
-        business_id: str,
-        receipt_id: str,
-        **fields: object,
-    ) -> Receipt | None:
-        """Update mutable fields on a receipt. Returns None if not found.
-
-        Only fields present in `fields` are applied. Passing a key with
-        value None explicitly clears that field.
-        """
-        receipt = await self.get(business_id, receipt_id)
-        if receipt is None:
-            return None
-        for key, value in fields.items():
-            setattr(receipt, key, value)
+    async def save(self) -> None:
         await self.session.flush()
-        await self.session.refresh(receipt)
-        return receipt
 
-    async def delete(self, business_id: str, receipt_id: str) -> bool:
-        """Delete a receipt. Returns True if deleted, False if not found."""
-        receipt = await self.get(business_id, receipt_id)
-        if receipt is None:
-            return False
+    async def delete(self, receipt: Receipt) -> None:
         await self.session.delete(receipt)
         await self.session.flush()
-        return True
 
-    # ------------------------------------------------------------------
-    # Enriched read methods — return dicts with resolved name fields.
-    # These are used only by read (GET) endpoints; write operations use
-    # the ORM-based methods above.
-    # ------------------------------------------------------------------
-
-    async def _inject_account_names(
-        self, business_id: str, rows: list[dict]
-    ) -> list[dict]:
-        """Batch-fetch COA account names and inject into each row's lines."""
-        account_ids: set[str] = set()
-        for row in rows:
-            for line in row.get("lines") or []:
-                aid = line.get("account_id")
-                if aid:
-                    account_ids.add(aid)
-
+    async def _inject_account_names(self, business_id: str, rows: list[dict]) -> list[dict]:
+        """Batch-fetch COA account names and inject them into each row's lines."""
+        account_ids = {
+            line["account_id"]
+            for row in rows
+            for line in row.get("lines") or []
+            if line.get("account_id")
+        }
         if not account_ids:
             return rows
-
         result = await self.session.execute(
             text(
                 "SELECT id::text, name FROM coa_accounts"
@@ -133,39 +86,46 @@ class ReceiptRepository(BaseRepository[Receipt]):
             {"business_id": business_id, "ids": list(account_ids)},
         )
         name_map: dict[str, str] = {r.id: r.name for r in result}
-
         for row in rows:
-            enriched_lines = []
-            for line in row.get("lines") or []:
-                aid = line.get("account_id")
-                enriched_lines.append(
-                    {**line, "account_name": name_map.get(aid) if aid else None}
-                )
-            row["lines"] = enriched_lines
-
+            row["lines"] = [
+                {**line, "account_name": name_map.get(line.get("account_id"))}
+                for line in row.get("lines") or []
+            ]
         return rows
 
-    async def list_with_names(self, business_id: str) -> list[dict]:
-        """Return all receipts for the business with resolved name fields."""
-        sql = text(
-            f"SELECT {_RECEIPT_COLS} {_ENRICHED_JOINS}"
-            "WHERE r.business_id = :business_id "
-            "ORDER BY r.date DESC, r.created_at DESC"
-        )
-        result = await self.session.execute(sql, {"business_id": business_id})
-        rows = [dict(r._mapping) for r in result]
-        return await self._inject_account_names(business_id, rows)
-
-    async def get_with_names(
-        self, business_id: str, receipt_id: str
-    ) -> dict | None:
-        """Return a single receipt with resolved name fields, or None."""
-        sql = text(
-            f"SELECT {_RECEIPT_COLS} {_ENRICHED_JOINS}"
-            "WHERE r.business_id = :business_id AND r.id = :receipt_id"
-        )
+    async def list_page(
+        self,
+        business_id: str,
+        offset: int,
+        limit: int,
+        contact: tuple[str, str] | None = None,
+    ) -> tuple[list[dict], int]:
+        """A page of receipts with resolved names; optionally only one contact's receipts."""
+        params: dict = {"business_id": business_id, "offset": offset, "limit": limit}
+        where = "WHERE r.business_id = :business_id"
+        if contact:
+            where += _CONTACT_FILTER
+            params.update(contact_type=contact[0], contact_id=contact[1])
+        total = (
+            await self.session.execute(text(f"SELECT count(*) FROM receipts r {where}"), params)
+        ).scalar_one()
         result = await self.session.execute(
-            sql, {"business_id": business_id, "receipt_id": receipt_id}
+            text(
+                f"SELECT {_RECEIPT_COLS} {_ENRICHED_JOINS} {where}"
+                " ORDER BY r.date DESC, r.created_at DESC, r.id DESC OFFSET :offset LIMIT :limit"
+            ),
+            params,
+        )
+        rows = [dict(r._mapping) for r in result]
+        return await self._inject_account_names(business_id, rows), total
+
+    async def get_with_names(self, business_id: str, receipt_id: str) -> dict | None:
+        result = await self.session.execute(
+            text(
+                f"SELECT {_RECEIPT_COLS} {_ENRICHED_JOINS}"
+                " WHERE r.business_id = :business_id AND r.id = CAST(:receipt_id AS uuid)"
+            ),
+            {"business_id": business_id, "receipt_id": receipt_id},
         )
         row = result.first()
         if row is None:

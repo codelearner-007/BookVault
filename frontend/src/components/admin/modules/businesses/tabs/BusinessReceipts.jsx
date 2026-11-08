@@ -62,8 +62,15 @@ import {
   deleteReceipt,
   getReceipt,
 } from '@/lib/services/receipts.service';
-import { apiClient } from '@/lib/services/api-client';
+import { isVersionConflict } from '@/lib/services/api-client';
 import { getTabColumns, updateTabColumns } from '@/lib/services/business.service';
+import { listBankAccounts } from '@/lib/services/bank-accounts.service';
+import { listCoaAccounts } from '@/lib/services/coa.service';
+import { listCustomers } from '@/lib/services/customers.service';
+import { listSuppliers } from '@/lib/services/suppliers.service';
+import { formatMoney, sumMoney } from '@/lib/utils/money';
+
+const RECEIPTS_TAB = 'receipts';
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
@@ -75,10 +82,6 @@ function formatDate(iso) {
   if (!iso) return '—';
   const [y, m, d] = iso.slice(0, 10).split('-');
   return `${parseInt(d)}/${parseInt(m)}/${y}`;
-}
-
-function sumLines(lines) {
-  return lines.reduce((acc, l) => acc + (parseFloat(l.total) || 0), 0);
 }
 
 function emptyLine() {
@@ -169,7 +172,7 @@ const DEFAULT_COLS = [
 
 /* ── Receipt form (create / edit) ────────────────────────────────────────── */
 
-function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial, bankAccounts, coaAccounts, customers, suppliers }) {
+function ReceiptForm({ businessId, onSaved, onCancel, onDelete, onConflict, initial, initialError = null, bankAccounts, coaAccounts, customers, suppliers }) {
   const isEdit = !!initial?.id;
 
   // Core fields
@@ -204,15 +207,16 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial, bankAcc
 
   // Remote state
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(initialError);
 
   /* ── Line management ─────────────────────────────────────────────────── */
 
+  // Client preview only: the server recomputes every line total on save.
   function calcTotal(line) {
     const amount = parseFloat(line.amount) || 0;
     const qty = parseFloat(line.qty) || 1;
     const discount = parseFloat(line.discount) || 0;
-    return amount * qty - discount;
+    return Math.round((amount * qty - discount) * 100) / 100;
   }
 
   function updateLine(id, field, value) {
@@ -269,33 +273,31 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial, bankAcc
       show_discount: showDiscount,
       lines: lines
         .filter((l) => l.account_id || parseFloat(l.amount))
-        .map(({ id: _id, ...rest }) => ({
-          account_id: rest.account_id,
-          line_description: rest.line_description?.trim() || null,
-          qty: rest.qty !== '' && rest.qty != null ? parseFloat(rest.qty) || null : null,
-          discount: rest.discount !== '' && rest.discount != null ? parseFloat(rest.discount) || null : null,
-          amount: parseFloat(rest.amount) || 0,
-          total: parseFloat(rest.total) || 0,
+        // Money goes as decimal strings; the line total is computed by the server.
+        .map((line) => ({
+          account_id: line.account_id,
+          line_description: line.line_description?.trim() || null,
+          qty: String(line.qty ?? '').trim() || null,
+          discount: String(line.discount ?? '').trim() || null,
+          amount: String(line.amount ?? '').trim() || '0',
         })),
     };
 
     setSaving(true);
     try {
-      if (isEdit) {
-        const updated = await updateReceipt(businessId, initial.id, payload);
-        onSaved(updated);
-      } else {
-        await createReceipt(businessId, payload);
-        onSaved();
-      }
+      const saved = isEdit
+        ? await updateReceipt(businessId, initial.id, { ...payload, version: initial.version })
+        : await createReceipt(businessId, payload);
+      onSaved(saved);
     } catch (err) {
       setError(err?.message ?? 'Failed to save receipt.');
+      if (isVersionConflict(err)) onConflict?.(err.message);
     } finally {
       setSaving(false);
     }
   }
 
-  const grandTotal = sumLines(lines);
+  const grandTotal = sumMoney(lines.map((l) => l.total));
 
   return (
     <div className="space-y-6 pb-8 max-w-2xl">
@@ -610,7 +612,7 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial, bankAcc
                     </td>
                   )}
                   <td className="px-3 py-1.5 border-r border-border text-right text-xs tabular-nums text-foreground">
-                    {(parseFloat(line.total) || 0).toFixed(2)}
+                    {formatMoney(line.total || 0)}
                   </td>
                   <td className="px-2 py-1.5 text-center">
                     <Button
@@ -644,7 +646,7 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial, bankAcc
                   Grand Total
                 </td>
                 <td className="px-3 py-2 text-right text-sm font-semibold text-foreground tabular-nums">
-                  {grandTotal.toFixed(2)}
+                  {formatMoney(grandTotal)}
                 </td>
                 <td />
               </tr>
@@ -812,23 +814,32 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, initial, bankAcc
 
 /* ── Delete confirm dialog ───────────────────────────────────────────────── */
 
-function DeleteDialog({ open, onOpenChange, businessId, receipt, onDeleted }) {
+function DeleteDialog({ open, onOpenChange, businessId, receipt, onDeleted, onStale }) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
+  const [version, setVersion] = useState(null);
 
   useEffect(() => {
-    if (open) setError(null);
-  }, [open]);
+    if (open) {
+      setError(null);
+      setVersion(receipt?.version ?? null);
+    }
+  }, [open, receipt]);
 
   async function handleDelete() {
     setDeleting(true);
     setError(null);
     try {
-      await deleteReceipt(businessId, receipt.id);
+      await deleteReceipt(businessId, receipt.id, version);
       onDeleted();
       onOpenChange(false);
     } catch (err) {
       setError(err?.message ?? 'Failed to delete receipt.');
+      if (isVersionConflict(err)) {
+        const fresh = await getReceipt(businessId, receipt.id).catch(() => null);
+        if (fresh) setVersion(fresh.version);
+        onStale?.();
+      }
     } finally {
       setDeleting(false);
     }
@@ -946,10 +957,8 @@ function ReceiptViewInfo({ receipt }) {
   );
 }
 
-function ReceiptViewLines({ lines, showLineNumber, showDescription, showQty, showDiscount }) {
+function ReceiptViewLines({ lines, total, showLineNumber, showDescription, showQty, showDiscount }) {
   if (!Array.isArray(lines) || lines.length === 0) return null;
-
-  const grandTotal = sumLines(lines);
 
   return (
     <div className="rounded-lg border border-border overflow-hidden overflow-x-auto">
@@ -989,19 +998,19 @@ function ReceiptViewLines({ lines, showLineNumber, showDescription, showQty, sho
               )}
               {showQty && (
                 <td className="px-3 py-2.5 text-right text-foreground border-r border-border tabular-nums">
-                  {parseFloat(line.qty || 1).toFixed(2)}
+                  {formatMoney(line.qty ?? 1)}
                 </td>
               )}
               <td className="px-4 py-2.5 text-right text-foreground border-r border-border tabular-nums">
-                {parseFloat(line.amount || 0).toFixed(2)}
+                {formatMoney(line.amount)}
               </td>
               {showDiscount && (
                 <td className="px-4 py-2.5 text-right text-muted-foreground border-r border-border tabular-nums">
-                  {parseFloat(line.discount || 0).toFixed(2)}
+                  {formatMoney(line.discount ?? 0)}
                 </td>
               )}
               <td className="px-4 py-2.5 text-right text-foreground tabular-nums font-medium">
-                {parseFloat(line.total || 0).toFixed(2)}
+                {formatMoney(line.total)}
               </td>
             </tr>
           ))}
@@ -1021,7 +1030,7 @@ function ReceiptViewLines({ lines, showLineNumber, showDescription, showQty, sho
               Grand Total
             </td>
             <td className="px-4 py-2 text-right">
-              <span className="text-sm font-bold text-foreground tabular-nums">{grandTotal.toFixed(2)}</span>
+              <span className="text-sm font-bold text-foreground tabular-nums">{formatMoney(total)}</span>
             </td>
           </tr>
         </tfoot>
@@ -1075,6 +1084,7 @@ function ReceiptView({ receipt, onBack, onEdit, onClone }) {
 
       <ReceiptViewLines
         lines={receipt.lines}
+        total={receipt.total}
         showLineNumber={receipt.show_line_number}
         showDescription={receipt.show_description}
         showQty={receipt.show_qty}
@@ -1098,6 +1108,8 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
   const [search, setSearch] = useState('');
 
   const [deleteTarget, setDeleteTarget] = useState(null);
+  // Message of a version conflict on the edit form, shown again after the record reloads.
+  const [editNotice, setEditNotice] = useState(null);
 
   // Focused receipt: populated from the list or fetched individually on hard refresh
   const [focusedReceipt, setFocusedReceipt] = useState(null);
@@ -1123,16 +1135,14 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
     if (formData.loaded) return;
     try {
       const [bankRes, coaRes, custRes, suppRes] = await Promise.all([
-        apiClient.get(`/v1/businesses/${business.id}/bank-accounts`).catch(() => null),
-        apiClient.get(`/v1/businesses/${business.id}/chart-of-accounts/accounts`).catch(() => null),
-        apiClient.get(`/v1/businesses/${business.id}/customers`).catch(() => null),
-        apiClient.get(`/v1/businesses/${business.id}/suppliers`).catch(() => null),
+        listBankAccounts(business.id).catch(() => null),
+        listCoaAccounts(business.id).catch(() => null),
+        listCustomers(business.id).catch(() => null),
+        listSuppliers(business.id).catch(() => null),
       ]);
       setFormData({
-        bankAccounts: bankRes?.items ?? (Array.isArray(bankRes) ? bankRes : []),
-        coaAccounts: (coaRes?.items ?? (Array.isArray(coaRes) ? coaRes : [])).filter(
-          (a) => ['income', 'expense'].includes(a.type)
-        ),
+        bankAccounts: bankRes?.items ?? [],
+        coaAccounts: (coaRes?.items ?? []).filter((a) => ['income', 'expense'].includes(a.type)),
         customers: custRes?.items ?? [],
         suppliers: suppRes?.items ?? [],
         loaded: true,
@@ -1148,17 +1158,16 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
 
   useEffect(() => {
     if (bankRefreshKey === 0) return;
-    apiClient.get(`/v1/businesses/${business.id}/bank-accounts`).then((bankRes) => {
-      const accounts = bankRes?.items ?? (Array.isArray(bankRes) ? bankRes : []);
-      setFormData((prev) => ({ ...prev, bankAccounts: accounts }));
+    listBankAccounts(business.id).then((bankRes) => {
+      setFormData((prev) => ({ ...prev, bankAccounts: bankRes.items }));
     }).catch(() => {});
   }, [bankRefreshKey, business.id]);
 
   /* ── Navigation helpers ─────────────────────────────────────────────── */
-  const goList   = useCallback(() => router.push('?tab=receipt'), [router]);
-  const goCreate = useCallback(() => router.push('?tab=receipt&page=create'), [router]);
-  const goEdit   = useCallback((id) => router.push(`?tab=receipt&page=edit&id=${id}`), [router]);
-  const goView   = useCallback((id) => router.push(`?tab=receipt&page=view&id=${id}`), [router]);
+  const goList   = useCallback(() => router.push(`?tab=${RECEIPTS_TAB}`), [router]);
+  const goCreate = useCallback(() => router.push(`?tab=${RECEIPTS_TAB}&page=create`), [router]);
+  const goEdit   = useCallback((id) => router.push(`?tab=${RECEIPTS_TAB}&page=edit&id=${id}`), [router]);
+  const goView   = useCallback((id) => router.push(`?tab=${RECEIPTS_TAB}&page=view&id=${id}`), [router]);
 
   const goClone = useCallback((receiptData) => {
     const {
@@ -1168,6 +1177,8 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
       business_id: _bid,
       paid_by_name: _pbn,
       received_in_account_name: _rian,
+      version: _version,
+      total: _total,
       ...cloneFields
     } = receiptData;
     setCloneSource({
@@ -1191,9 +1202,9 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
     try {
       const [data, colRes] = await Promise.all([
         listReceipts(business.id),
-        getTabColumns(business.id, 'receipt').catch(() => null),
+        getTabColumns(business.id, RECEIPTS_TAB).catch(() => null),
       ]);
-      setReceipts(Array.isArray(data) ? data : (data?.items ?? []));
+      setReceipts(data.items);
       const saved = colRes?.columns;
       if (Array.isArray(saved) && saved.length > 0) {
         const sorted = [...saved].sort((a, b) => a.order_index - b.order_index);
@@ -1264,7 +1275,8 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
           onOpenChange={(v) => !v && setDeleteTarget(null)}
           businessId={business.id}
           receipt={deleteTarget}
-          onDeleted={() => { setDeleteTarget(null); fetchReceipts(); onBankRefresh?.(); goList(); }}
+          onDeleted={() => { setDeleteTarget(null); setEditNotice(null); fetchReceipts(); onBankRefresh?.(); goList(); }}
+          onStale={fetchReceipts}
         />
         <ReceiptView
           receipt={receipt}
@@ -1287,15 +1299,18 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
           onOpenChange={(v) => !v && setDeleteTarget(null)}
           businessId={business.id}
           receipt={deleteTarget}
-          onDeleted={() => { setDeleteTarget(null); fetchReceipts(); onBankRefresh?.(); goList(); }}
+          onDeleted={() => { setDeleteTarget(null); setEditNotice(null); fetchReceipts(); onBankRefresh?.(); goList(); }}
+          onStale={fetchReceipts}
         />
         <ReceiptForm
-          key={receipt.id}
+          key={`${receipt.id}-${receipt.version}`}
           businessId={business.id}
-          onSaved={(updated) => { fetchReceipts(); onBankRefresh?.(); goView(updated.id); }}
-          onCancel={() => goView(receipt.id)}
+          onSaved={(updated) => { setEditNotice(null); fetchReceipts(); onBankRefresh?.(); goView(updated.id); }}
+          onCancel={() => { setEditNotice(null); goView(receipt.id); }}
           onDelete={() => setDeleteTarget(receipt)}
+          onConflict={(message) => { setEditNotice(message); fetchReceipts(); }}
           initial={receipt}
+          initialError={editNotice}
           bankAccounts={formData.bankAccounts}
           coaAccounts={formData.coaAccounts}
           customers={formData.customers}
@@ -1400,9 +1415,7 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
               </tr>
             ) : (
               filtered.map((receipt) => {
-                const total = Array.isArray(receipt.lines)
-                  ? sumLines(receipt.lines)
-                  : (receipt.total ?? 0);
+                const lines = receipt.lines ?? [];
                 return (
                   <tr
                     key={receipt.id}
@@ -1476,29 +1489,25 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
                         );
                       }
                       if (col.key === 'qty') {
-                        const totalQty = Array.isArray(receipt.lines)
-                          ? receipt.lines.reduce((acc, l) => acc + (parseFloat(l.qty) || 0), 0)
-                          : 0;
+                        const hasQty = lines.some((l) => l.qty);
                         return (
                           <td key="qty" className="px-4 py-2.5 text-right text-muted-foreground tabular-nums border-r border-border whitespace-nowrap">
-                            {totalQty > 0 ? totalQty.toFixed(2) : '—'}
+                            {hasQty ? formatMoney(sumMoney(lines.map((l) => l.qty))) : '—'}
                           </td>
                         );
                       }
                       if (col.key === 'discount') {
-                        const totalDiscount = Array.isArray(receipt.lines)
-                          ? receipt.lines.reduce((acc, l) => acc + (parseFloat(l.discount) || 0), 0)
-                          : 0;
+                        const totalDiscount = sumMoney(lines.map((l) => l.discount));
                         return (
                           <td key="discount" className="px-4 py-2.5 text-right text-muted-foreground tabular-nums border-r border-border whitespace-nowrap">
-                            {totalDiscount > 0 ? totalDiscount.toFixed(2) : '—'}
+                            {Number(totalDiscount) > 0 ? formatMoney(totalDiscount) : '—'}
                           </td>
                         );
                       }
                       if (col.key === 'amount') {
                         return (
                           <td key="amount" className="px-4 py-2.5 text-right text-foreground tabular-nums border-r border-border whitespace-nowrap">
-                            {total.toFixed(2)}
+                            {formatMoney(receipt.total)}
                           </td>
                         );
                       }
@@ -1518,10 +1527,7 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
                 />
                 <td className="px-4 py-2 text-right border-r border-border">
                   <div className="text-sm font-semibold text-muted-foreground tabular-nums">
-                    {filtered.reduce((acc, r) => {
-                      const t = Array.isArray(r.lines) ? sumLines(r.lines) : (r.total ?? 0);
-                      return acc + t;
-                    }, 0).toFixed(2)}
+                    {formatMoney(sumMoney(filtered.map((r) => r.total)))}
                   </div>
                 </td>
               </tr>
@@ -1550,7 +1556,7 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
           onApply={(newCols) => {
             setCols(newCols);
             const columns = newCols.map((c, i) => ({ col_key: c.key, visible: c.visible, order_index: i }));
-            updateTabColumns(business.id, 'receipt', columns)
+            updateTabColumns(business.id, RECEIPTS_TAB, columns)
               .catch((err) => console.error('Failed to save column preferences:', err?.message ?? err));
           }}
         />

@@ -15,10 +15,14 @@ async def test_contacts_crud(client, users, kind):
 
     contact = await create_contact(client, owner, business_id, kind)
     updated = await client.put(
-        f"{base}/{contact['id']}", json={"email": "c@bookvault-test.dev"}, headers=owner.headers
+        f"{base}/{contact['id']}",
+        json={"email": "c@bookvault-test.dev", "version": contact["version"]},
+        headers=owner.headers,
     )
     listed = await client.get(base, headers=owner.headers)
-    removed = await client.delete(f"{base}/{contact['id']}", headers=owner.headers)
+    removed = await client.delete(
+        f"{base}/{contact['id']}", params={"version": updated.json()["version"]}, headers=owner.headers
+    )
 
     assert updated.json()["email"] == "c@bookvault-test.dev"
     assert listed.json()["total"] == 1

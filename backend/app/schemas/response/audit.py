@@ -1,21 +1,24 @@
-"""Audit log response schemas for API output serialization."""
+"""Audit log response schemas."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class AuditLogResponse(BaseModel):
-    """Response schema for a single audit log entry."""
+    model_config = ConfigDict(from_attributes=True)
 
     id: str
     created_at: datetime
+    scope: str
+    business_id: Optional[str]
     user_id: Optional[str]
     action: str
-    module: str
-    resource_id: Optional[str]
-    details: Optional[dict]
+    entity_type: str
+    entity_id: Optional[str]
+    before: Optional[dict[str, Any]]
+    after: Optional[dict[str, Any]]
+    details: Optional[dict[str, Any]]
+    request_id: Optional[str]
     performed_by: Optional[str] = None
-
-    model_config = {"from_attributes": True}

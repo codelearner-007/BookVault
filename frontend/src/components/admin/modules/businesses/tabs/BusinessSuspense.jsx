@@ -4,19 +4,26 @@ import { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getSuspenseEntries } from '@/lib/services/suspense.service';
+import { getSuspenseBalance, getSuspenseEntries } from '@/lib/services/suspense.service';
+import { formatMoney } from '@/lib/utils/money';
 
 export default function BusinessSuspense({ business, onBack }) {
   const [entries, setEntries] = useState([]);
+  const [balance, setBalance] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchEntries = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await getSuspenseEntries(business.id);
-      setEntries(res?.items ?? []);
+      const [entriesData, balanceData] = await Promise.all([
+        getSuspenseEntries(business.id),
+        getSuspenseBalance(business.id),
+      ]);
+      setEntries(entriesData.items);
+      setBalance(balanceData.suspense_balance);
     } catch {
       setEntries([]);
+      setBalance(null);
     } finally {
       setIsLoading(false);
     }
@@ -86,7 +93,7 @@ export default function BusinessSuspense({ business, onBack }) {
                   <td className="px-4 py-2.5 text-muted-foreground border-r border-border whitespace-nowrap">{entry.receipt_reference || '—'}</td>
                   <td className="px-4 py-2.5 text-muted-foreground border-r border-border whitespace-nowrap">{formatPaidBy(entry)}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-foreground whitespace-nowrap">
-                    {parseFloat(entry.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {formatMoney(entry.amount)}
                   </td>
                 </tr>
               ))
@@ -97,7 +104,7 @@ export default function BusinessSuspense({ business, onBack }) {
               <tr className="border-t border-border bg-muted/20">
                 <td colSpan={3} className="px-4 py-2 text-right text-xs font-semibold text-muted-foreground">Total Suspense</td>
                 <td className="px-4 py-2 text-right text-sm font-semibold text-foreground tabular-nums">
-                  {entries.reduce((s, e) => s + parseFloat(e.amount), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {formatMoney(balance)}
                 </td>
               </tr>
             </tfoot>

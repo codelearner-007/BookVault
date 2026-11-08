@@ -1,7 +1,9 @@
+import { PAGE_SIZE_MAX } from '@/lib/config';
 import { apiClient } from './api-client';
+import { listAllPages } from './list-all-pages';
 
 export async function listBusinesses() {
-  return apiClient.get('/v1/businesses');
+  return listAllPages('/v1/businesses');
 }
 
 export async function createBusiness(data) {
@@ -13,7 +15,7 @@ export async function deleteBusiness(id) {
 }
 
 export async function listDeletedBusinesses() {
-  return apiClient.get('/v1/businesses/deleted');
+  return listAllPages('/v1/businesses/deleted');
 }
 
 export async function restoreBusiness(id) {
@@ -29,19 +31,20 @@ export async function getBusiness(id) {
 }
 
 export async function listBusinessTabs(businessId) {
-  return apiClient.get(`/v1/businesses/${businessId}/tabs`);
+  return listAllPages(`/v1/businesses/${businessId}/tabs`);
 }
 
 export async function updateBusinessTabs(businessId, items) {
-  return apiClient.put(`/v1/businesses/${businessId}/tabs`, { items });
+  // The PUT answers with a page of tabs; ask for the largest page so the whole set comes back.
+  return apiClient.put(`/v1/businesses/${businessId}/tabs?page_size=${PAGE_SIZE_MAX}`, { items });
 }
 
 export async function listAdminTabs() {
-  return apiClient.get('/v1/admin-tabs');
+  return listAllPages('/v1/admin-tabs');
 }
 
 export async function updateAdminTabs(items) {
-  return apiClient.put('/v1/admin-tabs', { items });
+  return apiClient.put(`/v1/admin-tabs?page_size=${PAGE_SIZE_MAX}`, { items });
 }
 
 export async function deleteAdminTab(key) {
@@ -53,7 +56,7 @@ export async function updateBusiness(id, data) {
 }
 
 export async function resetBusiness(id) {
-  return apiClient.post(`/v1/businesses/${id}/reset`, {});
+  return apiClient.post(`/v1/businesses/${id}/reset`);
 }
 
 export async function getTabColumns(businessId, tabKey) {

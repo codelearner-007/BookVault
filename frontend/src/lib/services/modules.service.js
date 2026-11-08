@@ -1,16 +1,9 @@
 /**
- * Modules Service - API client for system modules
+ * Modules Service - distinct audit entity types (filter options of the audit pages)
  */
 
-import { handleResponse } from './api-utils';
+import { listAllPages } from './list-all-pages';
 
-/**
- * Get list of all system modules
- */
 export async function getModules() {
-  const response = await fetch('/api/v1/modules', {
-    credentials: 'include',
-  });
-
-  return handleResponse(response);
+  return listAllPages('/v1/modules');
 }
