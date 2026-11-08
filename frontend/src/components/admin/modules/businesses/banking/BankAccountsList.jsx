@@ -20,7 +20,10 @@ export const BALANCE_COLUMNS = [
   ['actual_balance', 'Actual balance'],
 ];
 
-function AccountsTable({ accounts, totals, onOpen }) {
+// The balance that opens the account's register (every posted movement up to today).
+const REGISTER_COLUMN = 'actual_balance';
+
+function AccountsTable({ accounts, totals, onOpen, onOpenRegister }) {
   const showCode = accounts.some((account) => account.code);
   return (
     <Table>
@@ -53,7 +56,16 @@ function AccountsTable({ accounts, totals, onOpen }) {
             </TableCell>
             {BALANCE_COLUMNS.map(([key, label]) => (
               <TableCell key={key} className="num" data-label={label} data-card={key === 'actual_balance' ? 'end' : undefined}>
-                {formatMoney(account[key])}
+                {key === REGISTER_COLUMN ? (
+                  <Button
+                    variant="link"
+                    className="num h-auto p-0 text-inherit hover:text-link"
+                    aria-label={`Open the register of ${account.name}`}
+                    onClick={(event) => { event.stopPropagation(); onOpenRegister(account.id); }}
+                  >
+                    {formatMoney(account[key])}
+                  </Button>
+                ) : formatMoney(account[key])}
               </TableCell>
             ))}
           </TableRow>
@@ -117,7 +129,12 @@ export default function BankAccountsList({ businessId, page, active, canCreate }
         {items.length === 0 ? (
           <EmptyState icon={Landmark} title="No bank or cash accounts yet" />
         ) : (
-          <AccountsTable accounts={items} totals={data.totals} onOpen={(id) => navigate({ view: id })} />
+          <AccountsTable
+            accounts={items}
+            totals={data.totals}
+            onOpen={(id) => navigate({ view: id })}
+            onOpenRegister={(id) => navigate({ register: id })}
+          />
         )}
       </ListCard>
     </div>

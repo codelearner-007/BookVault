@@ -33,10 +33,24 @@ export function activityHref(event) {
 
 export const SUSPENSE_QUERY = 'tab=summary&suspense=1';
 
-// Businesses whose Suspense balance is not zero (null = no right to see it).
-export function suspenseItems(businesses) {
-  return businesses.filter((b) => {
-    const value = b.figures.suspense;
-    return value !== null && Number(value) !== 0;
+export const OVERDUE_QUERY = 'tab=sales-invoices';
+export const ATTENTION_KINDS = { suspense: 'suspense', overdue: 'overdue' };
+
+// Needs attention: per business a Suspense balance that is not zero and overdue sales invoices
+// (a null figure = no right to see it, so nothing is listed).
+export function attentionItems(businesses) {
+  return businesses.flatMap((business) => {
+    const { suspense, overdue_invoices: overdueCount } = business.figures;
+    const items = [];
+    if (suspense !== null && suspense !== undefined && Number(suspense) !== 0) {
+      items.push({ kind: ATTENTION_KINDS.suspense, business, amount: suspense, query: SUSPENSE_QUERY });
+    }
+    if (overdueCount) {
+      items.push({
+        kind: ATTENTION_KINDS.overdue, business, amount: business.figures.overdue_amount, count: overdueCount,
+        query: OVERDUE_QUERY,
+      });
+    }
+    return items;
   });
 }

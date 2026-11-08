@@ -20,8 +20,9 @@ from app.schemas.response.dashboard import (
 
 RECENT_ACTIVITY_WINDOW = timedelta(days=1)
 RECENT_ACTIVITY_LIMIT = 8
-FIGURE_FIELDS = ("cash", "receivables", "payables", "net_profit", "suspense")
-NO_FIGURES = BusinessFigures(cash_and_bank=None, receivables=None, payables=None, net_profit=None, suspense=None)
+FIGURE_FIELDS = ("cash", "receivables", "payables", "net_profit", "suspense", "overdue_amount")
+NO_FIGURES = BusinessFigures(cash_and_bank=None, receivables=None, payables=None, net_profit=None, suspense=None,
+                             overdue_invoices=None, overdue_amount=None)
 
 
 def _rounded(value: Decimal | None, decimals: int) -> Decimal | None:
@@ -32,9 +33,11 @@ def _figures(row, decimals: int) -> BusinessFigures:
     """Rounded to the currency's minor unit; a business with no row (not a member) gets none."""
     if row is None:
         return NO_FIGURES
-    cash, receivables, payables, net_profit, suspense = (_rounded(getattr(row, f), decimals) for f in FIGURE_FIELDS)
+    cash, receivables, payables, net_profit, suspense, overdue = (
+        _rounded(getattr(row, f), decimals) for f in FIGURE_FIELDS)
     return BusinessFigures(cash_and_bank=cash, receivables=receivables, payables=payables,
-                           net_profit=net_profit, suspense=suspense)
+                           net_profit=net_profit, suspense=suspense,
+                           overdue_invoices=row.overdue_count, overdue_amount=overdue)
 
 
 class DashboardService:

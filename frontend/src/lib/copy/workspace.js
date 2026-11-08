@@ -39,6 +39,8 @@ export const WORKSPACE_COPY = {
   suspenseTitle: 'Suspense is not zero',
   suspenseDetail: (amount) => `${amount} waits to be moved to the right accounts.`,
   suspensePill: 'Suspense',
+  overduePill: 'Overdue',
+  overdueDetail: (count, amount) => `${count === 1 ? '1 sales invoice' : `${count} sales invoices`} past due, ${amount} to collect.`,
   emptyOwnerTitle: 'Create your first business',
   emptyOwnerDescription:
     'A business holds one set of books: its chart of accounts, bank accounts and every transaction. You can add more later.',

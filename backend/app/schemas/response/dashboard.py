@@ -23,6 +23,8 @@ class BusinessFigures(BaseModel):
     payables: MoneyOut | None
     net_profit: MoneyOut | None
     suspense: MoneyOut | None
+    overdue_invoices: int | None  # posted sales invoices past their due date with a balance due
+    overdue_amount: MoneyOut | None
 
 
 class DashboardBusiness(BaseModel):

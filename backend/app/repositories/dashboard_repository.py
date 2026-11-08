@@ -48,7 +48,8 @@ _BUSINESS_PAGE = text(f"""
 _BUSINESS_COUNT = text(f"SELECT count(*) {_MY_BUSINESSES_FROM} {_MY_BUSINESSES_WHERE}")
 
 _FIGURES = text("""
-    SELECT CAST(business_id AS text) AS business_id, cash, receivables, payables, net_profit, suspense
+    SELECT CAST(business_id AS text) AS business_id, cash, receivables, payables, net_profit, suspense,
+           overdue_count, overdue_amount
     FROM public.dashboard_business_figures(CAST(:ids AS uuid[]), :date_from, :date_to)
 """)
 

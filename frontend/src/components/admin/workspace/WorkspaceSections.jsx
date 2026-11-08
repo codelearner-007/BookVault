@@ -9,7 +9,7 @@ import { ListCard } from '@/components/common/page';
 import { ACTIVITY_ENTITIES, ACTIVITY_VERBS, WORKSPACE_COPY as COPY, activityActor } from '@/lib/copy/workspace';
 import { businessMoneyFormatter } from '@/lib/utils/money';
 import { relativeTime } from '@/lib/utils/relative-time';
-import { SUSPENSE_QUERY, activityHref, businessHref } from './workspace-links';
+import { ATTENTION_KINDS, activityHref, businessHref } from './workspace-links';
 
 const ROW_LINK =
   'flex min-h-row items-center gap-3 rounded-control px-4 py-3 transition-colors duration-150 hover:bg-row-hover focus-visible:outline-2 focus-visible:outline-ring';
@@ -85,20 +85,23 @@ export function ActivitySkeleton() {
   );
 }
 
-// Suspense balances that are not zero: money posted without a final account.
-export function AttentionList({ businesses }) {
+function attentionDetail({ kind, business, amount, count }) {
+  const money = `${business.currency_code ?? ''} ${businessMoneyFormatter(business)(amount)}`.trim();
+  return kind === ATTENTION_KINDS.overdue ? COPY.overdueDetail(count, money) : COPY.suspenseDetail(money);
+}
+
+// Suspense balances that are not zero (money posted without a final account) and overdue sales invoices.
+export function AttentionList({ items }) {
   return (
     <ListCard>
       <ul className="divide-y divide-row-divider">
-        {businesses.map((business) => (
-          <li key={business.id}>
-            <Link href={businessHref(business.id, SUSPENSE_QUERY)} className={ROW_LINK}>
-              <Badge variant="warn">{COPY.suspensePill}</Badge>
+        {items.map((item) => (
+          <li key={`${item.business.id}-${item.kind}`}>
+            <Link href={businessHref(item.business.id, item.query)} className={ROW_LINK}>
+              <Badge variant="warn">{item.kind === ATTENTION_KINDS.overdue ? COPY.overduePill : COPY.suspensePill}</Badge>
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{business.name}</p>
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  {COPY.suspenseDetail(`${business.currency_code ?? ''} ${businessMoneyFormatter(business)(business.figures.suspense)}`.trim())}
-                </p>
+                <p className="truncate font-medium">{item.business.name}</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">{attentionDetail(item)}</p>
               </div>
               <ChevronRight className="size-4 shrink-0 text-muted-foreground rtl:rotate-180" aria-hidden="true" />
             </Link>

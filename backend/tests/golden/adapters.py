@@ -138,7 +138,7 @@ async def starting_balance(run: GoldenRun, fixture: dict) -> Outcome:
     return Outcome(201, body, entries)
 
 
-def _cleared(run: GoldenRun, bank_key: str, cleared: dict | None) -> tuple[bool, str | None]:
+def _cleared(run: GoldenRun, bank_key: str | None, cleared: dict | None) -> tuple[bool, str | None]:
     """PR-12: "cleared on a later date" (+ optional date); offered only on accounts that can have
     pending transactions (T65 note: on Bank the field is omitted, the ledger is the same)."""
     if not cleared or cleared.get("mode") != "later_date" or bank_key not in run.pending_banks:
@@ -148,12 +148,13 @@ def _cleared(run: GoldenRun, bank_key: str, cleared: dict | None) -> tuple[bool,
 
 def _cash_body(run: GoldenRun, doc: dict) -> dict:
     fields = doc.get("fields", {})
-    clears_later, cleared_on = _cleared(run, fields["bank_account"], fields.get("cleared"))
+    clears_later, cleared_on = _cleared(run, fields.get("bank_account"), fields.get("cleared"))
     contact = fields.get("contact")
     lines = [{"account_id": run.accounts.get(x["account_key"]) if x.get("account_key") else None,
               "unit_price": x["amount"], **_dimension_ids(run, x), **_invoice_id(run, x)} for x in doc["lines"]]
     return {
-        "date": doc["date"], "bank_account_id": run.banks[fields["bank_account"]], "post": True,
+        # No bank account (T102, T103): the bank side posts to Suspense (PR-78).
+        "date": doc["date"], "bank_account_id": run.banks.get(fields.get("bank_account")), "post": True,
         "counterparty_party_id": run.parties.get(fields.get("party")),
         "counterparty_name": contact if fields.get("payer_kind", fields.get("payee_kind")) == "other" else None,
         "clears_later": clears_later, "cleared_on": cleared_on,
@@ -171,7 +172,7 @@ async def _cash_actions(run: GoldenRun, fixture: dict, kind: str, created: dict)
             response = await run.client.post(biz(run.business_id, f"{path}/void"), json={"version": current["version"]},
                                              headers=run.owner.headers)
         else:
-            clears_later, cleared_on = _cleared(run, fixture["document"]["fields"]["bank_account"],
+            clears_later, cleared_on = _cleared(run, fixture["document"]["fields"].get("bank_account"),
                                                 action["fields"].get("cleared"))
             body = {k: current[k] for k in ("version", "date", "reference", "bank_account_id", "description",
                                             "counterparty_party_id", "counterparty_name")}

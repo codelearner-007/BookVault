@@ -120,13 +120,25 @@ export function withCurrentAccount(accounts, id, name) {
   return [...accounts, { id, name, code: null, can_have_pending: false }];
 }
 
-export function BankAccountSelect({ id, value, accounts, onChange, disabled }) {
+// Where a receipt or payment without a bank or cash account is shown as sitting (PR-78).
+export const NO_BANK_LABEL = 'Suspense';
+
+// Radix Select cannot hold an empty value, so "no account" has its own option value.
+const NO_ACCOUNT = '__none__';
+
+// allowNone: receipts and payments may have no account (the bank side then posts to Suspense, PR-78).
+export function BankAccountSelect({ id, value, accounts, onChange, disabled, allowNone = false }) {
   return (
-    <Select value={value} onValueChange={onChange} disabled={disabled}>
+    <Select
+      value={allowNone && !value ? NO_ACCOUNT : value}
+      onValueChange={(next) => onChange(next === NO_ACCOUNT ? '' : next)}
+      disabled={disabled}
+    >
       <SelectTrigger id={id} className="w-full">
         <SelectValue placeholder="Select account" />
       </SelectTrigger>
       <SelectContent>
+        {allowNone && <SelectItem value={NO_ACCOUNT}>No bank account</SelectItem>}
         {accounts.map((account) => (
           <SelectItem key={account.id} value={account.id}>{bankAccountLabel(account)}</SelectItem>
         ))}

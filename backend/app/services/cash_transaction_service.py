@@ -1,7 +1,8 @@
 """Receipts and payments (B3, PR-01, PR-06, PR-07, PR-12): one service, two directions.
 
 A receipt posts Dr Cash & cash equivalents[bank] total / Cr each line account; a payment the
-mirror image. Line amounts and totals are computed here (AC-22); drafts never reach the
+mirror image. Without a bank or cash account the bank side posts to Suspense (PR-78); picking an
+account later is an ordinary edit (reversal + repost). Line amounts and totals are computed here (AC-22); drafts never reach the
 ledger; an edit of a posted document that changes its ledger image is a reversal plus a new
 entry (PR-73); void = reversal (PR-74). Clear dates (PR-12) never touch the ledger.
 """
@@ -47,7 +48,7 @@ from app.services.versioning import check_version
 RECEIPT, PAYMENT = "receipt", "payment"
 AREAS = {RECEIPT: "receipts", PAYMENT: "payments"}
 ENTITIES = {RECEIPT: "Receipt", PAYMENT: "Payment"}
-CASH_CONTROL = "cash_control"
+CASH_CONTROL, SUSPENSE = "cash_control", "suspense"
 COUNTERPARTY_KINDS = {"customer", "supplier", "capital_account"}
 ZERO = Decimal(0)
 
@@ -190,15 +191,18 @@ class CashTransactionService:
         await self.posting.replace_allocations(ctx, document, allocations)
 
     # ---------------------------------------------------------------- validation
-    async def _bank(self, business_id: str, bank_account_id: str | None) -> BankAccount:
-        bank = await self.banks.get(business_id, bank_account_id) if bank_account_id else None
+    async def _bank(self, business_id: str, bank_account_id: str | None) -> BankAccount | None:
+        """None = no account chosen (the bank side goes to Suspense, PR-78); an unknown id is refused."""
+        if not bank_account_id:
+            return None
+        bank = await self.banks.get(business_id, bank_account_id)
         if bank is None:
             raise LedgerValidationError("Choose a bank or cash account of this business", "bank_account_required")
         return bank
 
-    async def _check_header(self, business_id: str, bank: BankAccount, clears_later: bool,
+    async def _check_header(self, business_id: str, bank: BankAccount | None, clears_later: bool,
                             party_id: str | None) -> None:
-        if clears_later and not bank.can_have_pending:
+        if clears_later and not (bank and bank.can_have_pending):
             raise LedgerValidationError(
                 "This bank or cash account cannot have pending transactions", "cleared_not_allowed")
         if party_id and (await self.repo.party_kinds(business_id, {party_id})).get(party_id) not in COUNTERPARTY_KINDS:
@@ -230,7 +234,7 @@ class CashTransactionService:
             )
             for no, x in enumerate(body.lines, start=1)
         ]
-        return await self._ledger(business_id, bank.id, lines, dp, require_postable)
+        return await self._ledger(business_id, bank and bank.id, lines, dp, require_postable)
 
     async def _prepare_stored(self, document: Document) -> Prepared:
         """A draft's stored form, validated as if it were posted now."""
@@ -240,13 +244,15 @@ class CashTransactionService:
             raise LedgerValidationError("Every line needs an account", "account_required")
         bank = await self._bank(document.business_id, extension.bank_account_id)
         await self._check_header(document.business_id, bank, extension.clears_later, extension.counterparty_party_id)
-        return await self._ledger(document.business_id, bank.id, lines, await self.posting.decimals(document.business_id),
-                                  True)
+        return await self._ledger(document.business_id, bank and bank.id, lines,
+                                  await self.posting.decimals(document.business_id), True)
 
-    async def _ledger(self, business_id: str, bank_account_id: str, lines: list[CashTransactionLine],
+    async def _ledger(self, business_id: str, bank_account_id: str | None, lines: list[CashTransactionLine],
                       dp: int, require_postable: bool) -> Prepared:
-        """Ledger image (PR-01 / PR-07): the bank line for the total, one line per non-zero line."""
+        """Ledger image (PR-01 / PR-07 / PR-78): the bank line for the total (Suspense when no bank
+        or cash account is chosen), one line per non-zero line."""
         cash = await self.coa.system_account_id(business_id, CASH_CONTROL)
+        bank_side = cash if bank_account_id else await self.coa.system_account_id(business_id, SUSPENSE)
         if any(x.account_id == cash for x in lines):
             raise LedgerValidationError(
                 "Move money between bank and cash accounts with an inter account transfer", "account_not_supported")
@@ -255,7 +261,7 @@ class CashTransactionService:
         if require_postable and total <= 0:
             raise LedgerValidationError("The total must be more than zero", "total_not_positive")
         receipt = self.direction == RECEIPT
-        ledger = [LineInput(cash, total if receipt else ZERO, ZERO if receipt else total,
+        ledger = [LineInput(bank_side, total if receipt else ZERO, ZERO if receipt else total,
                             bank_account_id=bank_account_id)]
         for line, amount in zip(lines, amounts):
             if amount == 0:

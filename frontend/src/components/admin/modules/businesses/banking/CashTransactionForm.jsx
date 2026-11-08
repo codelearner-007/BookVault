@@ -135,7 +135,17 @@ function HeaderFields({ businessId, direction, form, setField, banks, disabled }
       </div>
       <div className="grid gap-2">
         <Label htmlFor="cash-bank">{direction.bankLabel}</Label>
-        <BankAccountSelect id="cash-bank" value={form.bankAccountId} accounts={banks} onChange={(id) => setField('bankAccountId', id)} disabled={disabled} />
+        <BankAccountSelect
+          id="cash-bank"
+          value={form.bankAccountId}
+          accounts={banks}
+          onChange={(id) => setField('bankAccountId', id)}
+          disabled={disabled}
+          allowNone
+        />
+        {!form.bankAccountId && (
+          <p id="cash-bank-note" className="text-sm text-muted-foreground">No bank account: this will go to Suspense</p>
+        )}
       </div>
       {bank?.can_have_pending && (
         <ClearedField

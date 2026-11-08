@@ -27,7 +27,7 @@ from tests.support.ledger import SIDE_TO_TYPE, biz, create_account, set_lock_dat
 
 TEARDOWN_REASON = "golden-fixture teardown"
 
-EXPECTED_DOCUMENTS = 105
+EXPECTED_DOCUMENTS = 107
 EXPECTED_CHECKPOINTS = 6
 
 DOCUMENTS = fixtures_of_kind(DOCUMENT_KIND)
@@ -52,7 +52,8 @@ def test_manager_only_setup_records_are_skipped():
 
 
 def test_b1_to_b4_schedule_is_runnable():
-    assert {f["id"] for f in RUNNABLE} == B1_FIXTURES | B2_FIXTURES | B3_FIXTURES | B4_FIXTURES | B7_EARLY
+    assert {f["id"] for f in RUNNABLE} == (B1_FIXTURES | B2_FIXTURES | B3_FIXTURES | B4_FIXTURES | B7_EARLY
+                                           | BOOKVAULT_ONLY)
 
 
 def test_golden_support_report(capsys):
@@ -285,6 +286,8 @@ B4_FIXTURES = {"T04", "T05", "T09", "T37", "T42a", "T42b", "T43", "T47", "T56", 
 # Scheduled for B7 but already runnable on the single-rate engine (inclusive tax T53, per-line rounding T82);
 # B7 re-asserts them with the full tax engine.
 B7_EARLY = {"T53", "T82"}
+# BookVault-only rules without a Manager observation (phase_tag "bv"): PR-78 receipt / payment without a bank account.
+BOOKVAULT_ONLY = {"T102", "T103"}
 STATEMENT_ROOT = {"pl": "expenses", "balance_sheet": "assets"}
 NOT_YET = [f for f in DOCUMENTS if not _runnable(f)]
 

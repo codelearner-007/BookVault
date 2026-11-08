@@ -1,5 +1,7 @@
 """Bank and cash accounts endpoints (balances from the ledger, B3)."""
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,12 +59,15 @@ async def get_bank_account(
 @router.get("/{bank_account_id}/transactions", response_model=BankTransactionListResponse)
 async def list_bank_account_transactions(
     bank_account_id: str,
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
     params: PageParams = Depends(page_params),
     ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.VIEW)),
     db: AsyncSession = Depends(get_db, scope="function"),
 ) -> BankTransactionListResponse:
-    """Every document that moved the account (net of reversals), newest first."""
-    return await BankAccountService(db).transactions(ctx.business_id, bank_account_id, params)
+    """The register: every document that moved the account (net of reversals), newest first, with
+    the running balance; up to today unless date_to is given."""
+    return await BankAccountService(db).transactions(ctx.business_id, bank_account_id, params, date_from, date_to)
 
 
 @router.put("/{bank_account_id}", response_model=BankAccountResponse)

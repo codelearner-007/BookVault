@@ -46,7 +46,7 @@ class CashLineIn(LineAmountsIn):
 class CashTransactionFields(RequestModel):
     date: dt.date
     reference: OptionalCode = None
-    bank_account_id: IdStr
+    bank_account_id: Optional[IdStr] = None  # None = the bank side goes to Suspense (PR-78)
     counterparty_party_id: Optional[IdStr] = None
     counterparty_name: OptionalName = None
     description: OptionalText = None

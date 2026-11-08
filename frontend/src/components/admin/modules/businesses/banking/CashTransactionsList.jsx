@@ -7,7 +7,7 @@ import { EmptyState, ListCard, PageHeader } from '@/components/common/page';
 import { ListPagination } from '@/components/super-admin/platform-parts';
 import { formatMoney } from '@/lib/utils/money';
 import { ErrorAlert, JE_STATUS, StatusBadge, useTabNavigate } from '../ledger/ledger-parts';
-import { PendingBadge, TableSkeleton, useLoad } from './banking-parts';
+import { NO_BANK_LABEL, PendingBadge, TableSkeleton, useLoad } from './banking-parts';
 
 const COLUMN_COUNT = 6;
 
@@ -43,7 +43,7 @@ function TransactionsTable({ direction, rows, totalAmount, onOpen }) {
                 {row.is_pending && <PendingBadge />}
               </span>
             </TableCell>
-            <TableCell data-label={direction.bankLabel}>{row.bank_account_name}</TableCell>
+            <TableCell data-label={direction.bankLabel}>{row.bank_account_name ?? NO_BANK_LABEL}</TableCell>
             <TableCell className="max-w-md truncate text-muted-foreground" data-label="Description">{row.description}</TableCell>
             <TableCell className="text-muted-foreground" data-label={direction.counterpartyLabel}>{row.counterparty}</TableCell>
             <TableCell className="num" data-card="end">{formatMoney(row.amount)}</TableCell>

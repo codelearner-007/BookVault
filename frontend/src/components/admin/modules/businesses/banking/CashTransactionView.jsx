@@ -7,7 +7,7 @@ import { formatMoney } from '@/lib/utils/money';
 import TransactionJournal from '../ledger/TransactionJournal';
 import { ErrorAlert, JE_STATUS, StatusBadge, accountLabel, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from './AttachmentsPanel';
-import { DocumentSkeleton, PendingBadge, useLoad } from './banking-parts';
+import { DocumentSkeleton, NO_BANK_LABEL, PendingBadge, useLoad } from './banking-parts';
 import DocumentViewFrame from './DocumentViewFrame';
 import ReceiptAllocations from '../sales/ReceiptAllocations';
 
@@ -43,7 +43,7 @@ function CashDocument({ doc, direction, businessName }) {
       <dl className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Date"><span className="tabular-nums">{doc.date}</span></Field>
         <Field label="Reference">{doc.reference}</Field>
-        <Field label={direction.bankLabel}>{doc.bank_account_name}</Field>
+        <Field label={direction.bankLabel}>{doc.bank_account_name ?? NO_BANK_LABEL}</Field>
         <Field label={direction.counterpartyLabel}>{doc.counterparty}</Field>
         {doc.clears_later && <Field label="Cleared">{doc.cleared_on ?? 'Not cleared yet'}</Field>}
       </dl>

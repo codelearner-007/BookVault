@@ -38,7 +38,11 @@ class BankTransactionItem(BaseModel):
     date: date
     reference: str | None
     description: str | None
-    amount: MoneyOut
+    counterparty: str | None
+    amount: MoneyOut  # signed: + = money in
+    received: MoneyOut
+    paid: MoneyOut
+    balance: MoneyOut  # ledger balance of the account after this document
     is_pending: bool
 
 

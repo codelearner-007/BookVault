@@ -30,7 +30,11 @@ export async function deleteBankAccount(businessId, bankAccountId, version) {
   return apiClient.delete(`${base(businessId)}/${bankAccountId}?version=${version}`);
 }
 
-// Documents that moved money in or out of the account; amount is signed (+ = money in).
-export async function listBankAccountTransactions(businessId, bankAccountId, page = 1, pageSize = PAGE_SIZE_DEFAULT) {
-  return apiClient.get(`${base(businessId)}/${bankAccountId}/transactions?page=${page}&page_size=${pageSize}`);
+// The account's register: documents that moved money in or out (received / paid / running balance),
+// newest first; range = { from, to } ISO dates, either may be null (to defaults to today on the server).
+export async function listBankAccountTransactions(businessId, bankAccountId, page = 1, range = {}, pageSize = PAGE_SIZE_DEFAULT) {
+  const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (range.from) query.set('date_from', range.from);
+  if (range.to) query.set('date_to', range.to);
+  return apiClient.get(`${base(businessId)}/${bankAccountId}/transactions?${query.toString()}`);
 }

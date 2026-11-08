@@ -4,6 +4,8 @@ Balances and transactions come from SECURITY DEFINER aggregates that check the c
 bank_cash_accounts view right (B0.4 rule), never from a stored balance.
 """
 
+from datetime import date
+
 from sqlalchemy import func, select, text
 from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,9 +18,9 @@ _BALANCES = text("""
 """)
 _TRANSACTIONS = text("""
     SELECT CAST(document_id AS text) AS document_id, document_type, document_date AS date, reference,
-           description, amount, is_pending, total_count
+           description, counterparty, amount, balance, is_pending, total_count
     FROM public.bank_account_transactions(CAST(:business_id AS uuid), CAST(:bank_account_id AS uuid),
-                                          :offset, :limit)
+                                          CAST(:date_from AS date), CAST(:date_to AS date), :offset, :limit)
 """)
 _USAGE = text("""
     SELECT in_use, has_clears_later
@@ -56,10 +58,12 @@ class BankAccountRepository:
         return {r.bank_account_id: r for r in rows}
 
     async def transactions_page(
-        self, business_id: str, bank_account_id: str, offset: int, limit: int
+        self, business_id: str, bank_account_id: str, date_from: date | None, date_to: date | None,
+        offset: int, limit: int,
     ) -> tuple[list[Row], int]:
         rows = (await self.session.execute(_TRANSACTIONS, {
-            "business_id": business_id, "bank_account_id": bank_account_id, "offset": offset, "limit": limit,
+            "business_id": business_id, "bank_account_id": bank_account_id, "date_from": date_from,
+            "date_to": date_to, "offset": offset, "limit": limit,
         })).all()
         return list(rows), (rows[0].total_count if rows else 0)
 

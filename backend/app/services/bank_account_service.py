@@ -5,12 +5,12 @@ pending = posted documents marked "cleared later" without a clear date; cleared 
 A referenced account cannot be deleted (409, AC-23); an unused one is soft-deleted.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictError, ResourceNotFoundError
+from app.core.exceptions import ConflictError, LedgerValidationError, ResourceNotFoundError
 from app.core.ids import is_uuid
 from app.core.money import round_money
 from app.core.pagination import PageParams
@@ -83,12 +83,20 @@ class BankAccountService:
     async def get(self, business_id: str, bank_account_id: str) -> BankAccountResponse:
         return await self._response(await self._get_or_404(business_id, bank_account_id))
 
-    async def transactions(self, business_id: str, bank_account_id: str,
-                           params: PageParams) -> BankTransactionListResponse:
+    async def transactions(self, business_id: str, bank_account_id: str, params: PageParams,
+                           date_from: date | None = None, date_to: date | None = None) -> BankTransactionListResponse:
+        """The account's register: every document that moved it, newest first, with the running
+        ledger balance after each one (up to today unless a range is given)."""
+        if date_from and date_to and date_from > date_to:
+            raise LedgerValidationError("The start date is after the end date", "invalid_date_range")
         await self._get_or_404(business_id, bank_account_id)
-        rows, total = await self.repo.transactions_page(business_id, bank_account_id, params.offset, params.page_size)
+        rows, total = await self.repo.transactions_page(
+            business_id, bank_account_id, date_from, date_to or date.today(), params.offset, params.page_size)
         dp = await self.posting.decimals(business_id)
-        items = [BankTransactionItem.model_validate({**r._mapping, "amount": round_money(r.amount, dp)}) for r in rows]
+        items = [BankTransactionItem.model_validate({
+            **r._mapping, "amount": round_money(r.amount, dp), "balance": round_money(r.balance, dp),
+            "received": round_money(max(r.amount, ZERO), dp), "paid": round_money(max(-r.amount, ZERO), dp),
+        }) for r in rows]
         return BankTransactionListResponse.build(items, total, params.page, params.page_size)
 
     # ---------------------------------------------------------------- writes

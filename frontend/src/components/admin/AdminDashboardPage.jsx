@@ -10,7 +10,7 @@ import { BusinessCard, BusinessCardSkeleton } from '@/components/admin/workspace
 import {
   ActivityList, ActivitySkeleton, AttentionList, Section,
 } from '@/components/admin/workspace/WorkspaceSections';
-import { businessHref, suspenseItems } from '@/components/admin/workspace/workspace-links';
+import { attentionItems, businessHref } from '@/components/admin/workspace/workspace-links';
 import { useClientMinute, useWorkspaceDashboard } from '@/components/admin/workspace/use-workspace-dashboard';
 import { useGlobal } from '@/lib/context/GlobalContext';
 import { WORKSPACE_COPY as COPY, greeting } from '@/lib/copy/workspace';
@@ -112,7 +112,7 @@ function LoadError({ message, onRetry }) {
 
 function DashboardBody({ data }) {
   const businesses = data.items;
-  const attention = suspenseItems(businesses);
+  const attention = attentionItems(businesses);
   const more = data.total > CARDS_SHOWN && (
     <Button variant="ghost" size="sm" asChild>
       <Link href={BUSINESSES_HREF}>{COPY.allBusinesses(data.total)}</Link>
@@ -123,7 +123,7 @@ function DashboardBody({ data }) {
       <div className="space-y-8 lg:col-span-2">
         {attention.length > 0 && (
           <Section title={COPY.needsAttention}>
-            <AttentionList businesses={attention} />
+            <AttentionList items={attention} />
           </Section>
         )}
         <Section title={COPY.yourBusinesses} action={more}>
