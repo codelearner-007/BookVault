@@ -6,13 +6,27 @@ const MONEY_DECIMALS = 2;
  * numberFormat: an Intl locale tag (the business number format), defaults to en-US.
  * Never does arithmetic on the value; Intl rounds the decimal string itself.
  */
-export function formatMoney(value, numberFormat = DEFAULT_LOCALE) {
+export function formatMoney(value, numberFormat = DEFAULT_LOCALE, decimals = MONEY_DECIMALS) {
   if (value === null || value === undefined || value === '') return '';
   const formatter = new Intl.NumberFormat(numberFormat || DEFAULT_LOCALE, {
-    minimumFractionDigits: MONEY_DECIMALS,
-    maximumFractionDigits: MONEY_DECIMALS,
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
   });
   return formatter.format(String(value));
+}
+
+// business_format.number_format patterns (the country templates' values) and the Intl locale that writes them.
+const NUMBER_FORMAT_LOCALES = {
+  '1,234.56': 'en-US',
+  '1.234,56': 'de-DE',
+  '1 234,56': 'fr-FR',
+  "1'234.56": 'de-CH',
+};
+
+/** A formatter for one business's amounts: its number format and its base currency's decimal places. */
+export function businessMoneyFormatter({ number_format: pattern, decimal_places: decimals }) {
+  const locale = NUMBER_FORMAT_LOCALES[pattern] ?? DEFAULT_LOCALE;
+  return (value) => formatMoney(value, locale, decimals ?? MONEY_DECIMALS);
 }
 
 const API_SCALE = 4; // money columns are numeric(19,4)

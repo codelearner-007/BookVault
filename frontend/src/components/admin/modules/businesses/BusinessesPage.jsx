@@ -1,535 +1,158 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Building2, Trash2, Plus, RotateCcw, ArchiveRestore, Loader2, ChevronRight } from 'lucide-react';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { PageHeader, MoreMenu, ListCard, EmptyState } from '@/components/common/page';
-import {
-  listBusinesses,
-  deleteBusiness,
-  listDeletedBusinesses,
-  restoreBusiness,
-  permanentDeleteBusiness,
-  exportBusiness,
-} from '@/lib/services/business.service';
+import { Building2, ChevronLeft, ChevronRight, Plus, SearchX } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { EmptyState, ListCard, ListToolbar, MoreMenu, PageHeader, SearchInput } from '@/components/common/page';
+import { useShell } from '@/components/shell/ShellContext';
+import { BusinessCard, BusinessCardSkeleton } from '@/components/admin/workspace/BusinessCard';
+import { useWorkspaceDashboard } from '@/components/admin/workspace/use-workspace-dashboard';
+import { WORKSPACE_COPY as COPY } from '@/lib/copy/workspace';
 import CreateBusinessDialog from './CreateBusinessDialog';
+import { useBusinessTrash } from './BusinessTrash';
 
 const CREATE_PARAM = 'create';
-const SKELETON_ROWS = 3;
-const destructiveAction = buttonVariants({ variant: 'destructive' });
+const SEARCH_PARAM = 'q';
+const PAGE_PARAM = 'p';
+const PAGE_SIZE = 24;
+const SEARCH_FROM = 6; // search shows once there are more businesses than this
+const SEARCH_DEBOUNCE_MS = 250;
+const SKELETON_CARDS = 3;
+const CARD_GRID = 'grid gap-4 md:grid-cols-2 xl:grid-cols-3';
 
-function bizId(biz) {
-  return biz.id ?? biz._id;
+// ?q=<search>&p=<page>&create=1 (deep-linkable, restored after reload).
+function useListParams() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const page = Math.max(1, Number(searchParams.get(PAGE_PARAM)) || 1);
+
+  function update(changes) {
+    const next = new URLSearchParams(searchParams.toString());
+    Object.entries(changes).forEach(([key, value]) => (value ? next.set(key, String(value)) : next.delete(key)));
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
+
+  return { page, search: searchParams.get(SEARCH_PARAM) ?? '', creating: searchParams.get(CREATE_PARAM) === '1', update };
 }
 
-function BusinessAvatar({ name }) {
+function SearchBox({ value, onSearch }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => {
+    if (draft.trim() === value) return undefined;
+    const timer = setTimeout(() => onSearch(draft.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [draft, value, onSearch]);
+  return <SearchInput value={draft} onChange={setDraft} placeholder={COPY.searchPlaceholder} />;
+}
+
+function Pager({ page, totalPages, onPage }) {
+  if (totalPages <= 1) return null;
   return (
-    <span
-      aria-hidden="true"
-      className="inline-grid size-9 shrink-0 place-items-center rounded-menu-item bg-mono text-sm font-bold text-mono-foreground select-none"
-    >
-      {name ? name.charAt(0).toUpperCase() : '?'}
-    </span>
+    <nav aria-label="Pagination" className="mt-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+      <Button variant="ghost" size="icon" onClick={() => onPage(page - 1)} disabled={page <= 1} aria-label={COPY.previousPage}>
+        <ChevronLeft className="rtl:rotate-180" />
+      </Button>
+      <span>{COPY.pageOf(page, totalPages)}</span>
+      <Button variant="ghost" size="icon" onClick={() => onPage(page + 1)} disabled={page >= totalPages} aria-label={COPY.nextPage}>
+        <ChevronRight className="rtl:rotate-180" />
+      </Button>
+    </nav>
   );
 }
 
-function BusinessIdentity({ biz }) {
+function BusinessGrid({ data, search, canCreate, onCreate }) {
+  if (data.items.length > 0) {
+    return (
+      <ul className={CARD_GRID} aria-label={COPY.businessesTitle}>
+        {data.items.map((b) => <li key={b.id} className="grid"><BusinessCard business={b} showFootnote /></li>)}
+      </ul>
+    );
+  }
+  if (search) {
+    return <ListCard><EmptyState icon={SearchX} title={COPY.noSearchResults(search)} /></ListCard>;
+  }
   return (
-    <>
-      <BusinessAvatar name={biz.name} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">{biz.name}</p>
-        {biz.country && <p className="mt-0.5 truncate text-sm text-muted-foreground">{biz.country}</p>}
-      </div>
-    </>
+    <ListCard>
+      <EmptyState
+        icon={Building2}
+        title={canCreate ? COPY.emptyOwnerTitle : COPY.emptyMemberTitle}
+        description={canCreate ? COPY.emptyOwnerDescription : COPY.emptyMemberDescription}
+        action={canCreate && <Button onClick={onCreate} className="mt-2"><Plus />{COPY.createBusiness}</Button>}
+      />
+    </ListCard>
   );
 }
 
-function SkeletonRow() {
+function GridSkeleton() {
   return (
-    <div className="flex items-center gap-3 px-4 py-3">
-      <Skeleton className="size-9 shrink-0 rounded-menu-item" />
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <Skeleton className="h-4 w-36" />
-        <Skeleton className="h-3 w-20" />
-      </div>
-      <Skeleton className="h-pill w-16 shrink-0 rounded-full" />
+    <div className={CARD_GRID} aria-busy="true">
+      {Array.from({ length: SKELETON_CARDS }, (_, i) => <BusinessCardSkeleton key={i} showFootnote />)}
     </div>
   );
 }
 
-function SkeletonRows() {
-  return Array.from({ length: SKELETON_ROWS }, (_, i) => <SkeletonRow key={i} />);
-}
-
-/* ── Business list ───────────────────────────────────────────────────────── */
-
-function BusinessList({ businesses, loading, onCreate }) {
-  if (loading) return <SkeletonRows />;
-  if (businesses.length === 0) {
-    return (
-      <EmptyState
-        icon={Building2}
-        title="No businesses yet"
-        description="Create your first business to get started managing accounts and settings."
-        action={<Button onClick={onCreate}><Plus />Create business</Button>}
-      />
-    );
-  }
-  return (
-    <ul aria-label="Businesses" className="divide-y divide-row-divider">
-      {businesses.map((biz) => (
-        <li key={bizId(biz)}>
-          <Link
-            href={`/admin/businesses/${bizId(biz)}?tab=summary`}
-            className="flex items-center gap-3 rounded-control px-4 py-3 transition-colors duration-150 hover:bg-row-hover focus-visible:outline-2 focus-visible:outline-ring"
-          >
-            <BusinessIdentity biz={biz} />
-            <Badge variant="role">{biz.is_owner ? 'Owner' : 'Member'}</Badge>
-            <ChevronRight className="size-4 shrink-0 text-muted-foreground rtl:rotate-180" aria-hidden="true" />
-          </Link>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/* ── Remove flow (pick, then confirm) ────────────────────────────────────── */
-
-function RemoveBusinessDialog({ open, onOpenChange, businesses, selectedId, onSelect, onContinue }) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="md:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Remove Business</DialogTitle>
-          <DialogDescription>Select the business you want to remove.</DialogDescription>
-        </DialogHeader>
-
-        <div className="grid gap-2">
-          <Label htmlFor="remove-select">Business</Label>
-          <Select value={selectedId} onValueChange={onSelect}>
-            <SelectTrigger id="remove-select" className="w-full">
-              <SelectValue placeholder="Select a business…" />
-            </SelectTrigger>
-            <SelectContent>
-              {businesses.map((biz) => (
-                <SelectItem key={bizId(biz)} value={bizId(biz)}>
-                  {biz.name}{biz.country ? ` — ${biz.country}` : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <DialogFooter>
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={onContinue} disabled={!selectedId}>
-            Remove Business
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ConfirmRemoveDialog({ open, onOpenChange, name, loading, onConfirm }) {
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete &quot;{name ?? 'this business'}&quot;?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This business will be moved to Trash. You can restore it later from the Trash panel.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm} disabled={loading} className={`${destructiveAction} min-w-20`}>
-            {loading ? <><Loader2 className="animate-spin" />Deleting…</> : 'Delete'}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
-
-/* ── Trash ───────────────────────────────────────────────────────────────── */
-
-function DeletedBusinessRow({ biz, restoring, onRestore, onPurge }) {
-  return (
-    <li className="flex items-center gap-3 rounded-control px-4 py-3 transition-colors duration-150 hover:bg-row-hover">
-      <BusinessIdentity biz={biz} />
-      <div className="flex shrink-0 items-center gap-1">
-        <Button variant="ghost" size="icon-sm" onClick={onRestore} disabled={restoring} aria-label={`Restore ${biz.name}`}>
-          {restoring ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={onPurge}
-          className="hover:text-bad"
-          aria-label={`Permanently delete ${biz.name}`}
-        >
-          <Trash2 />
-        </Button>
-      </div>
-    </li>
-  );
-}
-
-function TrashDialog({ open, onOpenChange, loading, businesses, restoringId, onRestore, onPurge }) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Deleted Businesses</DialogTitle>
-          <DialogDescription>Businesses can be restored within this panel.</DialogDescription>
-        </DialogHeader>
-
-        <div className="-mx-2 max-h-72 overflow-y-auto">
-          {loading && <SkeletonRows />}
-          {!loading && businesses.length === 0 && (
-            <EmptyState icon={Building2} title="No deleted businesses" className="py-8" />
-          )}
-          {!loading && businesses.length > 0 && (
-            <ul className="divide-y divide-row-divider">
-              {businesses.map((biz) => (
-                <DeletedBusinessRow
-                  key={bizId(biz)}
-                  biz={biz}
-                  restoring={restoringId === bizId(biz)}
-                  onRestore={() => onRestore(bizId(biz))}
-                  onPurge={() => onPurge(biz)}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function PermanentDeleteDialog({ open, onOpenChange, name, typed, onTypedChange, loading, exporting, onExport, onConfirm }) {
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Permanently Delete Business?</AlertDialogTitle>
-          <AlertDialogDescription>
-            <span className="font-semibold text-foreground">{name}</span> will be{' '}
-            <span className="font-semibold text-bad">permanently deleted</span> and cannot be recovered. This action is irreversible.
-            {' '}You may be asked to sign in again first.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <div className="grid gap-4">
-          <Button variant="secondary" onClick={onExport} disabled={exporting} className="w-full">
-            {exporting ? 'Preparing backup...' : 'Download a full backup'}
-          </Button>
-          <div className="grid gap-2">
-            <Label htmlFor="permanent-delete-confirmation">Type the business name to confirm</Label>
-            <Input
-              id="permanent-delete-confirmation"
-              value={typed}
-              onChange={(e) => onTypedChange(e.target.value)}
-              placeholder={name}
-              autoComplete="off"
-            />
-          </div>
-        </div>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onConfirm}
-            disabled={loading || typed.trim() !== name}
-            className={destructiveAction}
-          >
-            {loading ? 'Deleting...' : 'Delete Permanently'}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
-
-/* ── Page ────────────────────────────────────────────────────────────────── */
-
 export default function BusinessesPage() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const createFromUrl = searchParams.get(CREATE_PARAM) === '1';
-
-  // Active businesses list
-  const [businesses, setBusinesses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  // Add business dialog
+  const { canCreateBusiness } = useShell();
+  const { page, search, creating, update } = useListParams();
   const [addOpen, setAddOpen] = useState(false);
+  const [actionError, setActionError] = useState(null);
+  const { data, error, reload } = useWorkspaceDashboard({ page, pageSize: PAGE_SIZE, search });
+  const trash = useBusinessTrash({ onChanged: reload, onError: setActionError });
 
-  // Remove dialog (flow 1)
-  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
-  const [removeSelectedId, setRemoveSelectedId] = useState('');
-  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const total = data?.total ?? 0;
+  const hasBusinesses = total > 0 || Boolean(search);
+  const message = actionError ?? error;
 
-  // Trash dialog (flow 2)
-  const [trashDialogOpen, setTrashDialogOpen] = useState(false);
-  const [deletedBusinesses, setDeletedBusinesses] = useState([]);
-  const [trashLoading, setTrashLoading] = useState(false);
-  const [restoreLoadingId, setRestoreLoadingId] = useState(null);
-
-  // Permanent delete (from trash dialog)
-  const [permanentDeleteId, setPermanentDeleteId] = useState(null);
-  const [permanentDeleteName, setPermanentDeleteName] = useState('');
-  const [permanentDeleteLoading, setPermanentDeleteLoading] = useState(false);
-  const [permanentDeleteOpen, setPermanentDeleteOpen] = useState(false);
-  const [permanentDeleteTyped, setPermanentDeleteTyped] = useState('');
-  const [exportLoading, setExportLoading] = useState(false);
-
-  const loadBusinesses = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await listBusinesses();
-      setBusinesses(data.items);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load businesses');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadBusinesses();
-  }, [loadBusinesses]);
-
-  // ── Add Business ──────────────────────────────────────────────────────────
-
-  // The business switcher opens this dialog with ?create=1; closing it drops the param.
+  // The business switcher opens the dialog with ?create=1; closing it drops the param.
   function handleAddOpenChange(open) {
     setAddOpen(open);
-    if (open || !createFromUrl) return;
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete(CREATE_PARAM);
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname);
+    if (!open && creating) update({ [CREATE_PARAM]: null });
   }
 
-  async function handleBusinessCreated() {
+  function handleCreated() {
     handleAddOpenChange(false);
-    await loadBusinesses();
+    reload();
   }
-
-  // ── Remove Dialog (flow 1) ────────────────────────────────────────────────
-
-  function handleOpenRemoveDialog() {
-    setRemoveSelectedId('');
-    setRemoveDialogOpen(true);
-  }
-
-  function handleOpenConfirmDelete() {
-    setRemoveDialogOpen(false);
-    setConfirmDeleteOpen(true);
-  }
-
-  async function handleConfirmDelete() {
-    try {
-      setDeleteLoading(true);
-      await deleteBusiness(removeSelectedId);
-      setConfirmDeleteOpen(false);
-      setRemoveSelectedId('');
-      await loadBusinesses();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete business');
-      setConfirmDeleteOpen(false);
-    } finally {
-      setDeleteLoading(false);
-    }
-  }
-
-  // ── Trash Dialog (flow 2) ─────────────────────────────────────────────────
-
-  async function handleOpenTrashDialog() {
-    setTrashDialogOpen(true);
-    setDeletedBusinesses([]);
-    try {
-      setTrashLoading(true);
-      const data = await listDeletedBusinesses();
-      setDeletedBusinesses(data.items);
-    } catch {
-      setDeletedBusinesses([]);
-    } finally {
-      setTrashLoading(false);
-    }
-  }
-
-  function handleOpenPermanentDelete(biz) {
-    setPermanentDeleteId(bizId(biz));
-    setPermanentDeleteName(biz.name);
-    setPermanentDeleteTyped('');
-    setPermanentDeleteOpen(true);
-  }
-
-  async function handlePermanentDelete() {
-    try {
-      setPermanentDeleteLoading(true);
-      await permanentDeleteBusiness(permanentDeleteId, permanentDeleteTyped);
-      setPermanentDeleteOpen(false);
-      setPermanentDeleteId(null);
-      setPermanentDeleteName('');
-      const deletedData = await listDeletedBusinesses();
-      setDeletedBusinesses(deletedData.items);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to permanently delete business');
-      setPermanentDeleteOpen(false);
-    } finally {
-      setPermanentDeleteLoading(false);
-    }
-  }
-
-  async function handleExportBackup() {
-    try {
-      setExportLoading(true);
-      const backup = await exportBusiness(permanentDeleteId);
-      const url = URL.createObjectURL(
-        new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
-      );
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${permanentDeleteName}-backup.json`;
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to export business');
-    } finally {
-      setExportLoading(false);
-    }
-  }
-
-  async function handleRestore(id) {
-    try {
-      setRestoreLoadingId(id);
-      await restoreBusiness(id);
-      const [activeData, deletedData] = await Promise.all([
-        listBusinesses(),
-        listDeletedBusinesses(),
-      ]);
-      setBusinesses(activeData.items);
-      setDeletedBusinesses(deletedData.items);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to restore business');
-    } finally {
-      setRestoreLoadingId(null);
-    }
-  }
-
-  const removeSelectedBiz = businesses.find((b) => bizId(b) === removeSelectedId);
 
   return (
     <div>
       <PageHeader
-        title="Businesses"
+        title={COPY.businessesTitle}
+        description={data && hasBusinesses ? COPY.businessCount(total) : undefined}
         actions={(
           <>
-            <MoreMenu
-              items={[
-                { label: 'Deleted Businesses', icon: ArchiveRestore, onSelect: handleOpenTrashDialog },
-                { label: 'Remove Business', icon: Trash2, onSelect: handleOpenRemoveDialog, destructive: true, separatorBefore: true },
-              ]}
-            />
-            <Button onClick={() => setAddOpen(true)}>
-              <Plus />
-              Create business
-            </Button>
+            <MoreMenu items={trash.menuItems} />
+            {canCreateBusiness && hasBusinesses && (
+              <Button onClick={() => setAddOpen(true)}><Plus />{COPY.createBusiness}</Button>
+            )}
           </>
         )}
       />
 
-      {error && (
-        <p className="mb-4 rounded-control bg-bad-soft px-4 py-3 text-sm text-bad" role="alert">{error}</p>
+      {message && (
+        <p className="mb-4 rounded-control bg-bad-soft px-4 py-3 text-sm text-bad" role="alert">{message}</p>
       )}
 
-      <ListCard>
-        <BusinessList businesses={businesses} loading={loading} onCreate={() => setAddOpen(true)} />
-      </ListCard>
+      {(total > SEARCH_FROM || search) && (
+        <ListToolbar>
+          <SearchBox value={search} onSearch={(q) => update({ [SEARCH_PARAM]: q, [PAGE_PARAM]: null })} />
+        </ListToolbar>
+      )}
 
-      <CreateBusinessDialog open={addOpen || createFromUrl} onOpenChange={handleAddOpenChange} onCreated={handleBusinessCreated} />
-      <RemoveBusinessDialog
-        open={removeDialogOpen}
-        onOpenChange={setRemoveDialogOpen}
-        businesses={businesses}
-        selectedId={removeSelectedId}
-        onSelect={setRemoveSelectedId}
-        onContinue={handleOpenConfirmDelete}
-      />
-      <ConfirmRemoveDialog
-        open={confirmDeleteOpen}
-        onOpenChange={setConfirmDeleteOpen}
-        name={removeSelectedBiz?.name}
-        loading={deleteLoading}
-        onConfirm={handleConfirmDelete}
-      />
-      <TrashDialog
-        open={trashDialogOpen}
-        onOpenChange={setTrashDialogOpen}
-        loading={trashLoading}
-        businesses={deletedBusinesses}
-        restoringId={restoreLoadingId}
-        onRestore={handleRestore}
-        onPurge={handleOpenPermanentDelete}
-      />
-      <PermanentDeleteDialog
-        open={permanentDeleteOpen}
-        onOpenChange={setPermanentDeleteOpen}
-        name={permanentDeleteName}
-        typed={permanentDeleteTyped}
-        onTypedChange={setPermanentDeleteTyped}
-        loading={permanentDeleteLoading}
-        exporting={exportLoading}
-        onExport={handleExportBackup}
-        onConfirm={handlePermanentDelete}
-      />
+      {data ? (
+        <>
+          <BusinessGrid data={data} search={search} canCreate={canCreateBusiness} onCreate={() => setAddOpen(true)} />
+          <Pager page={page} totalPages={data.total_pages} onPage={(p) => update({ [PAGE_PARAM]: p > 1 ? p : null })} />
+        </>
+      ) : (
+        !error && <GridSkeleton />
+      )}
+
+      <CreateBusinessDialog open={addOpen || creating} onOpenChange={handleAddOpenChange} onCreated={handleCreated} />
+      {trash.dialogs}
     </div>
   );
 }

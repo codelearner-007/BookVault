@@ -8,6 +8,7 @@ import {
   listBusinesses,
   listBusinessTabs,
 } from '@/lib/services/business.service';
+import { rememberLastBusiness } from '@/lib/navigation/last-business';
 
 const BUSINESS_PATH = /^\/admin\/businesses\/([^/]+)/;
 const SUPER_ADMIN_ROLE = 'super_admin';
@@ -28,7 +29,9 @@ function useBusinessData(businessId) {
       getMyBusinessAccess(businessId).catch(() => null),
     ])
       .then(([business, tabs, access]) => {
-        if (active) setData({ id: businessId, business, tabs: tabs.items ?? [], access, failed: !business?.id });
+        if (!active) return;
+        setData({ id: businessId, business, tabs: tabs.items ?? [], access, failed: !business?.id });
+        if (business?.id) rememberLastBusiness(business.id);
       })
       .catch(() => {
         if (active) setData({ id: businessId, business: null, tabs: [], access: null, failed: true });
