@@ -3,9 +3,12 @@
 There are no closing entries (PR-70): the Balance Sheet's Retained earnings is the account's
 own lines (openings, corrections) plus every P&L line up to `to`, so assets = liabilities +
 equity whenever the ledger balances. The P&L total is the sum of all P&L accounts (BUG-06).
+Suspense is presented by its sign (posting-rules §Suspense): a debit balance under Assets, a
+credit balance (or nil) under Liabilities, never under Equity.
 """
 
 from datetime import date
+from types import SimpleNamespace
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +31,7 @@ from app.services.posting import PostingService
 
 BALANCE_SHEET = "balance_sheet"
 RETAINED_EARNINGS = "retained_earnings"
+SUSPENSE = "suspense"
 ZERO = Decimal(0)
 
 
@@ -42,6 +46,19 @@ def _section(node: TreeNode) -> SummarySection:
     built = _group(node)
     return SummarySection(root_key=node.root.key, name=node.group.name, total=node.total,
                           groups=built.groups, accounts=built.accounts)
+
+
+def _place_suspense(accounts: list, groups: list) -> list:
+    """Move the Suspense row into the Assets (debit) or Liabilities (credit/nil) root group."""
+    root_group = {g.root_key: g.id for g in groups if g.root_key}
+
+    def placed(row):
+        if row.system_account_code != SUSPENSE:
+            return row
+        key = "assets" if row.closing > 0 else "liabilities"
+        return SimpleNamespace(**{**row._mapping, "group_id": root_group[key]})
+
+    return [placed(a) for a in accounts]
 
 
 class SummaryService:
@@ -68,7 +85,8 @@ class SummaryService:
             value = round_money(signed(row.closing, root.normal_balance), dp)
             return value + cumulative if row.id == re_row.id else value
 
-        nodes = {n.root.key: n for n in build_tree(roots, await self.coa.all_groups(business_id), accounts, amount)}
+        groups = await self.coa.all_groups(business_id)
+        nodes = {n.root.key: n for n in build_tree(roots, groups, _place_suspense(accounts, groups), amount)}
         assets, liabilities, equity = nodes["assets"], nodes["liabilities"], nodes["equity"]
         income, expenses = nodes["income"], nodes["expenses"]
         return SummaryResponse(

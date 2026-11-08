@@ -3,7 +3,7 @@
 from sqlalchemy import text
 
 from tests.support.factories import create_business
-from tests.support.ledger import biz, create_account, journal, post_je, set_lock_date
+from tests.support.ledger import biz, create_account, journal, post_je, set_lock_date, system_account_id
 
 START = "2026-01-01"
 OPENING = "2025-12-31"
@@ -356,3 +356,46 @@ async def test_summary_balances_with_opening_balance(client, users):
     bs = (await _summary(client, owner, bid))["balance_sheet"]
 
     assert (bs["total_assets"], bs["total_liabilities_and_equity"], bs["is_balanced"]) == ("400.00", "400.00", True)
+
+
+def _section(bs, key) -> dict:
+    return next(s for s in bs["sections"] if s["root_key"] == key)
+
+
+def _suspense_root(bs) -> tuple[str, str] | None:
+    for section in bs["sections"]:
+        for node in [section, *_nodes(section["groups"])]:
+            for account in node["accounts"]:
+                if account["name"] == "Suspense":
+                    return section["root_key"], account["amount"]
+    return None
+
+
+async def test_debit_suspense_shows_under_assets(client, users):
+    owner, bid = await _business(client, users)
+    suspense = await system_account_id(client, owner, bid, "suspense")
+    sales = await create_account(client, owner, bid, "Services", "income")
+    rent = await create_account(client, owner, bid, "Office rent", "expense")
+    await post_je(client, owner, bid, "2026-02-01", [(suspense, "100", "0"), (sales, "0", "100")])
+    await post_je(client, owner, bid, "2026-02-02", [(rent, "30", "0"), (suspense, "0", "30")])
+
+    summary = await _summary(client, owner, bid)
+    bs, pl = summary["balance_sheet"], summary["profit_and_loss"]
+
+    assert _suspense_root(bs) == ("assets", "70.00")
+    assert _section(bs, "equity")["total"] == "70.00"  # Retained earnings only, credit-positive
+    assert (bs["total_assets"], bs["total_liabilities_and_equity"], bs["is_balanced"]) == ("70.00", "70.00", True)
+    assert (pl["total_income"], pl["total_expenses"], pl["net_profit"]) == ("100.00", "30.00", "70.00")
+
+
+async def test_credit_suspense_shows_under_liabilities(client, users):
+    owner, bid = await _business(client, users)
+    suspense = await system_account_id(client, owner, bid, "suspense")
+    prepaid = await create_account(client, owner, bid, "Prepaid insurance", "asset")
+    await post_je(client, owner, bid, "2026-02-01", [(prepaid, "250", "0"), (suspense, "0", "250")])
+
+    bs = (await _summary(client, owner, bid))["balance_sheet"]
+
+    assert _suspense_root(bs) == ("liabilities", "250.00")
+    assert (bs["total_assets"], bs["total_liabilities"], bs["total_equity"]) == ("250.00", "250.00", "0.00")
+    assert bs["is_balanced"] is True
