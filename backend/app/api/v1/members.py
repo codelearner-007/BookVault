@@ -60,7 +60,7 @@ async def _audit(
 async def list_members(
     params: PageParams = Depends(page_params),
     ctx: BusinessContext = Depends(require_business_access(AREA_MEMBERS, AreaRight.VIEW)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> MemberListResponse:
     return await MemberService(db).list_members(ctx, params.page, params.page_size)
 
@@ -70,7 +70,7 @@ async def add_member(
     body: AddMemberRequest,
     key: str = Depends(require_idempotency_key),
     ctx: BusinessContext = Depends(require_business_access(AREA_MEMBERS, AreaRight.CREATE)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> MemberResponse:
     ManagedUserService(db).count_management_call(ctx.user_id)
 
@@ -89,7 +89,7 @@ async def update_member(
     member_id: str,
     body: UpdateMemberRequest,
     ctx: BusinessContext = Depends(require_business_access(AREA_MEMBERS, AreaRight.EDIT)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> MemberResponse:
     member = await MemberService(db).update_status(ctx, member_id, body)
     await _audit(db, ctx.user_id, f"member_{body.status}", member.id, business_id=ctx.business_id,
@@ -104,7 +104,7 @@ async def update_member(
 async def remove_member(
     member_id: str,
     ctx: BusinessContext = Depends(require_business_access(AREA_MEMBERS, AreaRight.DELETE)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> Response:
     user_id = await MemberService(db).remove_member(ctx, member_id)
     await _audit(db, ctx.user_id, "member_removed", member_id, business_id=ctx.business_id,
@@ -116,7 +116,7 @@ async def remove_member(
 async def get_member_access(
     member_id: str,
     ctx: BusinessContext = Depends(require_business_access(AREA_MEMBERS, AreaRight.VIEW)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> MemberAccessResponse:
     return await MemberService(db).get_access(ctx, member_id)
 
@@ -126,7 +126,7 @@ async def put_member_access(
     member_id: str,
     body: MemberAccessRequest,
     ctx: BusinessContext = Depends(require_business_access(AREA_MEMBERS, AreaRight.EDIT)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> MemberAccessResponse:
     change = await MemberService(db).put_access(ctx, member_id, body)
     await _audit(db, ctx.user_id, "member_access_changed", member_id, business_id=ctx.business_id,
@@ -141,7 +141,7 @@ async def put_member_access(
 async def check_new_user_email(
     body: EmailCheckRequest,
     ctx: BusinessContext = Depends(require_business_access(AREA_MEMBERS, AreaRight.CREATE)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> Response:
     """Step 1 of creating a business user (Next.js): owner only; refused emails are generic."""
     service = ManagedUserService(db)
@@ -161,7 +161,7 @@ async def check_new_user_email(
 @router.get("/businesses/{business_id}/me", response_model=MyBusinessAccessResponse)
 async def my_business_access(
     ctx: BusinessContext = Depends(require_business_member()),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> MyBusinessAccessResponse:
     """My rights per area in this business, for UI hiding only (the server checks every route)."""
     return await MemberService(db).my_access(ctx)
@@ -171,7 +171,7 @@ async def my_business_access(
 async def my_businesses(
     params: PageParams = Depends(page_params),
     current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> MyBusinessListResponse:
     return await MemberService(db).list_my_businesses(
         current_user.user_id, params.page, params.page_size
@@ -185,7 +185,7 @@ async def my_businesses(
 )
 async def list_access_areas(
     params: PageParams = Depends(page_params),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> AccessAreaListResponse:
     """The rows of the custom access grid: grantable areas (no owner-only or platform areas)."""
     return await MemberService(db).list_areas(params)
@@ -198,7 +198,7 @@ async def list_access_areas(
 )
 async def list_access_presets(
     params: PageParams = Depends(page_params),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> AccessPresetListResponse:
     return await MemberService(db).list_presets(params)
 
@@ -210,7 +210,7 @@ async def list_access_presets(
 async def list_managed_users(
     params: PageParams = Depends(page_params),
     current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ManagedUserListResponse:
     """The member accounts the caller created (the picker for 'add one of my users')."""
     return await ManagedUserService(db).list_managed(
@@ -223,7 +223,7 @@ async def authorize_managed_user_action(
     user_id: str,
     body: ManagedUserActionRequest,
     current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ManagedUserResponse:
     """Authorize and audit one account action of the Next.js routes (404 unless the caller created it)."""
     service = ManagedUserService(db)

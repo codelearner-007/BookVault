@@ -128,6 +128,7 @@ export const NEW_ACTIONS = [
   { tab: 'receipts', label: 'Receipt', href: '?tab=receipts&page=create', icon: ArrowDownLeft },
   { tab: 'customers', label: 'Customer', href: '?tab=customers&page=create', icon: Users },
   { tab: 'suppliers', label: 'Supplier', href: '?tab=suppliers&page=create', icon: Truck },
+  { tab: 'journal-entries', label: 'Journal Entry', href: '?tab=journal-entries&new=1', icon: BookOpen },
 ];
 
 export const DEFAULT_TAB = 'summary';

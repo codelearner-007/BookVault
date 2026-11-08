@@ -6,7 +6,7 @@ from fastapi.dependencies.utils import get_flat_dependant
 from fastapi.routing import APIRoute
 
 from app.core.config import settings
-from app.core.dependencies import require_idempotency_key
+from app.core.dependencies import get_db, require_idempotency_key
 from app.main import app
 
 PAGINATION_PARAMS = {"page", "page_size"}
@@ -14,6 +14,7 @@ PAGINATION_PARAMS = {"page", "page_size"}
 CREATE_SUFFIXES = (
     "/businesses", "/customers", "/suppliers", "/bank-accounts", "/receipts",
     "/chart-of-accounts/groups", "/chart-of-accounts/accounts", "/members",
+    "/journal-entries", "/journal-entries/{document_id}/post", "/journal-entries/{document_id}/void",
 )
 
 
@@ -64,3 +65,16 @@ def test_create_routes_require_idempotency_key():
     creates = [r for r in _routes() if "POST" in r.methods and r.path.endswith(CREATE_SUFFIXES)]
     missing = [r.path for r in creates if require_idempotency_key not in _calls(r)]
     assert len(creates) == len(CREATE_SUFFIXES) and missing == []
+
+
+def test_every_db_session_commits_before_the_response():
+    """B1 race fix: get_db is function-scoped everywhere, so COMMIT runs before the reply."""
+    request_scoped = []
+    for route in _routes():
+        stack = list(route.dependant.dependencies)
+        while stack:
+            dependant = stack.pop()
+            if dependant.call is get_db and dependant.scope != "function":
+                request_scoped.append(route.path)
+            stack.extend(dependant.dependencies)
+    assert request_scoped == []

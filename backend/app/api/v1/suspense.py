@@ -18,7 +18,7 @@ _VIEW = require_business_access("suspense", AreaRight.VIEW)
 @router.get("/balance", response_model=SuspenseBalanceResponse)
 async def get_suspense_balance(
     ctx: BusinessContext = Depends(_VIEW),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> SuspenseBalanceResponse:
     return await SuspenseService(db).balance(ctx.business_id)
 
@@ -27,6 +27,6 @@ async def get_suspense_balance(
 async def get_suspense_entries(
     params: PageParams = Depends(page_params),
     ctx: BusinessContext = Depends(_VIEW),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[SuspenseEntryResponse]:
     return await SuspenseService(db).entries(ctx.business_id, params)

@@ -43,7 +43,7 @@ router = APIRouter(prefix="/businesses", tags=["Businesses"])
 @router.get("", response_model=MyBusinessListResponse)
 async def list_businesses(
     params: PageParams = Depends(page_params),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> MyBusinessListResponse:
     """Businesses I own or am an active member of (alias of GET /me/businesses)."""
@@ -57,7 +57,7 @@ async def create_business(
     body: CreateBusinessRequest,
     key: str = Depends(require_idempotency_key),
     current_user: CurrentUser = Depends(require_business_creator),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> BusinessResponse:
     """Create a business owned by the caller (no business exists yet: platform-level key)."""
     scope = IdempotencyScope(key, current_user.user_id, None, None, "POST businesses")
@@ -69,7 +69,7 @@ async def create_business(
 @router.get("/deleted", response_model=PaginatedResponse[BusinessResponse])
 async def list_deleted_businesses(
     params: PageParams = Depends(page_params),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> PaginatedResponse[BusinessResponse]:
     """My businesses in Trash."""
@@ -79,7 +79,7 @@ async def list_deleted_businesses(
 @router.get("/{business_id}", response_model=BusinessResponse)
 async def get_business(
     ctx: BusinessContext = Depends(require_business_member()),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> BusinessResponse:
     return await BusinessService(db).get(ctx)
 
@@ -88,7 +88,7 @@ async def get_business(
 async def update_business(
     body: UpdateBusinessRequest,
     ctx: BusinessContext = Depends(_DETAILS_EDIT),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> BusinessResponse:
     """Update name, country and address (needs the version read by the client)."""
     return await BusinessService(db).update(ctx, body)
@@ -97,7 +97,7 @@ async def update_business(
 @router.delete("/{business_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_business(
     ctx: BusinessContext = Depends(_OWNER_ONLY),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> None:
     """Move the business to Trash (owner only)."""
     await BusinessService(db).soft_delete(ctx)
@@ -106,7 +106,7 @@ async def delete_business(
 @router.get("/{business_id}/export", response_model=BusinessExportResponse)
 async def export_business(
     ctx: BusinessContext = Depends(_OWNER_ONLY_INCLUDING_DELETED),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> BusinessExportResponse:
     """Full JSON backup of the business (owner only; offered before a permanent delete)."""
     return await BusinessService(db).export(ctx)
@@ -117,7 +117,7 @@ async def permanently_delete_business(
     body: PurgeBusinessRequest,
     ctx: BusinessContext = Depends(_OWNER_ONLY_INCLUDING_DELETED),
     current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> None:
     """Permanently delete a business in Trash (owner, recent re-auth, typed name, export offered)."""
     await BusinessService(db).purge(ctx, current_user, body)
@@ -126,7 +126,7 @@ async def permanently_delete_business(
 @router.post("/{business_id}/restore", response_model=BusinessResponse)
 async def restore_business(
     ctx: BusinessContext = Depends(_OWNER_ONLY_INCLUDING_DELETED),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> BusinessResponse:
     return await BusinessService(db).restore(ctx)
 
@@ -134,7 +134,7 @@ async def restore_business(
 @router.post("/{business_id}/reset", response_model=BusinessResponse)
 async def reset_business(
     ctx: BusinessContext = Depends(_DETAILS_EDIT),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> BusinessResponse:
     """Clear country and address."""
     return await BusinessService(db).reset(ctx)
@@ -144,7 +144,7 @@ async def reset_business(
 async def list_business_tabs(
     params: PageParams = Depends(page_params),
     ctx: BusinessContext = Depends(require_business_member()),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[BusinessTabResponse]:
     """Tabs of the business; a custom member sees only tabs whose area it can view."""
     tabs = await MemberService(db).visible_tabs(ctx, await TabService(db).list_business_tabs(ctx.business_id))
@@ -156,7 +156,7 @@ async def upsert_business_tabs(
     body: UpsertBusinessTabsRequest,
     params: PageParams = Depends(page_params),
     ctx: BusinessContext = Depends(_TABS_EDIT),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[BusinessTabResponse]:
     """Save enabled/order of the business tabs (unknown keys and orphan children -> 422)."""
     tabs = await TabService(db).upsert_business_tabs(ctx, body.items)

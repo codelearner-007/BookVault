@@ -30,7 +30,7 @@ def build_contact_router(kind: ContactKind) -> APIRouter:
         params: PageParams = Depends(page_params),
         search: Optional[str] = Query(None, max_length=SEARCH_MAX),
         ctx: BusinessContext = Depends(view),
-        db: AsyncSession = Depends(get_db),
+        db: AsyncSession = Depends(get_db, scope="function"),
     ) -> PaginatedResponse[ContactResponse]:
         return await ContactService(db, kind).list_page(ctx.business_id, search, params)
 
@@ -39,7 +39,7 @@ def build_contact_router(kind: ContactKind) -> APIRouter:
         body: ContactCreate,
         key: str = Depends(require_idempotency_key),
         ctx: BusinessContext = Depends(require_business_access(kind.area_key, AreaRight.CREATE)),
-        db: AsyncSession = Depends(get_db),
+        db: AsyncSession = Depends(get_db, scope="function"),
     ) -> ContactResponse:
         return await IdempotencyService(db).run(
             business_scope(ctx, key, kind.area_key, f"POST {kind.area_key}"),
@@ -51,7 +51,7 @@ def build_contact_router(kind: ContactKind) -> APIRouter:
     async def get_contact(
         contact_id: str,
         ctx: BusinessContext = Depends(view),
-        db: AsyncSession = Depends(get_db),
+        db: AsyncSession = Depends(get_db, scope="function"),
     ) -> ContactResponse:
         return await ContactService(db, kind).get(ctx.business_id, contact_id)
 
@@ -61,7 +61,7 @@ def build_contact_router(kind: ContactKind) -> APIRouter:
         params: PageParams = Depends(page_params),
         ctx: BusinessContext = Depends(view),
         _receipts: BusinessContext = Depends(receipts_view),
-        db: AsyncSession = Depends(get_db),
+        db: AsyncSession = Depends(get_db, scope="function"),
     ) -> PaginatedResponse[ReceiptResponse]:
         await ContactService(db, kind).get(ctx.business_id, contact_id)
         return await ReceiptService(db).list_page(ctx.business_id, params, (kind.key, contact_id))
@@ -71,7 +71,7 @@ def build_contact_router(kind: ContactKind) -> APIRouter:
         contact_id: str,
         body: ContactUpdate,
         ctx: BusinessContext = Depends(require_business_access(kind.area_key, AreaRight.EDIT)),
-        db: AsyncSession = Depends(get_db),
+        db: AsyncSession = Depends(get_db, scope="function"),
     ) -> ContactResponse:
         return await ContactService(db, kind).update(ctx, contact_id, body)
 
@@ -80,7 +80,7 @@ def build_contact_router(kind: ContactKind) -> APIRouter:
         contact_id: str,
         version: int = Query(..., ge=1),
         ctx: BusinessContext = Depends(require_business_access(kind.area_key, AreaRight.DELETE)),
-        db: AsyncSession = Depends(get_db),
+        db: AsyncSession = Depends(get_db, scope="function"),
     ) -> None:
         await ContactService(db, kind).delete(ctx, contact_id, version)
 

@@ -1,6 +1,8 @@
-"""Business settings model (migration 20261108000020; B1 adds the ledger columns)."""
+"""Business settings model (migrations 20261108000020, 20261108000025: ledger columns)."""
 
-from sqlalchemy import Boolean, ForeignKey, text
+from datetime import date
+
+from sqlalchemy import Boolean, Date, ForeignKey, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,5 +19,10 @@ class BusinessSettings(Base, TimestampMixin):
     )
     require_member_mfa: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
+    )
+    books_start_date: Mapped[date] = mapped_column(Date, nullable=False, server_default=text("CURRENT_DATE"))
+    lock_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    rounding_mode_key: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'half_away_from_zero'")
     )
     version: Mapped[int] = mapped_column(nullable=False, server_default=text("1"))

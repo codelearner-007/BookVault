@@ -181,7 +181,12 @@ async def enforce_rate_limit(
 async def get_db(
     claims: Optional[dict] = Depends(get_verified_claims),
 ) -> AsyncGenerator[AsyncSession, None]:
-    """Session whose transactions carry the verified caller as app.user_id (RLS, B0.4)."""
+    """Session whose transactions carry the verified caller as app.user_id (RLS, B0.4).
+
+    Always used as Depends(get_db, scope="function"): the session commits when the route
+    function returns, BEFORE the response is sent, so a client that gets 2xx can read its
+    write at once and a failed COMMIT (deferred ledger checks) becomes the error response.
+    """
     user_id = claims.get("user_id") if claims else None
     async with get_session_manager().session(user_id) as session:
         yield session
@@ -190,7 +195,7 @@ async def get_db(
 async def get_current_user(
     request: Request,
     claims: Optional[dict] = Depends(get_verified_claims),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> CurrentUser:
     """The authenticated caller; 401 without a valid token or for a banned/deleted account.
 
@@ -202,7 +207,7 @@ async def get_current_user(
 async def get_current_user_pending_mfa(
     request: Request,
     claims: Optional[dict] = Depends(get_verified_claims),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> CurrentUser:
     """Like get_current_user, but an AAL1 session of a user with a verified factor is accepted.
 
@@ -255,7 +260,7 @@ def require_role(*allowed_roles: str) -> Callable:
 
 async def require_live_super_admin(
     current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> CurrentUser:
     """Platform-route guard: the caller must hold super_admin in user_roles right now.
 
@@ -277,7 +282,7 @@ def _business_access(
     async def business_access(
         business_id: str,
         current_user: CurrentUser = Depends(get_current_user),
-        db: AsyncSession = Depends(get_db),
+        db: AsyncSession = Depends(get_db, scope="function"),
     ) -> BusinessContext:
         return await AccessService(db).resolve(
             business_id, current_user.user_id, area_key, right, include_deleted,
@@ -314,7 +319,7 @@ def require_tab_area_access(right: AreaRight) -> Callable:
         business_id: str,
         tab_key: str,
         current_user: CurrentUser = Depends(get_current_user),
-        db: AsyncSession = Depends(get_db),
+        db: AsyncSession = Depends(get_db, scope="function"),
     ) -> BusinessContext:
         service = AccessService(db)
         await service.resolve(business_id, current_user.user_id, None, None, aal=current_user.aal)
@@ -331,7 +336,7 @@ def require_tab_area_access(right: AreaRight) -> Callable:
 
 async def require_business_creator(
     current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> CurrentUser:
     decision = await can_create_business(db, current_user)
     if not decision.allowed:

@@ -18,7 +18,7 @@ router = APIRouter(prefix="/countries", tags=["Countries"])
 async def list_countries(
     params: PageParams = Depends(page_params),
     search: Optional[str] = Query(None, max_length=SEARCH_MAX),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[CountryResponse]:
     """Public reference data: the signup form needs it before there is a session (B0.7).
     Rate limited per IP by the v1 router."""

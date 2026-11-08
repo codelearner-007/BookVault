@@ -157,3 +157,28 @@ class MfaEnrollmentRequiredError(AppException):
             status_code=403,
             details={"code": "mfa_enrollment_required"},
         )
+
+
+class PeriodLockedError(ConflictError):
+    """PR-75 / CD-01: the date is on or before the business lock date (inclusive)."""
+
+    def __init__(self, lock_date: str) -> None:
+        super().__init__(f"Transactions dated on or before {lock_date} are locked.", "period_locked")
+
+
+class JournalUnbalancedError(AppException):
+    """BUG-03 / CD-10: a journal entry whose debits differ from its credits is rejected."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            message="Debits and credits must be equal",
+            status_code=422,
+            details={"code": "journal_unbalanced"},
+        )
+
+
+class LedgerValidationError(AppException):
+    """422 with a machine-readable code for a posting that cannot be made."""
+
+    def __init__(self, message: str, code: str) -> None:
+        super().__init__(message=message, status_code=422, details={"code": code})

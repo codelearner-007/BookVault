@@ -36,7 +36,7 @@ router = APIRouter(prefix="/businesses/{business_id}/chart-of-accounts", tags=["
 async def list_groups(
     params: PageParams = Depends(page_params),
     ctx: BusinessContext = Depends(_VIEW),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[CoaGroupResponse]:
     return await CoaService(db).list_groups(ctx.business_id, params)
 
@@ -46,7 +46,7 @@ async def create_group(
     body: CoaGroupCreate,
     key: str = Depends(require_idempotency_key),
     ctx: BusinessContext = Depends(_CREATE),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> CoaGroupResponse:
     return await IdempotencyService(db).run(
         business_scope(ctx, key, AREA, "POST coa groups"),
@@ -59,7 +59,7 @@ async def create_group(
 async def reorder_groups(
     body: CoaGroupsOrderUpdate,
     ctx: BusinessContext = Depends(_EDIT),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> None:
     await CoaService(db).reorder_groups(ctx, body)
 
@@ -68,7 +68,7 @@ async def reorder_groups(
 async def get_group(
     group_id: str,
     ctx: BusinessContext = Depends(_VIEW),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> CoaGroupResponse:
     return await CoaService(db).get_group(ctx.business_id, group_id)
 
@@ -78,7 +78,7 @@ async def update_group(
     group_id: str,
     body: CoaGroupUpdate,
     ctx: BusinessContext = Depends(_EDIT),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> CoaGroupResponse:
     return await CoaService(db).update_group(ctx, group_id, body)
 
@@ -88,7 +88,7 @@ async def delete_group(
     group_id: str,
     version: int = Query(..., ge=1),
     ctx: BusinessContext = Depends(_DELETE),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> None:
     await CoaService(db).delete_group(ctx, group_id, version)
 
@@ -100,7 +100,7 @@ async def delete_group(
 async def list_accounts(
     params: PageParams = Depends(page_params),
     ctx: BusinessContext = Depends(_VIEW),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[CoaAccountResponse]:
     return await CoaService(db).list_accounts(ctx.business_id, params)
 
@@ -110,7 +110,7 @@ async def create_account(
     body: CoaAccountCreate,
     key: str = Depends(require_idempotency_key),
     ctx: BusinessContext = Depends(_CREATE),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> CoaAccountResponse:
     return await IdempotencyService(db).run(
         business_scope(ctx, key, AREA, "POST coa accounts"),
@@ -123,7 +123,7 @@ async def create_account(
 async def reorder_accounts(
     body: CoaAccountsOrderUpdate,
     ctx: BusinessContext = Depends(_EDIT),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> None:
     await CoaService(db).reorder_accounts(ctx, body)
 
@@ -132,7 +132,7 @@ async def reorder_accounts(
 async def get_account(
     account_id: str,
     ctx: BusinessContext = Depends(_VIEW),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> CoaAccountResponse:
     return await CoaService(db).get_account(ctx.business_id, account_id)
 
@@ -142,7 +142,7 @@ async def update_account(
     account_id: str,
     body: CoaAccountUpdate,
     ctx: BusinessContext = Depends(_EDIT),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> CoaAccountResponse:
     return await CoaService(db).update_account(ctx, account_id, body)
 
@@ -152,6 +152,6 @@ async def delete_account(
     account_id: str,
     version: int = Query(..., ge=1),
     ctx: BusinessContext = Depends(_DELETE),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> None:
     await CoaService(db).delete_account(ctx, account_id, version)

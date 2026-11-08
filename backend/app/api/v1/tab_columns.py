@@ -17,7 +17,7 @@ router = APIRouter(prefix="/businesses/{business_id}/tab-columns", tags=["Tab Co
 async def get_tab_columns(
     tab_key: str,
     ctx: BusinessContext = Depends(require_tab_area_access(AreaRight.VIEW)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> TabColumnsResponse:
     return await TabColumnsService(db).get(ctx.business_id, tab_key)
 
@@ -27,6 +27,6 @@ async def update_tab_columns(
     tab_key: str,
     body: TabColumnsUpdate,
     ctx: BusinessContext = Depends(require_business_access("settings.customize_tabs", AreaRight.EDIT)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> TabColumnsResponse:
     return await TabColumnsService(db).replace(ctx, tab_key, body)

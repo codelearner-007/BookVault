@@ -25,7 +25,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
     dependencies=[Depends(require_live_super_admin)],
 )
 async def get_user_stats(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> UserStatsResponse:
     """Get user statistics. Requires: users:read_all"""
     service = UserService(db)
@@ -43,7 +43,7 @@ async def list_users_with_roles(
     email_verified: Optional[bool] = Query(None),
     status: Optional[str] = Query(None, max_length=KEY_MAX),
     search: Optional[str] = Query(None, max_length=SEARCH_MAX),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[UserWithRolesResponse]:
     """List users with pagination, filtering, and embedded roles. Requires: users:read_all"""
     service = UserService(db)
@@ -61,7 +61,7 @@ async def list_users_with_roles(
 )
 async def get_user_access_summary(
     user_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> UserAccessSummaryResponse:
     """Live role + owned businesses of a user; used by the Next.js user-admin routes."""
     return await UserService(db).get_access_summary(str(user_id))

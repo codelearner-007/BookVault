@@ -28,6 +28,7 @@ class BusinessContext:
     member_id: str
     access_mode: str
     owner_id: str
+    aal: str | None = None
 
     @property
     def is_owner(self) -> bool:
@@ -112,7 +113,7 @@ class AccessService:
             raise MfaEnrollmentRequiredError()
         if not row.allowed:
             raise PermissionDeniedError(f"{area_key}:{right}")
-        return BusinessContext(business_id, user_id, row.member_id, row.access_mode, row.owner_id)
+        return BusinessContext(business_id, user_id, row.member_id, row.access_mode, row.owner_id, aal)
 
     async def grantable_areas(self) -> dict[str, GrantableArea]:
         return {

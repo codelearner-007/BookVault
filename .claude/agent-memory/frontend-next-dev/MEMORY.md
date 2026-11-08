@@ -7,6 +7,7 @@
 
 ## API contract
 - [B0.5 contract](project_b05_contract.md) — envelopes, money strings, versions, CSRF/idempotency headers, 'receipts' tab key
+- [B1 ledger UI](project_b1_ledger_ui.md) — JE/reports URL params (?p paging), server totals, idempotency reuse, font build flake
 
 ## Pre-existing Build Issues
 - Turbopack build error when running `npx next build` outside project dir; always `cd frontend` first.

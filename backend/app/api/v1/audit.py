@@ -39,7 +39,7 @@ async def list_audit_logs(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     business_id: Optional[UUID] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> PaginatedResponse[AuditLogResponse]:
     """Audit rows of the caller (always scoped to the caller)."""
@@ -65,7 +65,7 @@ async def list_business_history(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     ctx: BusinessContext = Depends(require_business_access("history", AreaRight.VIEW)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[AuditLogResponse]:
     """Every audited change of the business (history:view)."""
     f = AuditFilter(
@@ -89,7 +89,7 @@ async def list_platform_audit(
     action: Optional[str] = Query(None, max_length=KEY_MAX),
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[AuditLogResponse]:
     """Platform-scope audit rows of every actor (live super admin, AAL2).
 
@@ -112,7 +112,7 @@ async def list_platform_audit(
 )
 async def list_audit_entity_types(
     params: PageParams = Depends(page_params),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[str]:
     """Distinct entity types in the audit trail (filter of the audit page)."""
     return await AuditService(db).list_entity_types(params)

@@ -20,7 +20,7 @@ router = APIRouter(prefix="/roles", tags=["Roles"])
 )
 async def list_roles(
     params: PageParams = Depends(page_params),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[RoleResponse]:
     """Platform role catalog (live super admin)."""
     roles = [RoleResponse.model_validate(role) for role in await RoleService(db).list_roles()]
@@ -34,7 +34,7 @@ async def list_roles(
 )
 async def get_role(
     role_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> RoleWithPermissionsResponse:
     """Get role details with permissions. Requires: roles:read"""
     service = RoleService(db)
@@ -58,7 +58,7 @@ async def get_role(
 async def get_role_permissions(
     role_id: str,
     params: PageParams = Depends(page_params),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[PermissionResponse]:
     """Permissions of one role (live super admin)."""
     role = await RoleService(db).get_role_with_permissions(role_id)

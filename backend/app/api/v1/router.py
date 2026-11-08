@@ -12,6 +12,8 @@ from app.api.v1 import (
     contacts,
     countries,
     dashboard,
+    journal_entries,
+    ledger_reports,
     members,
     permissions,
     profile,
@@ -30,6 +32,7 @@ api_router = APIRouter(prefix="/v1", dependencies=[Depends(enforce_rate_limit)])
 for module in (
     auth, profile, roles, permissions, user_roles, users, audit, dashboard, members,
     businesses, coa, bank_accounts, receipts, tab_columns, suspense, admin_tabs, countries,
+    journal_entries, ledger_reports,
 ):
     api_router.include_router(module.router)
 api_router.include_router(contacts.customers_router)

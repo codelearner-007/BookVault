@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -88,6 +88,13 @@ PG_UNIQUE_VIOLATION = "23505"
 PG_FOREIGN_KEY_VIOLATION = "23503"
 PG_CHECK_VIOLATION = "23514"
 
+# SQLSTATEs raised by the ledger triggers (migration 20261108000027) -> (HTTP status, code, message).
+LEDGER_SQLSTATES = {
+    "BVL01": (status.HTTP_409_CONFLICT, "period_locked", "This period is locked."),
+    "BVB01": (status.HTTP_422_UNPROCESSABLE_ENTITY, "journal_unbalanced", "Debits and credits must be equal"),
+    "BVI01": (status.HTTP_409_CONFLICT, "ledger_immutable", "Posted entries cannot be changed"),
+}
+
 
 def _error(status_code: int, message: str, details: dict | None = None) -> JSONResponse:
     """ErrorResponse body; internals stay in the server log under the request id (CS-15)."""
@@ -145,6 +152,21 @@ async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSON
     if code in (PG_FOREIGN_KEY_VIOLATION, PG_CHECK_VIOLATION):
         return _error(status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid reference or value")
     return _error(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
+
+
+@app.exception_handler(DBAPIError)
+async def ledger_error_handler(request: Request, exc: DBAPIError) -> JSONResponse:
+    """Ledger trigger refusals (the backstop behind the posting service); anything else is a 500."""
+    orig = getattr(exc, "orig", None)
+    mapped = LEDGER_SQLSTATES.get(getattr(orig, "sqlstate", None))
+    if mapped is None:
+        logger.exception("Database error")
+        return _error(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
+    status_code, code, fallback = mapped
+    # The trigger's own text for a locked period names the date (PR-75 wording).
+    message = getattr(orig.__cause__, "message", None) if code == "period_locked" else None
+    logger.warning("Ledger trigger refusal %s", code)
+    return _error(status_code, message or fallback, {"code": code})
 
 
 # Health check endpoint

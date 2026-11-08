@@ -22,7 +22,7 @@ router = APIRouter(prefix="/permissions", tags=["Permissions"])
 )
 async def list_permissions_grouped(
     params: PageParams = Depends(page_params),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[PermissionsGroupedByModuleResponse]:
     """List all permissions grouped by module. Platform route: live super_admin only."""
     service = PermissionService(db)

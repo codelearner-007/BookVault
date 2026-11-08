@@ -14,7 +14,7 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 @router.get("/stats", response_model=DashboardStatsResponse)
 async def get_dashboard_stats(
     current_user: CurrentUser = Depends(require_role("admin", "super_admin")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> DashboardStatsResponse:
     """My businesses and my audited actions (admin and super admin alike, CS-21)."""
     return await DashboardService(db).get_stats(current_user.user_id)

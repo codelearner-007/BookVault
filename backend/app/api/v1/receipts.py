@@ -22,7 +22,7 @@ router = APIRouter(prefix="/businesses/{business_id}/receipts", tags=["Receipts"
 async def list_receipts(
     params: PageParams = Depends(page_params),
     ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.VIEW)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[ReceiptResponse]:
     return await ReceiptService(db).list_page(ctx.business_id, params)
 
@@ -42,7 +42,7 @@ async def create_receipt(
     body: ReceiptCreate,
     key: str = Depends(require_idempotency_key),
     ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.CREATE)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ReceiptResponse:
     return await IdempotencyService(db).run(
         business_scope(ctx, key, AREA, "POST receipts"),
@@ -55,7 +55,7 @@ async def create_receipt(
 async def get_receipt(
     receipt_id: str,
     ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.VIEW)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ReceiptResponse:
     return await ReceiptService(db).get(ctx.business_id, receipt_id)
 
@@ -65,7 +65,7 @@ async def update_receipt(
     receipt_id: str,
     body: ReceiptUpdate,
     ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.EDIT)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ReceiptResponse:
     return await ReceiptService(db).update(ctx, receipt_id, body)
 
@@ -75,6 +75,6 @@ async def delete_receipt(
     receipt_id: str,
     version: int = Query(..., ge=1),
     ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.DELETE)),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> None:
     await ReceiptService(db).delete(ctx, receipt_id, version)

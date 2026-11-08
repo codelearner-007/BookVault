@@ -19,6 +19,8 @@ import BusinessCustomers from './tabs/BusinessCustomers';
 import BusinessSuppliers from './tabs/BusinessSuppliers';
 import BusinessHistory from './tabs/BusinessHistory';
 import BusinessReceipts from './tabs/BusinessReceipts';
+import BusinessJournalEntries from './tabs/BusinessJournalEntries';
+import BusinessReports from './tabs/BusinessReports';
 
 // Sidebar tabs (?tab=X): each must exist in admin_tabs (CLAUDE.md rule 18).
 const TAB_COMPONENTS = {
@@ -28,6 +30,8 @@ const TAB_COMPONENTS = {
   customers: BusinessCustomers,
   suppliers: BusinessSuppliers,
   receipts: BusinessReceipts,
+  'journal-entries': BusinessJournalEntries,
+  reports: BusinessReports,
 };
 
 const BUILT_TABS = Object.keys(TAB_COMPONENTS);

@@ -27,7 +27,7 @@ from tests.support.tenancy import business_routes, guard_kind, request_as, route
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PREFIX = "/api/v1/businesses/{business_id}"
 V, C, E, D = "view", "create", "edit", "delete"
-COA, MEMBERS = "settings.chart_of_accounts", "settings.members"
+COA, MEMBERS, JE = "settings.chart_of_accounts", "settings.members", "journal_entries"
 
 # platform-model Appendix A.3 (FastAPI), plus the B0.3 routes. "member" = membership only.
 ROUTE_MAP = {
@@ -54,6 +54,16 @@ ROUTE_MAP = {
     "GET /customers/{contact_id}/receipts": [("customers", V), ("receipts", V)],
     "GET /suppliers/{contact_id}/receipts": [("suppliers", V), ("receipts", V)],
     "GET /history": [("history", V)],
+    # B1: journal entries, Transaction Journal, ledger reports, book settings
+    "GET /journal-entries": [(JE, V)], "POST /journal-entries": [(JE, C)],
+    "POST /journal-entries/totals": [(JE, V)],
+    "GET /journal-entries/{document_id}": [(JE, V)], "PUT /journal-entries/{document_id}": [(JE, E)],
+    "POST /journal-entries/{document_id}/post": [(JE, E)],
+    "POST /journal-entries/{document_id}/void": [(JE, D)],
+    "GET /documents/{document_id}/journal": "member",
+    "GET /reports/trial-balance": [("reports", V)],
+    "GET /reports/general-ledger-transactions": [("reports", V)],
+    "GET /settings/books": [("settings.lock_date", V)], "PUT /settings/books": [("settings.lock_date", E)],
 }
 for _path, _area, _id in (("bank-accounts", "bank_cash_accounts", "bank_account_id"),
                           ("customers", "customers", "contact_id"),

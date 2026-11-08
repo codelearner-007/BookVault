@@ -1,0 +1,155 @@
+"""Ledger write repository: documents, document_lines, journal_entries, journal_lines.
+
+Imported only by app/services/posting/ (the one writer of the shared ledger tables,
+platform-model §5.2); tests/security/test_ledger_boundary.py enforces it.
+"""
+
+from datetime import date
+from sqlalchemy import delete, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.business_settings import BusinessSettings
+from app.models.coa_account import CoaAccount
+from app.models.ledger import (
+    Document,
+    DocumentLine,
+    DocumentStatus,
+    DocumentType,
+    JournalEntry,
+    JournalEntrySource,
+    JournalLine,
+)
+
+_NEXT_REFERENCE = text("SELECT public.next_document_reference(:business_id, :type_key, :area_key)")
+_BASE_DECIMALS = text(
+    "SELECT c.decimal_places FROM public.business_currencies bc"
+    " JOIN public.currencies c ON c.id = bc.currency_id"
+    " WHERE bc.business_id = :business_id AND bc.is_base"
+)
+
+
+class LedgerRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    # ---------------------------------------------------------------- reference data
+    async def document_type_id(self, key: str) -> str:
+        return (await self.session.execute(select(DocumentType.id).where(DocumentType.key == key))).scalar_one()
+
+    async def status_id(self, key: str) -> str:
+        return (await self.session.execute(select(DocumentStatus.id).where(DocumentStatus.key == key))).scalar_one()
+
+    async def status_key(self, status_id: str) -> str:
+        return (
+            await self.session.execute(select(DocumentStatus.key).where(DocumentStatus.id == status_id))
+        ).scalar_one()
+
+    async def source_id(self, key: str) -> str:
+        return (
+            await self.session.execute(select(JournalEntrySource.id).where(JournalEntrySource.key == key))
+        ).scalar_one()
+
+    # ---------------------------------------------------------------- business settings
+    async def lock_date(self, business_id: str) -> date | None:
+        return (
+            await self.session.execute(
+                select(BusinessSettings.lock_date).where(BusinessSettings.business_id == business_id)
+            )
+        ).scalar_one_or_none()
+
+    async def base_decimals(self, business_id: str) -> int | None:
+        return (await self.session.execute(_BASE_DECIMALS, {"business_id": business_id})).scalar_one_or_none()
+
+    async def next_reference(self, business_id: str, type_key: str, area_key: str) -> str:
+        result = await self.session.execute(
+            _NEXT_REFERENCE, {"business_id": business_id, "type_key": type_key, "area_key": area_key}
+        )
+        return result.scalar_one()
+
+    async def postable_account_ids(self, business_id: str, account_ids: set[str]) -> set[str]:
+        """Accounts of this business that may carry journal lines (active, not a total row)."""
+        result = await self.session.execute(
+            select(CoaAccount.id).where(
+                CoaAccount.business_id == business_id,
+                CoaAccount.id.in_(account_ids),
+                CoaAccount.is_active.is_(True),
+                CoaAccount.type != "total",
+            )
+        )
+        return set(result.scalars().all())
+
+    # ---------------------------------------------------------------- documents
+    async def get_document(
+        self, business_id: str, document_id: str, type_id: str | None = None, *, for_update: bool = False
+    ) -> Document | None:
+        query = select(Document).where(Document.business_id == business_id, Document.id == document_id)
+        if type_id is not None:
+            query = query.where(Document.document_type_id == type_id)
+        if for_update:
+            query = query.with_for_update()
+        return (await self.session.execute(query)).scalar_one_or_none()
+
+    async def add(self, row: Document | JournalEntry) -> None:
+        self.session.add(row)
+        await self.session.flush()
+        await self.session.refresh(row)
+
+    async def save(self, document: Document) -> None:
+        await self.session.flush()
+        await self.session.refresh(document)
+
+    async def lines(self, business_id: str, document_id: str) -> list[DocumentLine]:
+        result = await self.session.execute(
+            select(DocumentLine)
+            .where(DocumentLine.business_id == business_id, DocumentLine.document_id == document_id)
+            .order_by(DocumentLine.line_no)
+        )
+        return list(result.scalars().all())
+
+    async def replace_lines(self, business_id: str, document_id: str, lines: list[DocumentLine]) -> None:
+        await self.session.execute(
+            delete(DocumentLine).where(
+                DocumentLine.business_id == business_id, DocumentLine.document_id == document_id
+            )
+        )
+        self.session.add_all(lines)
+        await self.session.flush()
+
+    async def update_line_descriptions(self, lines: list[DocumentLine], descriptions: list[str | None]) -> None:
+        for line, description in zip(lines, descriptions, strict=True):
+            line.description = description
+        await self.session.flush()
+
+    # ---------------------------------------------------------------- journal
+    async def add_entry(self, entry: JournalEntry, lines: list[JournalLine]) -> None:
+        await self.add(entry)
+        for line in lines:
+            line.journal_entry_id = entry.id
+        self.session.add_all(lines)
+        await self.session.flush()
+
+    async def live_entry(self, business_id: str, document_id: str) -> JournalEntry | None:
+        """The document's current posting: not a reversal and not reversed yet."""
+        reversal = select(JournalEntry.reverses_entry_id).where(
+            JournalEntry.business_id == business_id, JournalEntry.reverses_entry_id.is_not(None)
+        )
+        result = await self.session.execute(
+            select(JournalEntry)
+            .where(
+                JournalEntry.business_id == business_id,
+                JournalEntry.document_id == document_id,
+                JournalEntry.reverses_entry_id.is_(None),
+                JournalEntry.id.not_in(reversal),
+            )
+            .order_by(JournalEntry.posted_at.desc(), JournalEntry.id.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def entry_lines(self, business_id: str, entry_id: str) -> list[JournalLine]:
+        result = await self.session.execute(
+            select(JournalLine)
+            .where(JournalLine.business_id == business_id, JournalLine.journal_entry_id == entry_id)
+            .order_by(JournalLine.line_no)
+        )
+        return list(result.scalars().all())

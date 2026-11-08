@@ -31,7 +31,7 @@ router = APIRouter(prefix="/users", tags=["User Roles"])
 async def list_user_roles(
     user_id: str,
     params: PageParams = Depends(page_params),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> PaginatedResponse[UserRoleResponse]:
     """
@@ -58,7 +58,7 @@ async def assign_role_to_user(
     request: Request,
     user_id: str,
     role_data: AssignUserRoleRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> UserRoleResponse:
     """Assign a role to a user. Requires: users:assign_roles"""
@@ -88,7 +88,7 @@ async def remove_role_from_user(
     request: Request,
     user_id: str,
     role_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> None:
     """Remove a role from a user. Requires: users:assign_roles"""

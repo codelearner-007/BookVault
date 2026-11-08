@@ -15,7 +15,7 @@ router = APIRouter(prefix="/profile", tags=["Profile"])
 
 @router.get("", response_model=ProfileResponse)
 async def get_profile(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ProfileResponse:
     """Get the current user's profile. Auto-creates a profile if one does not exist."""
@@ -27,7 +27,7 @@ async def get_profile(
 @router.patch("", response_model=ProfileResponse)
 async def update_profile(
     data: UpdateProfileRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ProfileResponse:
     """Update the current user's profile."""

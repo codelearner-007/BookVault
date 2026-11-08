@@ -37,12 +37,13 @@ def _decimal_str(value: Decimal) -> str:
 
 
 IdStr = Annotated[str, Field(max_length=36), AfterValidator(canonical_uuid)]
+# Optional text: blank -> None, explicit null accepted (the length bound applies to strings only).
 ShortText = Annotated[str, Field(min_length=1, max_length=NAME_MAX)]
-OptionalName = Annotated[Optional[str], BeforeValidator(_blank_to_none), Field(max_length=NAME_MAX)]
-OptionalCode = Annotated[Optional[str], BeforeValidator(_blank_to_none), Field(max_length=CODE_MAX)]
-OptionalEmail = Annotated[Optional[str], BeforeValidator(_blank_to_none), Field(max_length=EMAIL_MAX)]
-OptionalText = Annotated[Optional[str], BeforeValidator(_blank_to_none), Field(max_length=TEXT_MAX)]
-OptionalUrl = Annotated[Optional[str], BeforeValidator(_blank_to_none), Field(max_length=URL_MAX)]
+OptionalName = Annotated[Optional[Annotated[str, Field(max_length=NAME_MAX)]], BeforeValidator(_blank_to_none)]
+OptionalCode = Annotated[Optional[Annotated[str, Field(max_length=CODE_MAX)]], BeforeValidator(_blank_to_none)]
+OptionalEmail = Annotated[Optional[Annotated[str, Field(max_length=EMAIL_MAX)]], BeforeValidator(_blank_to_none)]
+OptionalText = Annotated[Optional[Annotated[str, Field(max_length=TEXT_MAX)]], BeforeValidator(_blank_to_none)]
+OptionalUrl = Annotated[Optional[Annotated[str, Field(max_length=URL_MAX)]], BeforeValidator(_blank_to_none)]
 
 # Money in requests: bounded Decimal; floats and exponent strings are parsed by Pydantic
 # into Decimal (never float arithmetic). Responses serialise money as strings.

@@ -21,7 +21,7 @@ router = APIRouter(prefix="/admin-tabs", tags=["Admin Tabs"])
 )
 async def list_admin_tabs(
     params: PageParams = Depends(page_params),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[AdminTabResponse]:
     tabs = await TabService(db).list_admin_tabs()
     return PaginatedResponse.build(params.slice(tabs), len(tabs), params.page, params.page_size)
@@ -32,7 +32,7 @@ async def upsert_admin_tabs(
     body: UpsertAdminTabsRequest,
     params: PageParams = Depends(page_params),
     current_user: CurrentUser = Depends(require_live_super_admin),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[AdminTabResponse]:
     tabs = await TabService(db).upsert_admin_tabs(current_user.user_id, body.items)
     return PaginatedResponse.build(params.slice(tabs), len(tabs), params.page, params.page_size)
@@ -42,6 +42,6 @@ async def upsert_admin_tabs(
 async def delete_admin_tab(
     key: str,
     current_user: CurrentUser = Depends(require_live_super_admin),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> None:
     await TabService(db).delete_admin_tab(current_user.user_id, key)

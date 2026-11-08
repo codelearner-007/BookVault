@@ -102,9 +102,12 @@ async def test_rls_helpers_are_security_definer_with_empty_search_path(db_conn):
         assert (secdef, volatility, config, owner) == (True, "s", ["search_path=\"\""], "bookvault_rls_owner"), name
 
 
-APPEND_ONLY = {"audit_logs"}
+# Documents are voided, never deleted; posted ledger rows are immutable (B1): no DELETE policy.
+APPEND_ONLY = {"audit_logs", "documents", "journal_entries", "journal_lines"}
 # One row per business, inserted by a trigger and removed by the FK cascade (B0.7).
-SINGLETONS = {"business_settings"}
+# business_currencies (creation trigger) and document_sequences (next_document_reference())
+# are written by SECURITY DEFINER functions only (B1).
+SINGLETONS = {"business_settings", "business_currencies", "document_sequences"}
 
 
 async def test_business_tables_have_policies_for_every_command(db_conn):

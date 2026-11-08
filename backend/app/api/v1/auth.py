@@ -44,7 +44,7 @@ async def get_current_user_info(
     status_code=status.HTTP_201_CREATED,
 )
 async def generate_recovery_codes(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> RecoveryCodesResponse:
     """New recovery codes (the old set is replaced). AAL2 and a recent sign-in required."""
@@ -53,7 +53,7 @@ async def generate_recovery_codes(
 
 @router.get("/mfa/recovery-codes", response_model=RecoveryCodesStatusResponse)
 async def recovery_codes_status(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> RecoveryCodesStatusResponse:
     return RecoveryCodesStatusResponse(remaining=await MfaService(db).remaining_codes(current_user))
@@ -61,7 +61,7 @@ async def recovery_codes_status(
 
 @router.delete("/mfa/recovery-codes", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_recovery_codes(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Response:
     """Called after 2FA is turned off; refused while a verified factor remains."""
@@ -72,7 +72,7 @@ async def delete_recovery_codes(
 @router.post("/mfa/recover", status_code=status.HTTP_204_NO_CONTENT)
 async def use_recovery_code(
     body: UseRecoveryCodeRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: CurrentUser = Depends(get_current_user_pending_mfa),
 ) -> Response:
     """Spend a recovery code from the AAL1 session; Next.js then removes the TOTP factors."""
@@ -83,7 +83,7 @@ async def use_recovery_code(
 @router.post("/events", status_code=status.HTTP_204_NO_CONTENT)
 async def record_auth_event(
     body: RecordAuthEventRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Response:
     """Audit an auth event only Next.js sees (allow-listed, about the caller only)."""
