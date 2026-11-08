@@ -23,6 +23,7 @@ from app.core.rate_limit import USER_KEY_STATE, enforce_user_limit, rate_limit_k
 from app.core.security import extract_user_claims, verify_token
 from app.db.session import get_session_manager
 from app.schemas.auth import CurrentUser
+from app.services.posting.service import PostingService
 from app.services.access_service import AccessService, BusinessContext
 from app.services.entitlements import can_create_business
 from app.services.mfa_service import MfaService
@@ -332,6 +333,31 @@ def require_tab_area_access(right: AreaRight) -> Callable:
 
     tab_area_access.grants_business_access = True
     return tab_area_access
+
+
+def require_document_access(right: AreaRight) -> Callable:
+    """Guard for /businesses/{business_id}/documents/{document_id}/...: `right` on the document's own area.
+
+    Not a member, or a document of another business -> 404; right not held -> 403.
+    """
+
+    async def document_access(
+        business_id: str,
+        document_id: str,
+        current_user: CurrentUser = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db, scope="function"),
+    ) -> BusinessContext:
+        service = AccessService(db)
+        await service.resolve(business_id, current_user.user_id, None, None, aal=current_user.aal)
+        document = await PostingService(db).find_document(business_id, document_id)
+        if document is None:
+            raise ResourceNotFoundError("Document", document_id)
+        return await service.resolve(
+            business_id, current_user.user_id, document.area_key, right, aal=current_user.aal
+        )
+
+    document_access.grants_business_access = True
+    return document_access
 
 
 async def require_business_creator(

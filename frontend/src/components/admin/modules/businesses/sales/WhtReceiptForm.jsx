@@ -57,6 +57,7 @@ export default function WhtReceiptForm({ businessId, receiptId, cloneId = null, 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const { save, setVersion } = useDocumentSave({
+    businessId,
     docId: receiptId,
     create: (body, key) => withholdingTaxReceiptsService.create(businessId, body, key),
     update: (body) => withholdingTaxReceiptsService.update(businessId, receiptId, body),

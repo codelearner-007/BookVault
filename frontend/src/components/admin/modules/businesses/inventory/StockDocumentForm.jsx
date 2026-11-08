@@ -137,6 +137,7 @@ export default function StockDocumentForm({ businessId, config, docId = null, cl
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const { save, setVersion } = useDocumentSave({
+    businessId,
     docId,
     create: (body, key) => config.service.create(businessId, body, key),
     update: (body) => config.service.update(businessId, docId, body),

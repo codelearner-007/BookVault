@@ -35,6 +35,7 @@ _LIST_FILTER = """
       AND (CAST(:party_id AS uuid) IS NULL OR td.party_id = CAST(:party_id AS uuid))
       AND (CAST(:search AS text) IS NULL OR d.reference ILIKE :pattern OR d.description ILIKE :pattern
            OR cu.name ILIKE :pattern OR su.name ILIKE :pattern)
+      AND s.key <> 'void'  -- deleted documents appear only in History
 """
 _LIST_PAGE = text(f"""
     SELECT CAST(d.id AS text) AS id, d.reference, d.document_date AS date, CAST(td.party_id AS text) AS party_id,

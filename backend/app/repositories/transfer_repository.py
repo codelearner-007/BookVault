@@ -13,6 +13,7 @@ _FILTER = """
     LEFT JOIN public.bank_accounts f ON f.business_id = x.business_id AND f.id = x.from_bank_account_id
     LEFT JOIN public.bank_accounts t ON t.business_id = x.business_id AND t.id = x.to_bank_account_id
     WHERE x.business_id = :business_id
+      AND s.key <> 'void'  -- deleted documents appear only in History
 """
 _PAGE = text(f"""
     SELECT CAST(d.id AS text) AS id, d.reference, d.document_date AS date, s.key AS status, d.version,

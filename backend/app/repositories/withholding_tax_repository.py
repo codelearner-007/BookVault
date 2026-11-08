@@ -21,9 +21,10 @@ _COLUMNS = """
     SELECT CAST(d.id AS text) AS id, d.reference, d.document_date AS date, CAST(w.party_id AS text) AS customer_id,
            cu.name AS customer_name, w.amount, d.description, s.key AS status, d.version
 """
-_PAGE = text(f"{_COLUMNS} {_ROWS} ORDER BY d.document_date DESC, d.id DESC OFFSET :offset LIMIT :limit")
+_LISTED = "AND s.key <> 'void'"  # deleted documents appear only in History
+_PAGE = text(f"{_COLUMNS} {_ROWS} {_LISTED} ORDER BY d.document_date DESC, d.id DESC OFFSET :offset LIMIT :limit")
 _TOTALS = text(f"""SELECT count(*) AS total, COALESCE(sum(w.amount) FILTER (WHERE s.key = 'posted'), 0) AS amount
-                   {_ROWS}""")
+                   {_ROWS} {_LISTED}""")
 _ONE = text(f"{_COLUMNS} {_ROWS} AND w.document_id = :document_id")
 
 

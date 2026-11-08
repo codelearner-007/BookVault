@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { Loader2, Lock } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { EmptyState, ListCard, PageHeader } from '@/components/common/page';
+import { undoLatestChange } from '@/lib/services/document-history.service';
 import { BackButton, JE_STATUS, todayIso } from '../ledger/ledger-parts';
 import { useIdempotencyKey } from './banking-parts';
 
@@ -11,8 +13,24 @@ import { useIdempotencyKey } from './banking-parts';
   Save flow shared by the receipt / payment and transfer forms (same as the journal entry form):
   new -> POST with post: true|false; draft -> PUT then POST /post; posted -> PUT (the server reverses and reposts).
   The Idempotency-Key is reused while the same submit is retried and changes once the body or version does.
+  An edit offers Undo in a toast for a few seconds (restores the version before it, see History).
 */
-export function useDocumentSave({ docId, create, update, post }) {
+export const DOCUMENT_CHANGED_EVENT = 'bv:document-changed';
+const UNDO_TOAST_MS = 10000;
+
+export function offerUndoEdit(businessId, docId) {
+  toast('Changes saved', {
+    duration: UNDO_TOAST_MS,
+    action: {
+      label: 'Undo',
+      onClick: () => undoLatestChange(businessId, docId)
+        .then(() => window.dispatchEvent(new CustomEvent(DOCUMENT_CHANGED_EVENT, { detail: docId })))
+        .catch((err) => toast.error(err?.message ?? 'The change could not be undone.')),
+    },
+  });
+}
+
+export function useDocumentSave({ businessId, docId, create, update, post }) {
   const keyFor = useIdempotencyKey();
   const [version, setVersion] = useState(null);
 
@@ -21,7 +39,10 @@ export function useDocumentSave({ docId, create, update, post }) {
     if (!docId) return create({ ...body, post: action === 'post' }, key);
     const updated = await update({ version, ...body });
     setVersion(updated.version);
-    if (action !== 'post') return updated;
+    if (action !== 'post') {
+      offerUndoEdit(businessId, docId);
+      return updated;
+    }
     return post(updated.version, keyFor(`post:${updated.version}`));
   }
 

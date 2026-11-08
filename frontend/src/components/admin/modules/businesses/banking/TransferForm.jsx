@@ -120,6 +120,7 @@ export default function TransferForm({ businessId, docId, cloneId = null, allowe
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const { save, setVersion } = useDocumentSave({
+    businessId,
     docId,
     create: (body, key) => createTransfer(businessId, body, key),
     update: (body) => updateTransfer(businessId, docId, body),

@@ -14,6 +14,7 @@
 - [B4 sales UI](project_b4_sales_ui.md) — sales/ folder, TRADE_DOCUMENTS config, copy-to URL, credit-limit confirm, tax codes/items pages
 - [B5 purchases UI](project_b5_purchases_ui.md) — TRADE_SIDES + role config, Parties* components, payment AP allocation, e2e trackAccounts teardown
 - [B7 tax/WHT UI](project_b7_tax_wht_ui.md) — config flags for WHT/freight, totalsRows shared by panel+paper, worktree shell limits
+- [Document actions](project_document_actions.md) — toolbar/print/PDF/history+restore, header layout the user insisted on, no blue links
 - [UI polish shared layer](project_ui_polish.md) — ListTable, Money tones + hide balances, business format, account/date pickers, journal disclosure, logo B
 
 ## Pre-existing Build Issues

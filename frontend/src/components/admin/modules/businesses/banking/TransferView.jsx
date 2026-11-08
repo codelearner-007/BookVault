@@ -69,6 +69,7 @@ export default function TransferView({ business, docId, rights }) {
 
   return (
     <DocumentViewFrame
+      businessId={business.id}
       title={doc.reference ? `${TITLE} ${doc.reference}` : TITLE}
       doc={doc}
       rights={rights}

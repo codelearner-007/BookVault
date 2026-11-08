@@ -25,6 +25,7 @@ export default function LateFeeView({ business, feeId, rights }) {
 
   return (
     <DocumentViewFrame
+      businessId={business.id}
       title={fee.reference ? `Late Payment Fee ${fee.reference}` : 'Late Payment Fee'}
       doc={fee}
       rights={rights}

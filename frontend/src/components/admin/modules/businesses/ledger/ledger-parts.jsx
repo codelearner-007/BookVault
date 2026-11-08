@@ -20,7 +20,7 @@ export const JE_STATUS = { draft: 'draft', posted: 'posted', void: 'void' };
 const STATUS_BADGE = {
   draft: { variant: 'draft', label: 'Draft' },
   posted: { variant: 'ok', label: 'Posted' },
-  void: { variant: 'void', label: 'Void' },
+  void: { variant: 'void', label: 'Deleted' },
 };
 
 export function StatusBadge({ status }) {

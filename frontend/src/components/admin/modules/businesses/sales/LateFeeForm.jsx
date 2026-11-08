@@ -59,6 +59,7 @@ export default function LateFeeForm({ businessId, feeId, cloneId = null, allowed
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const { save, setVersion } = useDocumentSave({
+    businessId,
     docId: feeId,
     create: (body, key) => latePaymentFeesService.create(businessId, body, key),
     update: (body) => latePaymentFeesService.update(businessId, feeId, body),

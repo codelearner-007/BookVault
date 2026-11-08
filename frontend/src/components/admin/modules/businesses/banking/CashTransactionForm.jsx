@@ -217,6 +217,7 @@ export default function CashTransactionForm({ businessId, direction, docId, clon
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const { save, setVersion } = useDocumentSave({
+    businessId,
     docId,
     create: (body, key) => service.create(businessId, body, key),
     update: (body) => service.update(businessId, docId, body),

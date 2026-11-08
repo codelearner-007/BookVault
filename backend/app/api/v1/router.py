@@ -17,6 +17,7 @@ from app.api.v1 import (
     country_templates,
     inventory,
     dashboard,
+    document_history,
     journal_entries,
     late_payment_fees,
     ledger_reports,
@@ -45,7 +46,7 @@ for module in (
     auth, profile, roles, permissions, user_roles, users, audit, dashboard, members,
     businesses, coa, bank_accounts, tab_columns, transfers, capital_accounts, parties, attachments, suspense, admin_tabs, countries,
     journal_entries, ledger_reports, starting_balances, country_templates,
-    customers, suppliers, master_data, late_payment_fees, sales, inventory, withholding_tax,
+    customers, suppliers, master_data, late_payment_fees, sales, inventory, withholding_tax, document_history,
 ):
     api_router.include_router(module.router)
 api_router.include_router(cash_transactions.receipts_router)

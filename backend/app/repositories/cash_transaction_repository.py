@@ -35,6 +35,7 @@ _LIST_FILTER = f"""
     WHERE c.business_id = :business_id AND c.direction = :direction
       AND (CAST(:bank_account_id AS uuid) IS NULL OR c.bank_account_id = CAST(:bank_account_id AS uuid))
       AND (CAST(:party_id AS uuid) IS NULL OR c.counterparty_party_id = CAST(:party_id AS uuid))
+      AND s.key <> 'void'  -- deleted documents appear only in History
 """
 _LIST_PAGE = text(f"""
     SELECT CAST(d.id AS text) AS id, d.reference, d.document_date AS date, s.key AS status, d.version,

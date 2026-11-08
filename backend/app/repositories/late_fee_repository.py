@@ -26,9 +26,10 @@ _COLUMNS = """
            cu.name AS customer_name, CAST(f.invoice_document_id AS text) AS invoice_id,
            inv.reference AS invoice_reference, f.amount, d.description, s.key AS status, d.version
 """
-_PAGE = text(f"{_COLUMNS} {_ROWS} ORDER BY d.document_date DESC, d.id DESC OFFSET :offset LIMIT :limit")
+_LISTED = "AND s.key <> 'void'"  # deleted documents appear only in History
+_PAGE = text(f"{_COLUMNS} {_ROWS} {_LISTED} ORDER BY d.document_date DESC, d.id DESC OFFSET :offset LIMIT :limit")
 _TOTALS = text(f"""SELECT count(*) AS total, COALESCE(sum(f.amount) FILTER (WHERE s.key = 'posted'), 0) AS amount
-                   {_ROWS}""")
+                   {_ROWS} {_LISTED}""")
 _ONE = text(f"{_COLUMNS} {_ROWS} AND f.document_id = :document_id")
 _CHARGED = text("""
     SELECT CAST(f.invoice_document_id AS text) AS invoice_id, d.document_date

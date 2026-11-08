@@ -21,18 +21,36 @@ import {
 } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { EmptyState, ListCard, ListToolbar, PageHeader } from '@/components/common/page';
+import { DatePicker } from '@/components/common/date-picker';
 import { listBusinessHistory } from '@/lib/services/audit.service';
+import { restoreFromHistoryEntry } from '@/lib/services/document-history.service';
+import { listAllMembers } from '@/lib/services/members.service';
 
 const PAGE_SIZE = 20;
 
+const ALL = 'all';
 const ACTION_OPTIONS = [
-  { value: '', label: 'All Actions' },
-  { value: 'create', label: 'Create' },
-  { value: 'update', label: 'Update' },
-  { value: 'delete', label: 'Delete' },
+  { value: ALL, label: 'All actions' },
+  { value: 'create', label: 'Created' },
+  { value: 'update', label: 'Edited' },
+  { value: 'post', label: 'Posted' },
+  { value: 'void', label: 'Deleted' },
+  { value: 'restore', label: 'Restored' },
 ];
+// Record types of the audit rows (entity_type), documents first.
+const RECORD_OPTIONS = [
+  [ALL, 'All records'], ['Receipt', 'Receipts'], ['Payment', 'Payments'], ['InterAccountTransfer', 'Inter account transfers'],
+  ['JournalEntry', 'Journal entries'], ['SalesQuote', 'Sales quotes'], ['SalesOrder', 'Sales orders'],
+  ['SalesInvoice', 'Sales invoices'], ['CreditNote', 'Credit notes'], ['DeliveryNote', 'Delivery notes'],
+  ['LatePaymentFee', 'Late payment fees'], ['WithholdingTaxReceipt', 'Withholding tax receipts'],
+  ['PurchaseQuote', 'Purchase quotes'], ['PurchaseOrder', 'Purchase orders'], ['PurchaseInvoice', 'Purchase invoices'],
+  ['DebitNote', 'Debit notes'], ['GoodsReceipt', 'Goods receipts'], ['InventoryTransfer', 'Inventory transfers'],
+  ['InventoryWriteOff', 'Inventory write-offs'], ['ProductionOrder', 'Production orders'],
+];
+const DOCUMENT_RECORDS = new Set(RECORD_OPTIONS.slice(1).map(([value]) => value));
+const ACTION_NAMES = Object.fromEntries(ACTION_OPTIONS.map((option) => [option.value, option.label]));
 
-const ACTION_BADGE_VARIANTS = { create: 'ok', update: 'info', delete: 'bad' };
+const ACTION_BADGE_VARIANTS = { create: 'ok', update: 'info', post: 'ok', void: 'bad', delete: 'bad', restore: 'warn' };
 const HISTORY_COLUMNS = ['Timestamp', 'User', 'Description', 'Action'];
 
 const FIELD_LABELS = {
@@ -66,7 +84,8 @@ function formatTimestamp(isoString) {
 }
 
 function actionLabel(action) {
-  return action ? action.charAt(0).toUpperCase() + action.slice(1).toLowerCase() : '—';
+  if (!action) return '—';
+  return ACTION_NAMES[action] ?? action.charAt(0).toUpperCase() + action.slice(1).toLowerCase();
 }
 
 function ActionBadge({ action }) {
@@ -156,7 +175,7 @@ function DetailFields({ fields }) {
   );
 }
 
-function DetailsDialog({ open, onOpenChange, log }) {
+function DetailsDialog({ open, onOpenChange, log, onRestore }) {
   if (!log) return null;
 
   const name = recordName(log);
@@ -197,6 +216,9 @@ function DetailsDialog({ open, onOpenChange, log }) {
         )}
 
         <DialogFooter>
+          {onRestore && (
+            <Button onClick={onRestore}>{log.action === 'void' ? 'Restore document' : 'Restore this version'}</Button>
+          )}
           <Button variant="secondary" onClick={() => onOpenChange(false)}>Close</Button>
         </DialogFooter>
       </DialogContent>
@@ -233,31 +255,31 @@ function HistoryTable({ logs, onView }) {
   );
 }
 
-function HistoryFilters({ selectedAction, onActionChange }) {
+function FilterSelect({ label, value, options, onChange, className = 'w-44' }) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className={className} aria-label={label}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map(([optionValue, optionLabel]) => <SelectItem key={optionValue} value={optionValue}>{optionLabel}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  );
+}
+
+// Record type, action, user (when the member list is readable) and a date range; every change resets the page.
+function HistoryFilters({ filters, users, onChange }) {
+  const set = (key) => (value) => onChange({ ...filters, [key]: value });
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {/* User filter: a single static option for now */}
-      <Select defaultValue="admin">
-        <SelectTrigger className="w-32" aria-label="User">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="admin">Admin</SelectItem>
-        </SelectContent>
-      </Select>
-
-      <Select value={selectedAction || 'all'} onValueChange={onActionChange}>
-        <SelectTrigger className="w-40" aria-label="Action">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {ACTION_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value || 'all'} value={opt.value || 'all'}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <FilterSelect label="Record" value={filters.record} options={RECORD_OPTIONS} onChange={set('record')} className="w-52" />
+      <FilterSelect label="Action" value={filters.action} options={ACTION_OPTIONS.map((o) => [o.value, o.label])} onChange={set('action')} />
+      {users.length > 0 && (
+        <FilterSelect label="User" value={filters.user} options={[[ALL, 'All users'], ...users]} onChange={set('user')} />
+      )}
+      <DatePicker aria-label="From date" value={filters.from} onChange={set('from')} className="w-40" />
+      <DatePicker aria-label="To date" value={filters.to} onChange={set('to')} className="w-40" />
     </div>
   );
 }
@@ -286,16 +308,26 @@ export default function BusinessHistory({ business }) {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [selectedAction, setSelectedAction] = useState('');
+  const [filters, setFilters] = useState({ record: ALL, action: ALL, user: ALL, from: '', to: '' });
+  const [users, setUsers] = useState([]);
   const [viewLog, setViewLog] = useState(null);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const fetchLogs = useCallback(async (p, action) => {
+  const fetchLogs = useCallback(async (p, current) => {
     setIsLoading(true);
     setError(null);
+    const pick = (value) => (value === ALL ? undefined : value);
     try {
-      const data = await listBusinessHistory(business.id, { page: p, page_size: PAGE_SIZE, action });
+      const data = await listBusinessHistory(business.id, {
+        page: p,
+        page_size: PAGE_SIZE,
+        entity_type: pick(current.record),
+        action: pick(current.action),
+        user_id: pick(current.user),
+        start_date: current.from ? `${current.from}T00:00:00` : undefined,
+        end_date: current.to ? `${current.to}T23:59:59` : undefined,
+      });
       setLogs(data.items);
       setTotal(data.total);
     } catch (err) {
@@ -306,12 +338,34 @@ export default function BusinessHistory({ business }) {
   }, [business.id]);
 
   useEffect(() => {
-    fetchLogs(page, selectedAction);
-  }, [fetchLogs, page, selectedAction]);
+    fetchLogs(page, filters);
+  }, [fetchLogs, page, filters]);
 
-  function handleActionChange(value) {
-    setSelectedAction(value === 'all' ? '' : value);
+  // The member list needs the members right; without it the user filter stays hidden.
+  useEffect(() => {
+    let active = true;
+    listAllMembers(business.id)
+      .then((members) => {
+        if (active) setUsers(members.map((member) => [member.user_id, member.full_name || member.email || 'Member']));
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [business.id]);
+
+  function handleFiltersChange(next) {
+    setFilters(next);
     setPage(1);
+  }
+
+  async function restore(log) {
+    setError(null);
+    try {
+      await restoreFromHistoryEntry(business.id, log);
+      setViewLog(null);
+      fetchLogs(page, filters);
+    } catch (err) {
+      setError(err?.message ?? 'The document could not be restored.');
+    }
   }
 
   if (isLoading) return <HistorySkeleton />;
@@ -326,12 +380,13 @@ export default function BusinessHistory({ business }) {
         open={!!viewLog}
         onOpenChange={(v) => !v && setViewLog(null)}
         log={viewLog}
+        onRestore={viewLog && DOCUMENT_RECORDS.has(viewLog.entity_type) && viewLog.entity_id ? () => restore(viewLog) : null}
       />
 
       <PageHeader title="History" />
 
       <ListToolbar>
-        <HistoryFilters selectedAction={selectedAction} onActionChange={handleActionChange} />
+        <HistoryFilters filters={filters} users={users} onChange={handleFiltersChange} />
       </ListToolbar>
 
       {error && <p className="mb-4 text-sm text-bad" role="alert">{error}</p>}

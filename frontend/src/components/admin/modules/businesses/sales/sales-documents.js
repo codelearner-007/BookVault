@@ -133,9 +133,9 @@ const ORDER_STATUS = {
 };
 const INVOICE_STATUS = {
   draft: [VARIANT.draft, 'Draft'], unpaid: [VARIANT.info, 'Unpaid'], overdue: [VARIANT.bad, 'Overdue'],
-  paid: [VARIANT.ok, 'Paid in full'], void: [VARIANT.void, 'Void'],
+  paid: [VARIANT.ok, 'Paid in full'], void: [VARIANT.void, 'Deleted'],
 };
-const NOTE_STATUS = { draft: [VARIANT.draft, 'Draft'], posted: [VARIANT.ok, 'Posted'], void: [VARIANT.void, 'Void'] };
+const NOTE_STATUS = { draft: [VARIANT.draft, 'Draft'], posted: [VARIANT.ok, 'Posted'], void: [VARIANT.void, 'Deleted'] };
 // Customer / supplier status from its balance: open (unpaid), settled (paid) or overpaid (credit).
 export const PARTY_STATUS = { unpaid: [VARIANT.warn, 'Unpaid'], paid: [VARIANT.ok, 'Paid'], credit: [VARIANT.info, 'Credit'] };
 export const ORDER_INVOICE_STATUS = { uninvoiced: [VARIANT.warn, 'Uninvoiced'], invoiced: [VARIANT.ok, 'Invoiced'] };

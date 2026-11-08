@@ -26,6 +26,7 @@ export default function WhtReceiptView({ business, receiptId, rights }) {
 
   return (
     <DocumentViewFrame
+      businessId={business.id}
       title={receipt.reference ? `${TITLE} ${receipt.reference}` : TITLE}
       doc={receipt}
       rights={rights}

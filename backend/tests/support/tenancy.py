@@ -76,13 +76,15 @@ def route_access_pairs(route: APIRoute) -> list[tuple[str, str]]:
 
 
 def guard_kind(route: APIRoute) -> str:
-    """'pairs' (area rights), 'member' (membership only) or 'tab' (area of the tab_key)."""
+    """'pairs' (area rights), 'member' (membership only), 'tab' (area of the tab_key) or 'document' (the
+    document's own area)."""
     stack = list(route.dependant.dependencies)
     kinds = set()
     while stack:
         dependant = stack.pop()
         if getattr(dependant.call, "grants_business_access", False):
             kinds.add("pairs" if getattr(dependant.call, "access_pair", None) else
-                      "tab" if dependant.call.__name__ == "tab_area_access" else "member")
+                      "tab" if dependant.call.__name__ == "tab_area_access" else
+                      "document" if dependant.call.__name__ == "document_access" else "member")
         stack.extend(dependant.dependencies)
     return "pairs" if "pairs" in kinds else kinds.pop() if kinds else "none"

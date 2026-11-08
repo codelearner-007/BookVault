@@ -118,6 +118,7 @@ export default function StockDocumentView({ business, config, docId, rights }) {
 
   return (
     <DocumentViewFrame
+      businessId={business.id}
       title={doc.reference ? `${config.title} ${doc.reference}` : config.title}
       doc={doc}
       rights={rights}

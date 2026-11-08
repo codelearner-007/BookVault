@@ -1,26 +1,32 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { Ban, ChevronDown, Copy, CopyPlus, FileDown, Loader2, Lock, Pencil, Printer } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronDown, Copy, CopyPlus, FileDown, History, Loader2, Lock, Pencil, Printer, RotateCcw, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { MoreMenu, PageHeader } from '@/components/common/page';
 import { ConfirmDialog } from '@/components/super-admin/platform-parts';
 import { isVersionConflict } from '@/lib/services/api-client';
+import { restoreDeletedDocument } from '@/lib/services/document-history.service';
 import { BackButton, ErrorAlert, JE_STATUS } from '../ledger/ledger-parts';
 import { DOCUMENT_PAPER_SELECTOR, downloadPdf, printDocument } from '../documents/document-output';
+import DocumentHistoryPanel from '../documents/DocumentHistoryPanel';
 import { useIdempotencyKey } from './banking-parts';
+import { DOCUMENT_CHANGED_EVENT } from './document-form';
 
 /*
-  The frame of every document view: title, Manager's toolbar (Edit | Clone | Copy to | Print | PDF, with Post
-  for drafts), the void confirmation, errors (409 period_locked text comes from the API) and the lock notice.
+  The frame of every document view: title, Manager's toolbar (Edit | Clone | Copy to | History | Print | PDF,
+  with Post for drafts), Delete (a reversal behind the scenes) with an Undo toast, Restore of a deleted document, errors (409 period_locked text comes from the API) and the lock notice.
   Edit (or Post on a draft) is the one primary; Clone / Copy to / Print / PDF are a quiet group that folds into
   "…" on small screens. Print and PDF render the child marked data-document-paper.
   postCall / voidCall: (version, idempotencyKey) => Promise. onChanged runs after a successful action.
   onClone: opens New prefilled with a copy (shown with the create right). copyTargets: [{ label, onSelect }].
-  voidCopy: { label, action?, keepLabel?, body } for documents whose void is not a ledger reversal.
+  voidCopy: { label, action?, keepLabel?, body, undo? } (quotes / orders are Cancelled, not deleted).
 */
-const LEDGER_VOID = { label: 'Void', body: (noun) => `A reversal is posted to the ledger. The ${noun} stays on record as Void.` };
+// Delete keeps the safe reversal behind the scenes (the ledger is append-only); History can restore it.
+const LEDGER_DELETE = { label: 'Delete', body: () => 'This removes the document; you can restore it from History.', undo: true };
+const UNDO_TOAST_MS = 10000;
 
 function CopyToMenu({ targets }) {
   if (targets.length === 0) return null;
@@ -65,20 +71,31 @@ function useOutput(title) {
 }
 
 export default function DocumentViewFrame({
-  title, doc, rights, noun, onBack, onEdit, onClone, postCall, voidCall, onChanged, children, copyTargets = [], voidCopy = LEDGER_VOID,
+  businessId, title, doc, rights, noun, onBack, onEdit, onClone, postCall, voidCall, onChanged, children, copyTargets = [], voidCopy = LEDGER_DELETE,
 }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
   const [confirmVoid, setConfirmVoid] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const keyFor = useIdempotencyKey();
   const output = useOutput(title);
+  const changedRef = useRef(onChanged);
+  useEffect(() => { changedRef.current = onChanged; });
+
+  // An Undo from the save toast changed this document: reload it.
+  useEffect(() => {
+    const reload = (event) => { if (event.detail === doc.id) changedRef.current(); };
+    window.addEventListener(DOCUMENT_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(DOCUMENT_CHANGED_EVENT, reload);
+  }, [doc.id]);
 
   async function run(action, call) {
     setBusy(action);
     setError(null);
     try {
-      await call(doc.version, keyFor(`${action}:${doc.version}`));
+      const result = await call(doc.version, keyFor(`${action}:${doc.version}`));
       onChanged();
+      if (action === 'void' && voidCopy.undo) offerUndoDelete(result?.version);
     } catch (err) {
       setError(err?.message ?? 'The action failed.');
       if (isVersionConflict(err)) onChanged();
@@ -88,12 +105,35 @@ export default function DocumentViewFrame({
     }
   }
 
+  async function restoreDeleted(version = doc.version) {
+    setBusy('restore');
+    setError(null);
+    try {
+      await restoreDeletedDocument(businessId, doc.id, version);
+      onChanged();
+    } catch (err) {
+      setError(err?.message ?? 'The document could not be restored.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function offerUndoDelete(version) {
+    if (version == null) return;
+    toast(`${noun.charAt(0).toUpperCase()}${noun.slice(1)} deleted`, {
+      duration: UNDO_TOAST_MS,
+      action: { label: 'Undo', onClick: () => restoreDeleted(version) },
+    });
+  }
+
+  const deleted = doc.status === JE_STATUS.void;
   const open = !doc.is_locked && doc.status !== JE_STATUS.void;
   const canEdit = open && rights.edit;
   const canPost = canEdit && doc.status === JE_STATUS.draft;
   const canVoid = open && rights.delete;
   const canClone = Boolean(onClone) && rights.create;
-  const voidItem = canVoid && { label: voidCopy.label, icon: Ban, destructive: true, separatorBefore: true, onSelect: () => setConfirmVoid(true) };
+  const canRestoreDeleted = deleted && voidCopy.undo && rights.create && !doc.is_locked;
+  const voidItem = canVoid && { label: voidCopy.label, icon: Trash2, destructive: true, separatorBefore: true, onSelect: () => setConfirmVoid(true) };
   const pdfLabel = output.exporting ? 'Creating PDF…' : 'PDF';
 
   const actions = (
@@ -101,6 +141,7 @@ export default function DocumentViewFrame({
       <div className="flex items-center gap-1 max-md:hidden" role="group" aria-label="Document actions">
         {canClone && <Button variant="ghost" onClick={onClone}><CopyPlus aria-hidden="true" />Clone</Button>}
         <CopyToMenu targets={copyTargets} />
+        <Button variant="ghost" onClick={() => setHistoryOpen(true)}><History aria-hidden="true" />History</Button>
         <Button variant="ghost" onClick={output.print}><Printer aria-hidden="true" />Print</Button>
         <Button variant="ghost" onClick={output.pdf} disabled={output.exporting}>
           {output.exporting ? <Loader2 className="animate-spin" aria-hidden="true" /> : <FileDown aria-hidden="true" />}
@@ -113,12 +154,19 @@ export default function DocumentViewFrame({
           items={[
             canClone && { label: 'Clone', icon: CopyPlus, onSelect: onClone },
             ...copyTargets.map((target) => ({ ...target, icon: Copy })),
+            { label: 'History', icon: History, onSelect: () => setHistoryOpen(true) },
             { label: 'Print', icon: Printer, onSelect: output.print },
             { label: pdfLabel, icon: FileDown, disabled: output.exporting, onSelect: output.pdf },
             voidItem,
           ]}
         />
       </div>
+      {canRestoreDeleted && (
+        <Button onClick={() => restoreDeleted()} disabled={!!busy}>
+          {busy === 'restore' ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RotateCcw aria-hidden="true" />}
+          Restore
+        </Button>
+      )}
       {canEdit && (
         <Button variant={canPost ? 'secondary' : 'default'} onClick={onEdit} disabled={!!busy}>
           <Pencil />
@@ -147,9 +195,23 @@ export default function DocumentViewFrame({
         onClose={() => setConfirmVoid(false)}
         cancelLabel={voidCopy.keepLabel ?? 'Cancel'}
       />
+      <DocumentHistoryPanel
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        businessId={businessId}
+        doc={doc}
+        canRestore={open && rights.edit}
+        onRestored={onChanged}
+      />
       <PageHeader title={title} back={<BackButton onClick={onBack} />} actions={actions} />
       {error && <ErrorAlert>{error}</ErrorAlert>}
       {output.error && <ErrorAlert>{output.error}</ErrorAlert>}
+      {deleted && (
+        <p className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
+          <Trash2 className="size-4" aria-hidden="true" />
+          This {noun} was deleted. Restore it to use it again.
+        </p>
+      )}
       {doc.is_locked && (
         <p className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
           <Lock className="size-4" aria-hidden="true" />

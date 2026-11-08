@@ -20,6 +20,7 @@ class AuditFilter:
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     scope: Optional[str] = None
+    entity_id: Optional[str] = None
 
 
 def _where(query, f: AuditFilter):
@@ -31,6 +32,8 @@ def _where(query, f: AuditFilter):
         query = query.where(AuditLog.business_id == f.business_id)
     if f.entity_type is not None:
         query = query.where(AuditLog.entity_type == f.entity_type)
+    if f.entity_id is not None:
+        query = query.where(AuditLog.entity_id == f.entity_id)
     if f.action is not None:
         query = query.where(AuditLog.action == f.action)
     if f.start_date is not None:
@@ -84,3 +87,19 @@ class AuditRepository:
             text("SELECT public.ingest_auth_audit_log(:batch)"), {"batch": batch}
         )
         return int(result.scalar_one())
+
+    async def get_for_entity(self, business_id: str, entity_id: str, audit_id: str) -> AuditLog | None:
+        """One audit row of a record in a business (None when it belongs elsewhere)."""
+        query = select(AuditLog).where(
+            AuditLog.id == audit_id, AuditLog.business_id == business_id, AuditLog.entity_id == entity_id
+        )
+        return (await self.session.execute(query)).scalar_one_or_none()
+
+    async def latest_for_entity(self, business_id: str, entity_id: str, action: str) -> AuditLog | None:
+        query = (
+            select(AuditLog)
+            .where(AuditLog.business_id == business_id, AuditLog.entity_id == entity_id, AuditLog.action == action)
+            .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .limit(1)
+        )
+        return (await self.session.execute(query)).scalar_one_or_none()

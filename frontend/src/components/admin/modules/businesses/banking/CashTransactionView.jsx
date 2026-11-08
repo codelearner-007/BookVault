@@ -23,6 +23,7 @@ export default function CashTransactionView({ business, direction, docId, rights
 
   return (
     <DocumentViewFrame
+      businessId={business.id}
       title={doc.reference ? `${direction.title} ${doc.reference}` : direction.title}
       doc={doc}
       rights={rights}

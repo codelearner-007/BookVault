@@ -61,6 +61,7 @@ export default function JournalEntryView({ business, entryId, rights }) {
 
   return (
     <DocumentViewFrame
+      businessId={business.id}
       title={entry.reference ? `${TITLE} ${entry.reference}` : TITLE}
       doc={entry}
       rights={rights}

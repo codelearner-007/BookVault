@@ -16,7 +16,7 @@ import {
 } from '@/lib/services/journal-entries.service';
 import JournalLinesEditor, { emptyLine, parseAmount } from './JournalLinesEditor';
 import { BackButton, ErrorAlert, JE_STATUS, JE_TAB, todayIso, useTabNavigate } from './ledger-parts';
-import { asClone } from '../banking/document-form';
+import { asClone, offerUndoEdit } from '../banking/document-form';
 
 const UNBALANCED = 'journal_unbalanced';
 const SKELETON_LINES = 2;
@@ -222,7 +222,10 @@ export default function JournalEntryForm({ businessId, entryId, cloneId = null, 
     if (!entryId) return createJournalEntry(businessId, { ...body, post: action === 'post' }, key);
     const updated = await updateJournalEntry(businessId, entryId, { version, ...body });
     setVersion(updated.version);
-    if (action !== 'post') return updated;
+    if (action !== 'post') {
+      offerUndoEdit(businessId, entryId);
+      return updated;
+    }
     return postJournalEntry(businessId, entryId, updated.version, idempotencyKey(`post:${updated.version}`));
   }
 

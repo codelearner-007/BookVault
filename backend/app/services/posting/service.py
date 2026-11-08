@@ -196,6 +196,13 @@ class PostingService:
         type_id = await self.repo.document_type_id(type_key)
         return await self.repo.get_document(business_id, document_id, type_id, for_update=for_update)
 
+    async def find_document(self, business_id: str, document_id: str) -> Document | None:
+        """A document of any type in the business (History, access by the document's own area)."""
+        return await self.repo.get_document(business_id, document_id)
+
+    async def type_key_of(self, document: Document) -> str:
+        return await self.repo.document_type_key(document.document_type_id)
+
     async def status_of(self, document: Document) -> str:
         return await self.repo.status_key(document.status_id)
 
@@ -432,6 +439,11 @@ class PostingService:
     async def repost_lines(self, ctx: BusinessContext, document: Document, lines: list[LineInput]) -> JournalEntry:
         await self.reverse_live_entry(ctx, document)
         return await self.post_lines(ctx, document, lines)
+
+    async def reopen(self, ctx: BusinessContext, document: Document) -> None:
+        """A void (deleted) document back to draft; its reversal stays in the ledger (restore = repost)."""
+        await self.assert_open(ctx.business_id, document.document_date)
+        await self.set_status(ctx, document, DRAFT)
 
     async def void(self, ctx: BusinessContext, document: Document) -> None:
         """Posted: reversal + status void; what it settled is released. Draft: status void only."""

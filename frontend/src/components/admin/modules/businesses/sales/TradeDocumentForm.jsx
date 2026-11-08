@@ -127,6 +127,7 @@ export default function TradeDocumentForm({ businessId, config, docId, allowed, 
   const override = useRef(false);
   const hasCreditLimit = config.type === DOC_TYPES.invoice;
   const { save, setVersion } = useDocumentSave({
+    businessId,
     docId,
     create: (body, key) => config.service.create(businessId, body, key),
     update: (body) => config.service.update(businessId, docId, body),

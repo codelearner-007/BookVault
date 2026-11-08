@@ -133,7 +133,7 @@ async def test_void_reverses_and_restores_balance(client, books):
     assert [e["source"] for e in entries] == ["document", "reversal"]
     assert (await bank_account(client, owner, bid, bank["id"]))["actual_balance"] == "0.00"
     listed = (await client.get(biz(bid, "/receipts"), headers=owner.headers)).json()
-    assert listed["total"] == 1 and listed["total_amount"] == "0.00"
+    assert listed["total"] == 0 and listed["total_amount"] == "0.00"  # deleted: only in History
 
 
 async def test_receipt_in_locked_period_rejected(client, books):

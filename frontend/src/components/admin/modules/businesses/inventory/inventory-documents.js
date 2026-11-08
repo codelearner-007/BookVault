@@ -21,11 +21,11 @@ export const STOCK_TYPES = { transfer: 'inventory_transfer', writeOff: 'inventor
 
 export const DEFAULT_LOCATION_LABEL = 'Default Inventory Location';
 
-const STOCK_STATUS = { draft: ['draft', 'Draft'], posted: ['ok', 'Posted'], void: ['void', 'Void'] };
-const PRODUCTION_STATUS = { draft: ['draft', 'Draft'], completed: ['ok', 'Completed'], void: ['void', 'Void'] };
+const STOCK_STATUS = { draft: ['draft', 'Draft'], posted: ['ok', 'Posted'], void: ['void', 'Deleted'] };
+const PRODUCTION_STATUS = { draft: ['draft', 'Draft'], completed: ['ok', 'Completed'], void: ['void', 'Deleted'] };
 
 // A void that is not a ledger reversal: the stock just moves back.
-const TRANSFER_VOID = { label: 'Void', body: (noun) => `The stock moves back. The ${noun} stays on record as Void.` };
+const TRANSFER_VOID = { label: 'Delete', body: () => 'This removes the document and moves the stock back; you can restore it from History.', undo: true };
 
 // List columns (keys rendered by StockDocumentsList), in Manager's order.
 export const STOCK_DOCUMENTS = {

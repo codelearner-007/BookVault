@@ -19,7 +19,7 @@ from app.core.pagination import PageParams, page_params
 from app.models.audit_log import SCOPE_PLATFORM
 from app.repositories.audit_repository import AuditFilter
 from app.schemas.auth import CurrentUser
-from app.schemas.common import KEY_MAX, PaginatedResponse
+from app.schemas.common import IdStr, KEY_MAX, PaginatedResponse
 from app.schemas.response.audit import AuditLogResponse
 from app.services.access_service import BusinessContext
 from app.services.audit_service import AuditService
@@ -62,14 +62,16 @@ async def list_business_history(
     params: PageParams = Depends(page_params),
     entity_type: Optional[str] = Query(None, max_length=KEY_MAX),
     action: Optional[str] = Query(None, max_length=KEY_MAX),
+    user_id: Optional[IdStr] = Query(None),
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     ctx: BusinessContext = Depends(require_business_access("history", AreaRight.VIEW)),
     db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[AuditLogResponse]:
-    """Every audited change of the business (history:view)."""
+    """Every audited change of the business (history:view), filterable by record type, action, user and dates."""
     f = AuditFilter(
         business_id=ctx.business_id,
+        user_id=user_id,
         entity_type=entity_type,
         action=action,
         start_date=start_date,

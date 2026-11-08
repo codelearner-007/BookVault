@@ -153,10 +153,11 @@ _STOCK_DOC_COLUMNS = """
             JOIN public.items i ON i.business_id = x.business_id AND i.id = x.item_id
             WHERE x.business_id = d.business_id AND x.document_id = d.id) AS item_names
 """
-_STOCK_DOC_PAGE = text(f"{_STOCK_DOC_COLUMNS} {_STOCK_DOC_FILTER} ORDER BY d.document_date DESC, d.id DESC"
+_LISTED = "AND s.key <> 'void'"  # deleted documents appear only in History
+_STOCK_DOC_PAGE = text(f"{_STOCK_DOC_COLUMNS} {_STOCK_DOC_FILTER} {_LISTED} ORDER BY d.document_date DESC, d.id DESC"
                        " OFFSET :offset LIMIT :limit")
 _STOCK_DOC_ONE = text(f"{_STOCK_DOC_COLUMNS} {_STOCK_DOC_FILTER} AND d.id = CAST(:document_id AS uuid)")
-_STOCK_DOC_TOTALS = text(f"SELECT count(*) AS total {_STOCK_DOC_FILTER}")
+_STOCK_DOC_TOTALS = text(f"SELECT count(*) AS total {_STOCK_DOC_FILTER} {_LISTED}")
 _STOCK_LINES = text("""
     SELECT CAST(x.id AS text) AS id, x.line_no, CAST(x.item_id AS text) AS item_id, i.code AS item_code,
            i.name AS item_name, x.qty, CAST(x.account_id AS text) AS account_id, a.name AS account_name,

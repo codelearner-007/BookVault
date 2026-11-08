@@ -37,13 +37,14 @@ _JE_LIST = text("""
     FROM public.documents d
     JOIN public.document_statuses s ON s.id = d.status_id
     JOIN public.document_types t ON t.id = d.document_type_id
-    WHERE d.business_id = :business_id AND t.key = :type_key
+    WHERE d.business_id = :business_id AND t.key = :type_key AND s.key <> 'void'
     ORDER BY d.document_date DESC, d.id DESC
     OFFSET :offset LIMIT :limit
 """)
 _JE_COUNT = text("""
     SELECT count(*) FROM public.documents d JOIN public.document_types t ON t.id = d.document_type_id
-    WHERE d.business_id = :business_id AND t.key = :type_key
+    JOIN public.document_statuses s ON s.id = d.status_id
+    WHERE d.business_id = :business_id AND t.key = :type_key AND s.key <> 'void'
 """)
 _DOCUMENT_LINES = text(f"""
     SELECT CAST(l.id AS text) AS id, l.line_no, CAST(l.account_id AS text) AS account_id, a.code AS account_code, a.name AS account_name,

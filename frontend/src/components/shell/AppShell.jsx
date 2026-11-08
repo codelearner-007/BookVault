@@ -115,7 +115,7 @@ function ShellFrame({ initialSidebar, children }) {
             sidebar={{ state: sidebarState, isDesktop, drawerOpen, onToggle: toggleSidebar }}
             onOpenPalette={openPalette}
           />
-          <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-content flex-1 px-page pb-16 pt-page-y focus:outline-none">
+          <main id="main-content" tabIndex={-1} className="w-full min-w-0 flex-1 px-page pb-16 pt-page-y focus:outline-none">
             {children}
           </main>
         </div>
