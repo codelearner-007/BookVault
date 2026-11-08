@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ListTree } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,6 +16,7 @@ import { ListPagination } from '@/components/super-admin/platform-parts';
 import { getCoaTree } from '@/lib/services/coa.service';
 import { listGeneralLedgerTransactions } from '@/lib/services/ledger-reports.service';
 import { accountsFromTree } from '../coa/coa-tree';
+import { documentEditHref, documentHref, useDocumentEditRight } from '../banking/banking-parts';
 import {
   BackButton, ErrorAlert, PAGE_PARAM, REPORTS_TAB, accountLabel, todayIso, usePageParam, useTabNavigate,
 } from './ledger-parts';
@@ -81,7 +83,16 @@ function Filters({ filters, accounts, onChange }) {
 
 const COLUMNS = [
   { key: 'date', label: 'Date', kind: COLUMN_KIND.date },
-  { key: 'reference', label: 'Reference', card: 'title' },
+  {
+    key: 'reference',
+    label: 'Reference',
+    card: 'title',
+    render: (line) => (
+      <Link href={documentHref(line.document_type, line.document_id)} className="text-link underline-offset-4 hover:underline" onClick={(event) => event.stopPropagation()}>
+        {line.reference || 'View'}
+      </Link>
+    ),
+  },
   { key: 'description', label: 'Description', muted: true, truncate: true },
   { key: 'account', label: 'Account', value: accountLabel },
   { key: 'debit', label: 'Debit', kind: COLUMN_KIND.money, zero: 'blank' },
@@ -91,6 +102,8 @@ const COLUMNS = [
 // ?tab=reports&report=general-ledger-transactions[&from&to&account&reversed=1&p]
 export default function GeneralLedgerTransactionsReport({ businessId }) {
   const navigate = useTabNavigate(REPORTS_TAB);
+  const router = useRouter();
+  const canEdit = useDocumentEditRight();
   const filters = useFilters();
   const accounts = useAccounts(businessId);
   const [result, setResult] = useState({ key: null, data: null, error: null });
@@ -147,7 +160,15 @@ export default function GeneralLedgerTransactionsReport({ businessId }) {
         )}
         {!loading && data?.items.length === 0 && <EmptyState icon={ListTree} title="No transactions in this period" />}
         {!loading && data?.items.length > 0 && (
-          <ListTable columns={COLUMNS} rows={data.items} rowKey={(line) => line.journal_line_id} />
+          <ListTable
+            columns={COLUMNS}
+            rows={data.items}
+            rowKey={(line) => line.journal_line_id}
+            rowName={(line) => line.reference || line.description || 'transaction'}
+            onView={(line) => router.push(documentHref(line.document_type, line.document_id))}
+            onEdit={(line) => router.push(documentEditHref(line.document_type, line.document_id))}
+            canEdit={canEdit}
+          />
         )}
       </ListCard>
     </div>

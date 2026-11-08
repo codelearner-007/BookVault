@@ -1,18 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Copy, CopyPlus, FileDown, History, Loader2, Lock, Pencil, Printer, RotateCcw, Trash2 } from 'lucide-react';
+import { ChevronDown, Copy, CopyPlus, FileDown, History, Loader2, Lock, Pencil, Printer, RotateCcw, Trash2, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { MoreMenu, PageHeader } from '@/components/common/page';
 import { ConfirmDialog } from '@/components/super-admin/platform-parts';
 import { isVersionConflict } from '@/lib/services/api-client';
-import { restoreDeletedDocument } from '@/lib/services/document-history.service';
+import { listDocumentHistory, restoreDeletedDocument, undoLatestChange } from '@/lib/services/document-history.service';
 import { BackButton, ErrorAlert, JE_STATUS } from '../ledger/ledger-parts';
 import { DOCUMENT_PAPER_SELECTOR, downloadPdf, printDocument } from '../documents/document-output';
-import DocumentHistoryPanel from '../documents/DocumentHistoryPanel';
-import { useIdempotencyKey } from './banking-parts';
+import DocumentHistoryPanel, { canUndo } from '../documents/DocumentHistoryPanel';
+import { useIdempotencyKey, useLoad } from './banking-parts';
 import { DOCUMENT_CHANGED_EVENT } from './document-form';
 
 /*
@@ -79,6 +79,11 @@ export default function DocumentViewFrame({
   const [historyOpen, setHistoryOpen] = useState(false);
   const keyFor = useIdempotencyKey();
   const output = useOutput(title);
+  // The newest history entries decide whether "Undo last change" shows (reloaded with every new version).
+  const history = useLoad(
+    () => (rights.edit ? listDocumentHistory(businessId, doc.id).catch(() => null) : Promise.resolve(null)),
+    [businessId, doc.id, doc.version, rights.edit],
+  );
   const changedRef = useRef(onChanged);
   useEffect(() => { changedRef.current = onChanged; });
 
@@ -126,6 +131,19 @@ export default function DocumentViewFrame({
     });
   }
 
+  async function undoLast() {
+    setBusy('undo');
+    setError(null);
+    try {
+      await undoLatestChange(businessId, doc.id);
+      onChanged();
+    } catch (err) {
+      setError(err?.message ?? 'The change could not be undone.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const deleted = doc.status === JE_STATUS.void;
   const open = !doc.is_locked && doc.status !== JE_STATUS.void;
   const canEdit = open && rights.edit;
@@ -161,6 +179,12 @@ export default function DocumentViewFrame({
           ]}
         />
       </div>
+      {open && rights.edit && canUndo(history.data?.items) && (
+        <Button variant="secondary" onClick={undoLast} disabled={!!busy}>
+          {busy === 'undo' ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Undo2 aria-hidden="true" />}
+          Undo last change
+        </Button>
+      )}
       {canRestoreDeleted && (
         <Button onClick={() => restoreDeleted()} disabled={!!busy}>
           {busy === 'restore' ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RotateCcw aria-hidden="true" />}

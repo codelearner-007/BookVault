@@ -32,9 +32,9 @@ class LedgerReportService:
         self.access = AccessService(session)
         self.posting = PostingService(session)
 
-    async def _money(self, business_id: str, row, *names: str) -> dict:
-        """Row as a dict with its amounts shown at the base currency's decimal places."""
-        dp = await self.posting.decimals(business_id)
+    @staticmethod
+    def _money(dp: int, row, *names: str) -> dict:
+        """Row as a dict with its amounts at the base currency's decimal places (dp read once per request)."""
         return {**row._mapping, **{n: round_money(getattr(row, n), dp) for n in names}}
 
     async def _assert_can_view_document(self, ctx: BusinessContext, area_key: str) -> None:
@@ -47,8 +47,9 @@ class LedgerReportService:
     async def trial_balance(self, business_id: str, as_at: date) -> TrialBalanceResponse:
         """Net balance per account as at the date, on its debit or credit side."""
         rows = []
+        dp = await self.posting.decimals(business_id)
         for r in await self.queries.trial_balance(business_id, as_at):
-            net: Decimal = (await self._money(business_id, r, "net"))["net"]
+            net: Decimal = self._money(dp, r, "net")["net"]
             rows.append(TrialBalanceRow(
                 account_id=r.account_id, account_code=r.account_code, account_name=r.account_name,
                 account_type=r.account_type, debit=max(net, Decimal(0)), credit=max(-net, Decimal(0)),
@@ -69,8 +70,8 @@ class LedgerReportService:
         rows, total = await self.queries.general_ledger_page(
             business_id, date_from, date_to, account_id, include_reversed, params.offset, params.page_size
         )
-        items = [GeneralLedgerTransaction.model_validate(await self._money(business_id, r, "debit", "credit"))
-                 for r in rows]
+        dp = await self.posting.decimals(business_id)
+        items = [GeneralLedgerTransaction.model_validate(self._money(dp, r, "debit", "credit")) for r in rows]
         return GeneralLedgerTransactionsResponse.build(items, total, params.page, params.page_size)
 
     async def journal(self, ctx: BusinessContext, document_id: str) -> TransactionJournalResponse:
@@ -81,9 +82,10 @@ class LedgerReportService:
         await self._assert_can_view_document(ctx, area_key)
         entries, lines = await self.queries.document_entries(ctx.business_id, document_id)
         by_entry: dict[str, list[LedgerLineResponse]] = {}
+        dp = await self.posting.decimals(ctx.business_id)
         for line in lines:
             by_entry.setdefault(str(line.journal_entry_id), []).append(
-                LedgerLineResponse.model_validate(await self._money(ctx.business_id, line, "debit", "credit"))
+                LedgerLineResponse.model_validate(self._money(dp, line, "debit", "credit"))
             )
         postings = []
         for entry in entries:
