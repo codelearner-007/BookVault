@@ -9,13 +9,21 @@ from app.models.business import Business
 from app.models.business_details import BusinessDetails
 
 
-# How the business writes dates and amounts (business_format) and its base currency (business_currencies).
+# How the business writes dates and amounts (business_format; unset parts fall back to its country's
+# template, then the generic one) and its base currency (business_currencies).
 _FORMAT = text("""
-    SELECT f.date_format, f.number_format, cur.code AS currency_code, cur.decimal_places
+    SELECT COALESCE(f.date_format, t.date_format) AS date_format,
+           COALESCE(f.number_format, t.number_format) AS number_format,
+           cur.code AS currency_code, cur.decimal_places
     FROM public.businesses b
     LEFT JOIN public.business_format f ON f.business_id = b.id
     LEFT JOIN public.business_currencies bc ON bc.business_id = b.id AND bc.is_base
     LEFT JOIN public.currencies cur ON cur.id = bc.currency_id
+    LEFT JOIN LATERAL (
+        SELECT ct.date_format, ct.number_format FROM public.country_templates ct
+        WHERE ct.country_id = b.country_id OR ct.country_id IS NULL
+        ORDER BY ct.country_id NULLS LAST LIMIT 1
+    ) t ON true
     WHERE b.id = CAST(:id AS uuid)
 """)
 

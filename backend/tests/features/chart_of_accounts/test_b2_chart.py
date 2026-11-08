@@ -192,10 +192,13 @@ async def test_business_read_carries_its_date_and_number_format(client, users, d
     created = (await client.post("/api/v1/businesses", json={"name": "Karachi Books"}, headers=owner.headers)).json()
 
     read = (await client.get(f"/api/v1/businesses/{created['id']}", headers=owner.headers)).json()
+    await db_conn.execute(text("DELETE FROM business_format WHERE business_id = :b"), {"b": created["id"]})
+    unset = (await client.get(f"/api/v1/businesses/{created['id']}", headers=owner.headers)).json()
 
     assert read["format"] == {
         "date_format": "dd/MM/yyyy", "number_format": "1,234.56", "currency_code": "PKR", "decimal_places": 2,
     }
+    assert unset["format"] == read["format"]  # no saved format: the country's template
 
 
 async def test_reapply_template_adds_only_missing(client, users, db_conn):
