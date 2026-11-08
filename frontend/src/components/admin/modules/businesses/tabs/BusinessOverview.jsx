@@ -1,7 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { ChevronRight } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageHeader } from '@/components/common/page';
 import { listCoaGroups, listCoaAccounts } from '@/lib/services/coa.service';
 import { getSuspenseBalance } from '@/lib/services/suspense.service';
 import { listBankAccounts } from '@/lib/services/bank-accounts.service';
@@ -9,86 +14,98 @@ import { formatMoney } from '@/lib/utils/money';
 import BusinessSuspense from './BusinessSuspense';
 
 const CASH_ACCOUNT_KEYWORDS = ['cash', 'bank', 'cash and cash equivalents', 'cash & cash equivalents', 'cash equilent', 'cash equivalent'];
+const EMPTY_AMOUNT = '—';
+const ROW = 'flex min-h-row items-center justify-between gap-4 border-b border-row-divider';
 
 function isCashAccount(accountName) {
   const lower = (accountName ?? '').toLowerCase().trim();
   return CASH_ACCOUNT_KEYWORDS.some((kw) => lower === kw || lower.includes(kw));
 }
 
-function CoaSkeleton() {
+function Amount({ value }) {
+  if (value === null) return <span className="num text-muted-foreground">{EMPTY_AMOUNT}</span>;
+  return <span className="num">{formatMoney(value)}</span>;
+}
+
+function SummarySkeleton() {
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 divide-y xl:divide-y-0 xl:divide-x divide-border gap-0">
-      {[0, 1].map((i) => (
-        <div key={i} className={`space-y-3 ${i === 0 ? 'pb-8 xl:pb-0 xl:pr-8' : 'pt-8 xl:pt-0 xl:pl-8'}`}>
-          <Skeleton className="h-4 w-32 mx-auto" />
-          {[1, 2, 3].map((j) => (
-            <div key={j} className="rounded-xl border border-border overflow-hidden">
-              <Skeleton className="h-11 w-full rounded-none" />
-              <Skeleton className="h-9 w-full rounded-none opacity-60" />
-              <Skeleton className="h-9 w-full rounded-none opacity-40" />
-            </div>
-          ))}
-        </div>
-      ))}
+    <>
+      <Skeleton className="mb-8 h-9 w-40 max-md:mb-6" />
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        {[0, 1].map((card) => (
+          <Card key={card}>
+            <CardHeader><Skeleton className="h-5 w-40" /></CardHeader>
+            <CardContent className="space-y-6">
+              {[0, 1, 2].map((group) => (
+                <div key={group} className="space-y-3">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-row w-full" />
+                  <Skeleton className="h-row w-full" />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function AccountRow({ account, bankTotal }) {
+  const amount = isCashAccount(account.name) && bankTotal !== null ? bankTotal : null;
+  const isTotal = account.type === 'total';
+  return (
+    <div className={ROW}>
+      <span className={isTotal ? 'text-muted-foreground italic' : undefined}>{account.name}</span>
+      <Amount value={amount} />
     </div>
   );
 }
 
-function GroupCard({ group, accounts, bankTotal }) {
+function GroupSection({ group, accounts, bankTotal = null }) {
   const groupAccounts = accounts.filter((a) => a.group_id === group.id);
-  const groupTotal = bankTotal !== null && groupAccounts.some((a) => isCashAccount(a.name))
-    ? bankTotal
-    : null;
+  const groupTotal = bankTotal !== null && groupAccounts.some((a) => isCashAccount(a.name)) ? bankTotal : null;
 
   return (
-    <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
-        <span className="text-sm font-bold text-foreground">{group.name}</span>
-        <span className="text-sm font-semibold text-foreground tabular-nums">
-          {groupTotal !== null ? formatMoney(groupTotal) : '—'}
-        </span>
-      </div>
+    <section aria-label={group.name}>
+      <h3 className="pb-1 pt-2 text-sm font-semibold text-muted-foreground">{group.name}</h3>
       {groupAccounts.length === 0 ? (
-        <div className="px-4 py-3 text-xs text-muted-foreground">No accounts</div>
+        <p className={`${ROW} text-sm text-muted-foreground`}>No accounts</p>
       ) : (
-        groupAccounts.map((account) => (
-          <div
-            key={account.id}
-            className="flex items-center justify-between px-4 py-2.5 border-b border-border/40 last:border-0"
-          >
-            <span
-              className={
-                account.type === 'total'
-                  ? 'text-xs text-muted-foreground italic'
-                  : 'text-sm text-muted-foreground'
-              }
-            >
-              {account.name}
-            </span>
-            <span
-              className={
-                account.type === 'total'
-                  ? 'text-xs font-medium text-primary tabular-nums'
-                  : 'text-sm text-foreground tabular-nums'
-              }
-            >
-              {isCashAccount(account.name) && bankTotal !== null ? formatMoney(bankTotal) : '—'}
-            </span>
-          </div>
-        ))
+        groupAccounts.map((account) => <AccountRow key={account.id} account={account} bankTotal={bankTotal} />)
       )}
-    </div>
+      <div className="flex min-h-row items-center justify-between border-t border-border font-semibold">
+        <span className="text-sm text-muted-foreground">Total {group.name}</span>
+        <Amount value={groupTotal} />
+      </div>
+    </section>
   );
 }
 
-function NetProfitRow() {
+function SuspenseRow({ balance, onOpen }) {
   return (
-    <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3">
-        <span className="text-sm font-bold text-foreground">Net profit (loss)</span>
-        <span className="text-sm font-semibold text-foreground tabular-nums">—</span>
-      </div>
-    </div>
+    <Button
+      variant="ghost"
+      onClick={onOpen}
+      className="h-row w-full justify-between rounded-control px-2 text-base font-normal text-foreground"
+    >
+      <Badge variant="warn">Suspense</Badge>
+      <span className="flex items-center gap-2">
+        <span className="num">{formatMoney(balance)}</span>
+        <ChevronRight aria-hidden="true" className="text-muted-foreground" />
+      </span>
+    </Button>
+  );
+}
+
+function StatementCard({ title, children }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">{children}</CardContent>
+    </Card>
   );
 }
 
@@ -121,13 +138,14 @@ export default function BusinessFinancialSummary({ business, bankRefreshKey = 0 
     } finally {
       setIsLoading(false);
     }
-  }, [business.id, bankRefreshKey]);
+  }, [business.id]);
 
+  // bankRefreshKey changes when a bank account changes elsewhere: reload then too.
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, bankRefreshKey]);
 
-  if (isLoading) return <CoaSkeleton />;
+  if (isLoading) return <SummarySkeleton />;
 
   if (showSuspense) {
     return <BusinessSuspense business={business} onBack={() => setShowSuspense(false)} />;
@@ -137,42 +155,28 @@ export default function BusinessFinancialSummary({ business, bankRefreshKey = 0 
   const plGroups = groups.filter((g) => g.type === 'pl');
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 xl:grid-cols-2 divide-y xl:divide-y-0 xl:divide-x divide-border">
-        {/* Left: Balance Sheet */}
-        <div className="pb-8 xl:pb-0 xl:pr-8 space-y-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center pb-2 border-b border-border">
-            Balance Sheet
-          </p>
+    <>
+      <PageHeader title="Summary" />
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
+        <StatementCard title="Balance Sheet">
           {bsGroups.map((group) => (
-            <GroupCard key={group.id} group={group} accounts={accounts} bankTotal={bankTotal} />
+            <GroupSection key={group.id} group={group} accounts={accounts} bankTotal={bankTotal} />
           ))}
           {Number(suspenseBalance) !== 0 && (
-            <button
-              onClick={() => setShowSuspense(true)}
-              className="w-full rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 shadow-sm overflow-hidden hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center justify-between px-4 py-3">
-                <span className="text-sm font-bold text-amber-700 dark:text-amber-400">Suspense</span>
-                <span className="text-sm font-semibold text-amber-700 dark:text-amber-400 tabular-nums">
-                  {formatMoney(suspenseBalance)}
-                </span>
-              </div>
-            </button>
+            <SuspenseRow balance={suspenseBalance} onOpen={() => setShowSuspense(true)} />
           )}
-        </div>
+        </StatementCard>
 
-        {/* Right: P&L */}
-        <div className="pt-8 xl:pt-0 xl:pl-8 space-y-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center pb-2 border-b border-border">
-            Profit and Loss Statement
-          </p>
+        <StatementCard title="Profit and Loss Statement">
           {plGroups.map((group) => (
-            <GroupCard key={group.id} group={group} accounts={accounts} />
+            <GroupSection key={group.id} group={group} accounts={accounts} />
           ))}
-          <NetProfitRow />
-        </div>
+          <div className="flex min-h-row items-center justify-between gap-4 border-t border-border font-semibold">
+            <span>Net profit (loss)</span>
+            <Amount value={null} />
+          </div>
+        </StatementCard>
       </div>
-    </div>
+    </>
   );
 }

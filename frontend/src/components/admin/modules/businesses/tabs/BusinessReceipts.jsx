@@ -22,17 +22,16 @@ import {
   Trash2,
   AlertTriangle,
   Pencil,
-  Eye,
-  Search,
   GripVertical,
   ArrowLeft,
-  CalendarDays,
   Paperclip,
   ExternalLink,
   X,
   Columns,
   Copy,
+  Receipt,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,6 +39,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
+import { Card } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Select,
   SelectContent,
@@ -54,6 +55,23 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table';
+import {
+  PageHeader,
+  MoreMenu,
+  SearchInput,
+  ListToolbar,
+  ListCard,
+  EmptyState,
+} from '@/components/common/page';
 import ColEditorDialog from '../ColEditorDialog';
 import {
   listReceipts,
@@ -71,6 +89,10 @@ import { listSuppliers } from '@/lib/services/suppliers.service';
 import { formatMoney, sumMoney } from '@/lib/utils/money';
 
 const RECEIPTS_TAB = 'receipts';
+const NUMERIC_COLS = new Set(['amount', 'qty', 'discount']);
+const LIST_SKELETON_ROWS = [1, 2, 3, 4, 5];
+const FORM_SKELETON_FIELDS = [1, 2, 3, 4];
+const FORM_SKELETON_LINES = [1, 2];
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
@@ -88,41 +110,109 @@ function emptyLine() {
   return { id: Math.random().toString(36).slice(2), account_id: '', amount: '', total: '' };
 }
 
-/* ── Loading skeleton ────────────────────────────────────────────────────── */
-
-function ReceiptsSkeleton() {
+function BackButton({ onClick, disabled }) {
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Skeleton className="h-7 w-40" />
-        <Skeleton className="h-9 w-36" />
-      </div>
-      <div className="rounded-lg border border-border overflow-hidden">
-        <Skeleton className="h-10 w-full rounded-none" />
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-10 w-full rounded-none border-t border-border" />
-        ))}
-      </div>
+    <Button variant="ghost" size="icon" onClick={onClick} disabled={disabled} aria-label="Back">
+      <ArrowLeft />
+    </Button>
+  );
+}
+
+function ErrorAlert({ children }) {
+  return (
+    <Alert variant="destructive">
+      <AlertTriangle aria-hidden="true" />
+      <AlertDescription>{children}</AlertDescription>
+    </Alert>
+  );
+}
+
+// A form field: label above its control.
+function Field({ label, htmlFor, className, children }) {
+  return (
+    <div className={cn('flex min-w-0 flex-col gap-2', className)}>
+      {typeof label === 'string' ? <Label htmlFor={htmlFor}>{label}</Label> : label}
+      {children}
     </div>
   );
 }
 
-/* ── Form skeleton (bank accounts loading) ───────────────────────────────── */
+/* ── Loading skeletons ───────────────────────────────────────────────────── */
+
+function ReceiptsSkeleton() {
+  return (
+    <div>
+      <div className="mb-8 flex items-end justify-between gap-4 max-md:mb-6">
+        <Skeleton className="h-9 w-40" />
+        <div className="flex items-center gap-2">
+          <Skeleton className="size-control rounded-full" />
+          <Skeleton className="h-control w-36 rounded-full" />
+        </div>
+      </div>
+      <ListToolbar>
+        <Skeleton className="h-control w-full rounded-control md:w-search" />
+      </ListToolbar>
+      <ListCard>
+        <div className="flex h-row-head items-center gap-6 border-b border-border px-4">
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="ms-auto h-3 w-16" />
+        </div>
+        {LIST_SKELETON_ROWS.map((row) => (
+          <div key={row} className="flex h-row items-center gap-6 border-b border-row-divider px-4 last:border-b-0">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="ms-auto h-4 w-20" />
+            <Skeleton className="size-control-sm rounded-full" />
+          </div>
+        ))}
+      </ListCard>
+    </div>
+  );
+}
 
 function FormSkeleton() {
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Skeleton className="h-8 w-8 rounded" />
-        <Skeleton className="h-6 w-36" />
+    <div className="max-w-prose space-y-8">
+      <div className="flex items-center gap-2">
+        <Skeleton className="size-control rounded-full" />
+        <Skeleton className="h-9 w-48" />
       </div>
-      <div className="space-y-3">
-        {[1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} className="h-9 w-full rounded" />
+      <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
+        {FORM_SKELETON_FIELDS.map((field) => (
+          <div key={field} className="space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-control w-full rounded-control" />
+          </div>
         ))}
+        <div className="space-y-2 sm:col-span-2">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-24 w-full rounded-control" />
+        </div>
       </div>
-      <Skeleton className="h-24 w-full rounded" />
-      <Skeleton className="h-32 w-full rounded" />
+      <ListCard>
+        <div className="flex h-row-head items-center gap-6 border-b border-border px-4">
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="ms-auto h-3 w-16" />
+          <Skeleton className="h-3 w-16" />
+        </div>
+        {FORM_SKELETON_LINES.map((line) => (
+          <div key={line} className="flex h-row items-center gap-4 border-b border-row-divider px-4">
+            <Skeleton className="h-control flex-1 rounded-control" />
+            <Skeleton className="h-control w-28 rounded-control" />
+            <Skeleton className="h-4 w-20" />
+          </div>
+        ))}
+        <div className="flex h-row items-center justify-end px-4">
+          <Skeleton className="h-4 w-24" />
+        </div>
+      </ListCard>
+      <div className="flex items-center gap-3 border-t border-border pt-6">
+        <Skeleton className="h-control w-24 rounded-full" />
+        <Skeleton className="h-control w-20 rounded-full" />
+      </div>
     </div>
   );
 }
@@ -134,25 +224,27 @@ function SortableRow({ id, saving, children }) {
     useSortable({ id });
 
   return (
-    <tr
+    <TableRow
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`hover:bg-muted/20 transition-colors ${isDragging ? 'opacity-50 bg-muted/40' : ''}`}
+      className={cn(isDragging && 'bg-row-selected opacity-50')}
     >
-      <td className="px-1 py-1.5 border-r border-border text-center">
-        <button
+      <TableCell className="w-10 pe-0 ps-2">
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-sm"
           {...attributes}
           {...listeners}
           disabled={saving}
-          className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 touch-none"
+          className="cursor-grab touch-none active:cursor-grabbing"
           aria-label="Drag to reorder"
         >
-          <GripVertical className="h-3.5 w-3.5" />
-        </button>
-      </td>
+          <GripVertical />
+        </Button>
+      </TableCell>
       {children}
-    </tr>
+    </TableRow>
   );
 }
 
@@ -170,6 +262,375 @@ const DEFAULT_COLS = [
   { key: 'amount',      label: 'Amount',      visible: true,  locked: true  },
 ];
 
+/* ── Receipt form sections ───────────────────────────────────────────────── */
+
+function ReferenceField({ form, saving }) {
+  const label = (
+    <div className="flex items-center gap-2">
+      <Checkbox
+        id="receipt-ref-toggle"
+        checked={form.showReference}
+        onCheckedChange={form.setShowReference}
+        disabled={saving}
+      />
+      <Label htmlFor="receipt-ref-toggle" className="select-none">Reference</Label>
+    </div>
+  );
+
+  return (
+    <Field label={label}>
+      {form.showReference ? (
+        <Input
+          id="receipt-reference"
+          aria-label="Reference"
+          placeholder="e.g. REC-001"
+          value={form.reference}
+          onChange={(e) => form.setReference(e.target.value)}
+          disabled={saving}
+          autoFocus
+        />
+      ) : (
+        <p className="flex h-control items-center text-sm text-muted-foreground">Click checkbox to add a reference</p>
+      )}
+    </Field>
+  );
+}
+
+function PaidByField({ form, saving, customers, suppliers }) {
+  const isCustomer = form.paidByMode === 'customer';
+  const contacts = isCustomer ? customers : suppliers;
+
+  return (
+    <Field label="Paid by" htmlFor="receipt-paid-by-type">
+      <div className="flex gap-2">
+        <Select value={form.paidByMode} onValueChange={form.changePaidByMode} disabled={saving}>
+          <SelectTrigger id="receipt-paid-by-type" className="w-32 shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="customer">Customer</SelectItem>
+            <SelectItem value="supplier">Supplier</SelectItem>
+            <Separator className="my-1" />
+            <SelectItem value="other">Other</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {form.paidByMode === 'other' ? (
+          <Input
+            aria-label="Paid by name"
+            placeholder="Optional"
+            value={form.paidByOther}
+            onChange={(e) => form.setPaidByOther(e.target.value)}
+            disabled={saving}
+            className="min-w-0 flex-1"
+          />
+        ) : (
+          <Select value={form.paidByContactId} onValueChange={form.setPaidByContactId} disabled={saving}>
+            <SelectTrigger aria-label={isCustomer ? 'Customer' : 'Supplier'} className="min-w-0 flex-1">
+              <SelectValue placeholder={isCustomer ? 'Select customer…' : 'Select supplier…'} />
+            </SelectTrigger>
+            <SelectContent>
+              {contacts.length === 0 ? (
+                <SelectItem value="__none__" disabled>
+                  No {isCustomer ? 'customers' : 'suppliers'} found
+                </SelectItem>
+              ) : (
+                contacts.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+    </Field>
+  );
+}
+
+function ReceiptTopFields({ form, saving, bankAccounts, customers, suppliers }) {
+  const dateLabel = (
+    <Label htmlFor="receipt-date">
+      Date <span className="text-bad" aria-hidden="true">*</span>
+    </Label>
+  );
+
+  return (
+    <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
+      <Field label={dateLabel}>
+        <Input
+          id="receipt-date"
+          type="date"
+          value={form.date}
+          onChange={(e) => form.setDate(e.target.value)}
+          disabled={saving}
+        />
+      </Field>
+      <ReferenceField form={form} saving={saving} />
+      <PaidByField form={form} saving={saving} customers={customers} suppliers={suppliers} />
+      <Field label="Received in" htmlFor="receipt-received-in">
+        <Select value={form.receivedInAccountId} onValueChange={form.setReceivedInAccountId} disabled={saving}>
+          <SelectTrigger id="receipt-received-in">
+            <SelectValue placeholder="Select account…" />
+          </SelectTrigger>
+          <SelectContent>
+            {bankAccounts.length === 0 ? (
+              <SelectItem value="_none" disabled>No bank accounts found</SelectItem>
+            ) : (
+              bankAccounts.map((acct) => (
+                <SelectItem key={acct.id} value={acct.id}>{acct.name}</SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Description" htmlFor="receipt-description" className="sm:col-span-2">
+        <Textarea
+          id="receipt-description"
+          placeholder="Optional description…"
+          value={form.description}
+          onChange={(e) => form.setDescription(e.target.value)}
+          disabled={saving}
+          rows={3}
+          className="resize-none"
+        />
+      </Field>
+    </div>
+  );
+}
+
+function LineInput({ line, field, placeholder, saving, onUpdate, label, numeric = true }) {
+  return (
+    <Input
+      type="text"
+      inputMode={numeric ? 'decimal' : undefined}
+      aria-label={label}
+      placeholder={placeholder}
+      value={line[field] ?? ''}
+      onChange={(e) => onUpdate(line.id, field, e.target.value)}
+      disabled={saving}
+      className={numeric ? 'text-end' : undefined}
+    />
+  );
+}
+
+function LineRow({ line, index, flags, saving, coaAccounts, onUpdate, onRemove, canRemove }) {
+  return (
+    <SortableRow id={line.id} saving={saving}>
+      {flags.showLineNumber && (
+        <TableCell className="w-12 text-center tabular-nums text-muted-foreground">{index + 1}</TableCell>
+      )}
+      <TableCell className="px-2">
+        <Select value={line.account_id} onValueChange={(v) => onUpdate(line.id, 'account_id', v)} disabled={saving}>
+          <SelectTrigger aria-label="Account" className="min-w-32">
+            <SelectValue placeholder="Select account…" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="suspense">Suspense</SelectItem>
+            {coaAccounts.map((acct) => (
+              <SelectItem key={acct.id} value={acct.id}>{acct.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </TableCell>
+      {flags.showLineDescription && (
+        <TableCell className="px-2">
+          <LineInput line={line} field="line_description" label="Line description" placeholder="Line description" numeric={false} saving={saving} onUpdate={onUpdate} />
+        </TableCell>
+      )}
+      {flags.showQty && (
+        <TableCell className="w-24 px-2">
+          <LineInput line={line} field="qty" label="Quantity" placeholder="1" saving={saving} onUpdate={onUpdate} />
+        </TableCell>
+      )}
+      <TableCell className="w-32 px-2">
+        <LineInput line={line} field="amount" label="Amount" placeholder="0.00" saving={saving} onUpdate={onUpdate} />
+      </TableCell>
+      {flags.showDiscount && (
+        <TableCell className="w-28 px-2">
+          <LineInput line={line} field="discount" label="Discount" placeholder="0.00" saving={saving} onUpdate={onUpdate} />
+        </TableCell>
+      )}
+      <TableCell className="num w-28">{formatMoney(line.total || 0)}</TableCell>
+      <TableCell className="w-12 pe-2 ps-0 text-end">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="hover:text-bad"
+          onClick={() => onRemove(line.id)}
+          disabled={saving || !canRemove}
+          aria-label="Remove line"
+        >
+          <Trash2 />
+        </Button>
+      </TableCell>
+    </SortableRow>
+  );
+}
+
+function ReceiptLinesEditor({ lines, setLines, flags, saving, coaAccounts, onUpdate, onAdd, onRemove }) {
+  const sensors = useSensors(useSensor(PointerSensor));
+  const grandTotal = sumMoney(lines.map((l) => l.total));
+  const labelSpan = 3 + [flags.showLineNumber, flags.showLineDescription, flags.showQty, flags.showDiscount].filter(Boolean).length;
+
+  function handleDragEnd(event) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setLines((prev) => {
+      const oldIndex = prev.findIndex((l) => l.id === active.id);
+      const newIndex = prev.findIndex((l) => l.id === over.id);
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  }
+
+  const addLineButton = (
+    <Button variant="secondary" size="sm" onClick={onAdd} disabled={saving}>
+      <Plus />
+      Add line
+    </Button>
+  );
+
+  return (
+    <ListCard footer={addLineButton}>
+      <Table className="min-w-xl">
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="w-10"><span className="sr-only">Reorder</span></TableHead>
+            {flags.showLineNumber && <TableHead className="w-12 text-center">#</TableHead>}
+            <TableHead className="px-2">Account</TableHead>
+            {flags.showLineDescription && <TableHead className="px-2">Description</TableHead>}
+            {flags.showQty && <TableHead className="w-24 px-2 text-end">Qty</TableHead>}
+            <TableHead className="w-32 px-2 text-end">Amount</TableHead>
+            {flags.showDiscount && <TableHead className="w-28 px-2 text-end">Discount</TableHead>}
+            <TableHead className="w-28 text-end">Total</TableHead>
+            <TableHead className="w-12"><span className="sr-only">Remove</span></TableHead>
+          </TableRow>
+        </TableHeader>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={lines.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+            <TableBody>
+              {lines.map((line, idx) => (
+                <LineRow
+                  key={line.id}
+                  line={line}
+                  index={idx}
+                  flags={flags}
+                  saving={saving}
+                  coaAccounts={coaAccounts}
+                  onUpdate={onUpdate}
+                  onRemove={onRemove}
+                  canRemove={lines.length > 1}
+                />
+              ))}
+            </TableBody>
+          </SortableContext>
+        </DndContext>
+        <TableFooter>
+          <TableRow className="hover:bg-transparent">
+            <TableCell colSpan={labelSpan} className="text-muted-foreground">Grand Total</TableCell>
+            <TableCell className="num">{formatMoney(grandTotal)}</TableCell>
+            <TableCell />
+          </TableRow>
+        </TableFooter>
+      </Table>
+    </ListCard>
+  );
+}
+
+function ColumnToggles({ toggles, saving }) {
+  return (
+    <fieldset className="space-y-3">
+      <legend className="label-caps">Column visibility</legend>
+      <div className="flex flex-wrap gap-x-6 gap-y-3">
+        {toggles.map(({ id, label, value, setter }) => (
+          <div key={id} className="flex items-center gap-2">
+            <Checkbox id={id} checked={value} onCheckedChange={setter} disabled={saving} />
+            <Label htmlFor={id} className="select-none font-normal">{label}</Label>
+          </div>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function AttachmentField({ imageUrl, setImageUrl, uploading, saving, onUpload }) {
+  const label = (
+    <Label htmlFor="receipt-attachment" className="flex items-center gap-1.5">
+      <Paperclip className="size-4 text-muted-foreground" aria-hidden="true" />
+      Attachment
+    </Label>
+  );
+
+  return (
+    <Field label={label}>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-0 flex-1">
+          <Input
+            id="receipt-attachment"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+            className="py-2 file:me-3 file:rounded-full file:bg-muted file:px-3 file:py-0.5 file:text-xs file:text-muted-foreground hover:file:bg-accent"
+            onChange={onUpload}
+            disabled={saving || uploading}
+          />
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-control bg-background/60">
+              <Loader2 className="size-4 animate-spin text-muted-foreground" aria-hidden="true" />
+            </div>
+          )}
+        </div>
+        {imageUrl?.startsWith('http') && (
+          <div className="flex min-w-0 items-center gap-1">
+            <a
+              href={imageUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex max-w-48 items-center gap-1.5 truncate text-sm text-link underline-offset-4 hover:underline"
+            >
+              <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
+              View attachment
+            </a>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="hover:text-bad"
+              onClick={() => setImageUrl('')}
+              disabled={saving || uploading}
+              aria-label="Remove attachment"
+            >
+              <X />
+            </Button>
+          </div>
+        )}
+        {imageUrl && !imageUrl.startsWith('http') && (
+          <span className="max-w-48 truncate text-sm text-muted-foreground">{imageUrl}</span>
+        )}
+      </div>
+    </Field>
+  );
+}
+
+function FormActions({ isEdit, saving, onSubmit, onCancel, onDelete }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 border-t border-border pt-6">
+      <Button className="min-w-24" onClick={onSubmit} disabled={saving}>
+        {saving ? <Loader2 className="animate-spin" aria-label="Saving" /> : isEdit ? 'Update' : 'Create'}
+      </Button>
+      {!isEdit && (
+        <Button variant="ghost" onClick={onCancel} disabled={saving}>
+          Cancel
+        </Button>
+      )}
+      {isEdit && onDelete && (
+        <Button variant="ghost" className="ms-auto text-bad hover:text-bad" onClick={onDelete} disabled={saving}>
+          <Trash2 />
+          Delete
+        </Button>
+      )}
+    </div>
+  );
+}
+
 /* ── Receipt form (create / edit) ────────────────────────────────────────── */
 
 function ReceiptForm({ businessId, onSaved, onCancel, onDelete, onConflict, initial, initialError = null, bankAccounts, coaAccounts, customers, suppliers }) {
@@ -180,7 +641,7 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, onConflict, init
   const [showReference, setShowReference] = useState(!!initial?.reference);
   const [reference, setReference] = useState(initial?.reference ?? '');
   const [paidByContactId, setPaidByContactId] = useState(initial?.paid_by_contact_id ?? '');
-  const [paidByContactType, setPaidByContactType] = useState(initial?.paid_by_contact_type ?? ''); // 'customer' | 'supplier'
+  const [, setPaidByContactType] = useState(initial?.paid_by_contact_type ?? ''); // 'customer' | 'supplier'
   const [paidByOther, setPaidByOther] = useState(initial?.paid_by_other ?? '');
   // paidByMode: 'customer' | 'supplier' | 'other'
   const [paidByMode, setPaidByMode] = useState(
@@ -238,16 +699,35 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, onConflict, init
     setLines((prev) => (prev.length > 1 ? prev.filter((l) => l.id !== id) : prev));
   }
 
-  const sensors = useSensors(useSensor(PointerSensor));
+  function changePaidByMode(val) {
+    setPaidByMode(val);
+    setPaidByContactId('');
+    setPaidByContactType(val !== 'other' ? val : '');
+    setPaidByOther('');
+  }
 
-  function handleDragEnd(event) {
-    const { active, over } = event;
-    if (over && active.id !== over.id) {
-      setLines((prev) => {
-        const oldIndex = prev.findIndex((l) => l.id === active.id);
-        const newIndex = prev.findIndex((l) => l.id === over.id);
-        return arrayMove(prev, oldIndex, newIndex);
+  /* ── Attachment upload ───────────────────────────────────────────────── */
+
+  async function handleUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('businessId', businessId);
+      const res = await fetch('/api/storage/receipt-upload', {
+        method: 'POST',
+        body: fd,
       });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Upload failed');
+      setImageUrl(json.url);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -297,516 +777,70 @@ function ReceiptForm({ businessId, onSaved, onCancel, onDelete, onConflict, init
     }
   }
 
-  const grandTotal = sumMoney(lines.map((l) => l.total));
+  const form = {
+    date, setDate,
+    showReference, setShowReference,
+    reference, setReference,
+    paidByMode, changePaidByMode,
+    paidByContactId, setPaidByContactId,
+    paidByOther, setPaidByOther,
+    receivedInAccountId, setReceivedInAccountId,
+    description, setDescription,
+  };
+  const flags = { showLineNumber, showLineDescription, showQty, showDiscount };
+  const toggles = [
+    { id: 'col-linenum', label: 'Line number', value: showLineNumber, setter: setShowLineNumber },
+    { id: 'col-linedesc', label: 'Description', value: showLineDescription, setter: setShowLineDescription },
+    { id: 'col-qty', label: 'Qty', value: showQty, setter: setShowQty },
+    { id: 'col-discount', label: 'Discount', value: showDiscount, setter: setShowDiscount },
+  ];
 
   return (
-    <div className="space-y-6 pb-8 max-w-2xl">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground"
-          onClick={onCancel}
-          disabled={saving}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Button>
-        <h2 className="text-lg font-semibold text-foreground">
-          {isEdit ? 'Edit Receipt' : 'New Receipt'}
-        </h2>
-      </div>
+    <div className="max-w-prose">
+      <PageHeader
+        back={<BackButton onClick={onCancel} disabled={saving} />}
+        title={isEdit ? 'Edit Receipt' : 'New Receipt'}
+      />
 
-      {error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive flex items-start gap-2">
-          <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-          {error}
-        </div>
-      )}
+      <div className="space-y-8">
+        {error && <ErrorAlert>{error}</ErrorAlert>}
 
-      {/* ── Section: Top fields ─────────────────────────────────────────── */}
-      <div className="rounded-lg border border-border overflow-hidden">
-        {/* Date row */}
-        <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center border-b border-border">
-          <div className="px-4 py-3 bg-muted/30 border-r border-border flex items-center gap-2">
-            <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
-            <Label htmlFor="receipt-date" className="text-xs font-medium text-muted-foreground">
-              Date <span className="text-destructive">*</span>
-            </Label>
-          </div>
-          <div className="px-4 py-2.5">
-            <Input
-              id="receipt-date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              disabled={saving}
-              className="h-8 text-sm w-44"
-            />
-          </div>
-        </div>
-
-        {/* Reference row */}
-        <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center border-b border-border">
-          <div className="px-4 py-3 bg-muted/30 border-r border-border flex items-center gap-2">
-            <Checkbox
-              id="receipt-ref-toggle"
-              checked={showReference}
-              onCheckedChange={setShowReference}
-              disabled={saving}
-              className="h-3.5 w-3.5"
-            />
-            <Label
-              htmlFor="receipt-ref-toggle"
-              className="text-xs font-medium text-muted-foreground cursor-pointer select-none"
-            >
-              Reference
-            </Label>
-          </div>
-          <div className="px-4 py-2.5">
-            {showReference ? (
-              <Input
-                id="receipt-reference"
-                placeholder="e.g. REC-001"
-                value={reference}
-                onChange={(e) => setReference(e.target.value)}
-                disabled={saving}
-                className="h-8 text-sm w-44"
-                autoFocus
-              />
-            ) : (
-              <span className="text-xs text-muted-foreground italic">Click checkbox to add a reference</span>
-            )}
-          </div>
-        </div>
-
-        {/* Paid by row */}
-        <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center border-b border-border">
-          <div className="px-4 py-3 bg-muted/30 border-r border-border">
-            <Label className="text-xs font-medium text-muted-foreground">Paid by</Label>
-          </div>
-          <div className="px-4 py-2.5 flex flex-wrap items-center gap-2">
-            {/* Type selector: Customer / Supplier / Other */}
-            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Contact</span>
-            <Select
-              value={paidByMode}
-              onValueChange={(val) => {
-                setPaidByMode(val);
-                setPaidByContactId('');
-                setPaidByContactType(val !== 'other' ? val : '');
-                setPaidByOther('');
-              }}
-              disabled={saving}
-            >
-              <SelectTrigger className="h-8 text-sm w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="customer">Customer</SelectItem>
-                <SelectItem value="supplier">Supplier</SelectItem>
-                <Separator className="my-1" />
-                <SelectItem value="other">Other</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Contact picker when Customer or Supplier selected */}
-            {(paidByMode === 'customer' || paidByMode === 'supplier') && (
-              <Select
-                value={paidByContactId}
-                onValueChange={setPaidByContactId}
-                disabled={saving}
-              >
-                <SelectTrigger className="h-8 text-sm w-44">
-                  <SelectValue placeholder={paidByMode === 'customer' ? 'Select customer…' : 'Select supplier…'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {(paidByMode === 'customer' ? customers : suppliers).length === 0 ? (
-                    <SelectItem value="__none__" disabled>
-                      No {paidByMode === 'customer' ? 'customers' : 'suppliers'} found
-                    </SelectItem>
-                  ) : (
-                    (paidByMode === 'customer' ? customers : suppliers).map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            )}
-
-            {/* Free-text input when Other selected */}
-            {paidByMode === 'other' && (
-              <Input
-                placeholder="Optional"
-                value={paidByOther}
-                onChange={(e) => setPaidByOther(e.target.value)}
-                disabled={saving}
-                className="h-8 text-sm flex-1 min-w-[140px]"
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Received in row */}
-        <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center">
-          <div className="px-4 py-3 bg-muted/30 border-r border-border">
-            <Label className="text-xs font-medium text-muted-foreground">Received in</Label>
-          </div>
-          <div className="px-4 py-2.5">
-            <Select
-              value={receivedInAccountId}
-              onValueChange={setReceivedInAccountId}
-              disabled={saving}
-            >
-              <SelectTrigger className="h-8 text-sm w-56">
-                <SelectValue placeholder="Select account…" />
-              </SelectTrigger>
-              <SelectContent>
-                {bankAccounts.length === 0 ? (
-                  <SelectItem value="_none" disabled>No bank accounts found</SelectItem>
-                ) : (
-                  bankAccounts.map((acct) => (
-                    <SelectItem key={acct.id} value={acct.id}>
-                      {acct.name}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Section: Description ────────────────────────────────────────── */}
-      <div className="space-y-1.5">
-        <Label htmlFor="receipt-description" className="text-xs font-medium text-muted-foreground">
-          Description
-        </Label>
-        <Textarea
-          id="receipt-description"
-          placeholder="Optional description…"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          disabled={saving}
-          rows={3}
-          className="text-sm resize-none"
+        <ReceiptTopFields
+          form={form}
+          saving={saving}
+          bankAccounts={bankAccounts}
+          customers={customers}
+          suppliers={suppliers}
         />
-      </div>
 
-      {/* ── Section: Line items ─────────────────────────────────────────── */}
-      <div className="space-y-2">
-        <div className="rounded-lg border border-border overflow-hidden overflow-x-auto">
-          <table className="w-full text-sm min-w-[520px]">
-            <thead>
-              <tr className="bg-muted/30 border-b border-border">
-                <th className="w-6 border-r border-border" />
-                {showLineNumber && (
-                  <th className="px-3 py-2 w-10 text-center text-xs font-semibold text-muted-foreground border-r border-border">
-                    #
-                  </th>
-                )}
-                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-r border-border">
-                  Account
-                </th>
-                {showLineDescription && (
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-r border-border">
-                    Description
-                  </th>
-                )}
-                {showQty && (
-                  <th className="px-3 py-2 w-20 text-right text-xs font-semibold text-muted-foreground border-r border-border">
-                    Qty
-                  </th>
-                )}
-                <th className="px-3 py-2 w-28 text-right text-xs font-semibold text-muted-foreground border-r border-border">
-                  Amount
-                </th>
-                {showDiscount && (
-                  <th className="px-3 py-2 w-24 text-right text-xs font-semibold text-muted-foreground border-r border-border">
-                    Discount
-                  </th>
-                )}
-                <th className="px-3 py-2 w-28 text-right text-xs font-semibold text-muted-foreground border-r border-border">
-                  Total
-                </th>
-                <th className="px-3 py-2 w-10 text-center text-xs font-semibold text-muted-foreground" />
-              </tr>
-            </thead>
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={lines.map((l) => l.id)} strategy={verticalListSortingStrategy}>
-            <tbody className="divide-y divide-border">
-              {lines.map((line, idx) => (
-                <SortableRow key={line.id} id={line.id} saving={saving}>
-                  {showLineNumber && (
-                    <td className="px-3 py-2 text-center text-xs text-muted-foreground border-r border-border">
-                      {idx + 1}
-                    </td>
-                  )}
-                  <td className="px-2 py-1.5 border-r border-border">
-                    <Select
-                      value={line.account_id}
-                      onValueChange={(v) => updateLine(line.id, 'account_id', v)}
-                      disabled={saving}
-                    >
-                      <SelectTrigger className="h-7 text-xs w-full min-w-[120px]">
-                        <SelectValue placeholder="Select account…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="suspense">Suspense</SelectItem>
-                        {coaAccounts.map((acct) => (
-                          <SelectItem key={acct.id} value={acct.id}>
-                            {acct.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </td>
-                  {showLineDescription && (
-                    <td className="px-2 py-1.5 border-r border-border">
-                      <Input
-                        placeholder="Line description"
-                        value={line.line_description ?? ''}
-                        onChange={(e) => updateLine(line.id, 'line_description', e.target.value)}
-                        disabled={saving}
-                        className="h-7 text-xs"
-                      />
-                    </td>
-                  )}
-                  {showQty && (
-                    <td className="px-2 py-1.5 border-r border-border">
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="1"
-                        value={line.qty ?? ''}
-                        onChange={(e) => updateLine(line.id, 'qty', e.target.value)}
-                        disabled={saving}
-                        className="h-7 text-xs text-right"
-                      />
-                    </td>
-                  )}
-                  <td className="px-2 py-1.5 border-r border-border">
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="0.00"
-                      value={line.amount}
-                      onChange={(e) => updateLine(line.id, 'amount', e.target.value)}
-                      disabled={saving}
-                      className="h-7 text-xs text-right"
-                    />
-                  </td>
-                  {showDiscount && (
-                    <td className="px-2 py-1.5 border-r border-border">
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={line.discount ?? ''}
-                        onChange={(e) => updateLine(line.id, 'discount', e.target.value)}
-                        disabled={saving}
-                        className="h-7 text-xs text-right"
-                      />
-                    </td>
-                  )}
-                  <td className="px-3 py-1.5 border-r border-border text-right text-xs tabular-nums text-foreground">
-                    {formatMoney(line.total || 0)}
-                  </td>
-                  <td className="px-2 py-1.5 text-center">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 cursor-pointer text-muted-foreground hover:text-destructive"
-                      onClick={() => removeLine(line.id)}
-                      disabled={saving || lines.length === 1}
-                      aria-label="Remove line"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </td>
-                </SortableRow>
-              ))}
-            </tbody>
-              </SortableContext>
-            </DndContext>
-            <tfoot>
-              <tr className="border-t border-border bg-muted/20">
-                <td
-                  colSpan={
-                    3 +
-                    (showLineNumber ? 1 : 0) +
-                    (showLineDescription ? 1 : 0) +
-                    (showQty ? 1 : 0) +
-                    (showDiscount ? 1 : 0)
-                  }
-                  className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground"
-                >
-                  Grand Total
-                </td>
-                <td className="px-3 py-2 text-right text-sm font-semibold text-foreground tabular-nums">
-                  {formatMoney(grandTotal)}
-                </td>
-                <td />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+        <ReceiptLinesEditor
+          lines={lines}
+          setLines={setLines}
+          flags={flags}
+          saving={saving}
+          coaAccounts={coaAccounts}
+          onUpdate={updateLine}
+          onAdd={addLine}
+          onRemove={removeLine}
+        />
 
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5 cursor-pointer text-xs"
-          onClick={addLine}
-          disabled={saving}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add line
-        </Button>
-      </div>
+        <ColumnToggles toggles={toggles} saving={saving} />
 
-      {/* ── Section: Column visibility ───────────────────────────────────── */}
-      <div className="rounded-lg border border-border p-4 space-y-3">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-          Column visibility
-        </p>
-        <div className="flex flex-wrap gap-x-6 gap-y-2.5">
-          {[
-            { id: 'col-linenum', label: 'Line number', value: showLineNumber, setter: setShowLineNumber },
-            { id: 'col-linedesc', label: 'Description', value: showLineDescription, setter: setShowLineDescription },
-            { id: 'col-qty', label: 'Qty', value: showQty, setter: setShowQty },
-            { id: 'col-discount', label: 'Discount', value: showDiscount, setter: setShowDiscount },
-          ].map(({ id, label, value, setter }) => (
-            <div key={id} className="flex items-center gap-2">
-              <Checkbox
-                id={id}
-                checked={value}
-                onCheckedChange={setter}
-                disabled={saving}
-                className="h-3.5 w-3.5"
-              />
-              <Label htmlFor={id} className="text-xs text-muted-foreground cursor-pointer select-none">
-                {label}
-              </Label>
-            </div>
-          ))}
-        </div>
-      </div>
+        <AttachmentField
+          imageUrl={imageUrl}
+          setImageUrl={setImageUrl}
+          uploading={uploading}
+          saving={saving}
+          onUpload={handleUpload}
+        />
 
-      {/* ── Section: Image attachment ────────────────────────────────────── */}
-      <div className="space-y-1.5">
-        <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-          <Paperclip className="h-3.5 w-3.5" />
-          Attachment
-        </Label>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative">
-            <Input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
-              className="h-9 text-sm file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-muted file:text-muted-foreground hover:file:bg-muted/80 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                setUploading(true);
-                setError(null);
-                try {
-                  const fd = new FormData();
-                  fd.append('file', file);
-                  fd.append('businessId', businessId);
-                  const res = await fetch('/api/storage/receipt-upload', {
-                    method: 'POST',
-                    body: fd,
-                  });
-                  const json = await res.json();
-                  if (!res.ok) throw new Error(json.error ?? 'Upload failed');
-                  setImageUrl(json.url);
-                } catch (err) {
-                  setError(err.message);
-                } finally {
-                  setUploading(false);
-                }
-              }}
-              disabled={saving || uploading}
-            />
-            {uploading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-background/60 rounded">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              </div>
-            )}
-          </div>
-          {imageUrl?.startsWith('http') && (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <a
-                href={imageUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1 text-xs text-primary hover:underline truncate max-w-[180px]"
-              >
-                <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                View attachment
-              </a>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 text-muted-foreground hover:text-destructive flex-shrink-0"
-                onClick={() => setImageUrl('')}
-                disabled={saving || uploading}
-                aria-label="Remove attachment"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          )}
-          {imageUrl && !imageUrl.startsWith('http') && (
-            <span className="text-xs text-muted-foreground truncate max-w-[180px]">{imageUrl}</span>
-          )}
-        </div>
-      </div>
-
-      <Separator />
-
-      {/* ── Action buttons ───────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Button
-            className="cursor-pointer min-w-[90px]"
-            onClick={handleSubmit}
-            disabled={saving}
-          >
-            {saving ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : isEdit ? (
-              'Update'
-            ) : (
-              'Create'
-            )}
-          </Button>
-          {!isEdit && (
-            <Button
-              variant="ghost"
-              className="cursor-pointer text-muted-foreground"
-              onClick={onCancel}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
-          )}
-        </div>
-        {isEdit && onDelete && (
-          <Button
-            variant="destructive"
-            size="sm"
-            className="cursor-pointer gap-1.5"
-            onClick={onDelete}
-            disabled={saving}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Delete
-          </Button>
-        )}
+        <FormActions
+          isEdit={isEdit}
+          saving={saving}
+          onSubmit={handleSubmit}
+          onCancel={onCancel}
+          onDelete={onDelete}
+        />
       </div>
     </div>
   );
@@ -851,22 +885,19 @@ function DeleteDialog({ open, onOpenChange, businessId, receipt, onDeleted, onSt
         <DialogHeader>
           <DialogTitle>Delete Receipt</DialogTitle>
         </DialogHeader>
-        <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
-          <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-destructive">
-            Delete receipt{receipt?.reference ? <> <span className="font-medium">{receipt.reference}</span></> : ''} from{' '}
-            <span className="font-medium">{formatDate(receipt?.date)}</span>? This cannot be undone.
-          </p>
-        </div>
+        <ErrorAlert>
+          Delete receipt{receipt?.reference ? <> <span className="font-medium">{receipt.reference}</span></> : ''} from{' '}
+          <span className="font-medium">{formatDate(receipt?.date)}</span>? This cannot be undone.
+        </ErrorAlert>
         {error && (
-          <p className="text-xs text-destructive" role="alert">{error}</p>
+          <p className="text-sm text-bad" role="alert">{error}</p>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={deleting} className="cursor-pointer">
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={deleting}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={handleDelete} disabled={deleting} className="cursor-pointer min-w-[72px]">
-            {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Delete'}
+          <Button variant="destructive" onClick={handleDelete} disabled={deleting} className="min-w-20">
+            {deleting ? <Loader2 className="animate-spin" aria-label="Deleting" /> : 'Delete'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -875,6 +906,15 @@ function DeleteDialog({ open, onOpenChange, businessId, receipt, onDeleted, onSt
 }
 
 /* ── Receipt view (full-page, read-only) ─────────────────────────────────── */
+
+function InfoItem({ label, className, children }) {
+  return (
+    <div className={cn('min-w-0', className)}>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="mt-1 text-base text-foreground">{children}</dd>
+    </div>
+  );
+}
 
 function ReceiptViewInfo({ receipt }) {
   function paidByLabel() {
@@ -886,211 +926,215 @@ function ReceiptViewInfo({ receipt }) {
   }
 
   return (
-    <div className="rounded-lg border border-border overflow-hidden">
-      <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-start border-b border-border">
-        <div className="px-4 py-3 bg-muted/30 border-r border-border">
-          <p className="text-xs font-medium text-muted-foreground">Date</p>
-        </div>
-        <div className="px-4 py-3">
-          <p className="text-sm text-foreground">{formatDate(receipt.date)}</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-start border-b border-border">
-        <div className="px-4 py-3 bg-muted/30 border-r border-border">
-          <p className="text-xs font-medium text-muted-foreground">Reference</p>
-        </div>
-        <div className="px-4 py-3">
-          <p className="text-sm text-foreground">{receipt.reference || '—'}</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-start border-b border-border">
-        <div className="px-4 py-3 bg-muted/30 border-r border-border">
-          <p className="text-xs font-medium text-muted-foreground">Paid By</p>
-        </div>
-        <div className="px-4 py-3">
-          <p className="text-sm text-foreground">{paidByLabel()}</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-start border-b border-border">
-        <div className="px-4 py-3 bg-muted/30 border-r border-border">
-          <p className="text-xs font-medium text-muted-foreground">Received In</p>
-        </div>
-        <div className="px-4 py-3">
-          <p className="text-sm text-foreground">{receipt.received_in_account_name || receipt.received_in_account_id || '—'}</p>
-        </div>
-      </div>
-
-      {receipt.description && (
-        <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-start border-b border-border">
-          <div className="px-4 py-3 bg-muted/30 border-r border-border">
-            <p className="text-xs font-medium text-muted-foreground">Description</p>
-          </div>
-          <div className="px-4 py-3">
-            <p className="text-sm text-foreground whitespace-pre-wrap">{receipt.description}</p>
-          </div>
-        </div>
-      )}
-
-      {receipt.image_url && (
-        <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-start">
-          <div className="px-4 py-3 bg-muted/30 border-r border-border">
-            <p className="text-xs font-medium text-muted-foreground">Attachment</p>
-          </div>
-          <div className="px-4 py-3">
+    <Card className="p-card">
+      <dl className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+        <InfoItem label="Date">{formatDate(receipt.date)}</InfoItem>
+        <InfoItem label="Reference">{receipt.reference || '—'}</InfoItem>
+        <InfoItem label="Paid By">{paidByLabel()}</InfoItem>
+        <InfoItem label="Received In">
+          {receipt.received_in_account_name || receipt.received_in_account_id || '—'}
+        </InfoItem>
+        {receipt.description && (
+          <InfoItem label="Description" className="sm:col-span-2">
+            <span className="whitespace-pre-wrap">{receipt.description}</span>
+          </InfoItem>
+        )}
+        {receipt.image_url && (
+          <InfoItem label="Attachment" className="sm:col-span-2">
             <a
               href={receipt.image_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+              className="inline-flex items-center gap-1.5 text-link underline-offset-4 hover:underline"
             >
-              <Paperclip className="h-3.5 w-3.5" />
+              <Paperclip className="size-3.5" aria-hidden="true" />
               View attachment
-              <ExternalLink className="h-3.5 w-3.5" />
+              <ExternalLink className="size-3.5" aria-hidden="true" />
             </a>
-          </div>
-        </div>
-      )}
-    </div>
+          </InfoItem>
+        )}
+      </dl>
+    </Card>
   );
 }
 
 function ReceiptViewLines({ lines, total, showLineNumber, showDescription, showQty, showDiscount }) {
   if (!Array.isArray(lines) || lines.length === 0) return null;
+  const labelSpan = 2 + [showLineNumber, showDescription, showQty, showDiscount].filter(Boolean).length;
 
   return (
-    <div className="rounded-lg border border-border overflow-hidden overflow-x-auto">
-      <table className="w-full text-sm min-w-[400px]">
-        <thead>
-          <tr className="bg-muted/30 border-b border-border">
-            {showLineNumber && (
-              <th className="px-3 py-2 w-10 text-center text-xs font-semibold text-muted-foreground border-r border-border">#</th>
-            )}
-            <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border-r border-border">Account</th>
-            {showDescription && (
-              <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border-r border-border">Description</th>
-            )}
-            {showQty && (
-              <th className="px-3 py-2 w-16 text-right text-xs font-semibold text-muted-foreground border-r border-border">Qty</th>
-            )}
-            <th className="px-4 py-2 w-28 text-right text-xs font-semibold text-muted-foreground border-r border-border">Amount</th>
-            {showDiscount && (
-              <th className="px-4 py-2 w-24 text-right text-xs font-semibold text-muted-foreground border-r border-border">Discount</th>
-            )}
-            <th className="px-4 py-2 w-28 text-right text-xs font-semibold text-muted-foreground">Total</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
+    <ListCard>
+      <Table className="min-w-md">
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            {showLineNumber && <TableHead className="w-12 text-center">#</TableHead>}
+            <TableHead>Account</TableHead>
+            {showDescription && <TableHead>Description</TableHead>}
+            {showQty && <TableHead className="w-20 text-end">Qty</TableHead>}
+            <TableHead className="w-28 text-end">Amount</TableHead>
+            {showDiscount && <TableHead className="w-24 text-end">Discount</TableHead>}
+            <TableHead className="w-28 text-end">Total</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {lines.map((line, idx) => (
-            <tr key={line.id ?? idx} className="hover:bg-muted/20 transition-colors">
+            <TableRow key={line.id ?? idx}>
               {showLineNumber && (
-                <td className="px-3 py-2.5 text-center text-muted-foreground border-r border-border tabular-nums">{idx + 1}</td>
+                <TableCell className="text-center tabular-nums text-muted-foreground">{idx + 1}</TableCell>
               )}
-              <td className="px-4 py-2.5 text-foreground border-r border-border">
-                {line.account_name ?? line.account_id ?? '—'}
-              </td>
+              <TableCell>{line.account_name ?? line.account_id ?? '—'}</TableCell>
               {showDescription && (
-                <td className="px-4 py-2.5 text-muted-foreground border-r border-border">
-                  {line.line_description || '—'}
-                </td>
+                <TableCell className="text-muted-foreground">{line.line_description || '—'}</TableCell>
               )}
-              {showQty && (
-                <td className="px-3 py-2.5 text-right text-foreground border-r border-border tabular-nums">
-                  {formatMoney(line.qty ?? 1)}
-                </td>
-              )}
-              <td className="px-4 py-2.5 text-right text-foreground border-r border-border tabular-nums">
-                {formatMoney(line.amount)}
-              </td>
+              {showQty && <TableCell className="num">{formatMoney(line.qty ?? 1)}</TableCell>}
+              <TableCell className="num">{formatMoney(line.amount)}</TableCell>
               {showDiscount && (
-                <td className="px-4 py-2.5 text-right text-muted-foreground border-r border-border tabular-nums">
-                  {formatMoney(line.discount ?? 0)}
-                </td>
+                <TableCell className="num text-muted-foreground">{formatMoney(line.discount ?? 0)}</TableCell>
               )}
-              <td className="px-4 py-2.5 text-right text-foreground tabular-nums font-medium">
-                {formatMoney(line.total)}
-              </td>
-            </tr>
+              <TableCell className="num font-medium">{formatMoney(line.total)}</TableCell>
+            </TableRow>
           ))}
-        </tbody>
-        <tfoot>
-          <tr className="border-t border-border bg-muted/30">
-            <td
-              colSpan={
-                2 +
-                (showLineNumber ? 1 : 0) +
-                (showDescription ? 1 : 0) +
-                (showQty ? 1 : 0) +
-                (showDiscount ? 1 : 0)
-              }
-              className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border-r border-border"
-            >
-              Grand Total
-            </td>
-            <td className="px-4 py-2 text-right">
-              <span className="text-sm font-bold text-foreground tabular-nums">{formatMoney(total)}</span>
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
+        </TableBody>
+        <TableFooter>
+          <TableRow className="hover:bg-transparent">
+            <TableCell colSpan={labelSpan} className="text-muted-foreground">Grand Total</TableCell>
+            <TableCell className="num">{formatMoney(total)}</TableCell>
+          </TableRow>
+        </TableFooter>
+      </Table>
+    </ListCard>
   );
 }
 
 function ReceiptView({ receipt, onBack, onEdit, onClone }) {
   if (!receipt) return null;
 
+  const actions = (
+    <>
+      <MoreMenu items={[{ label: 'Clone', icon: Copy, onSelect: onClone }]} />
+      <Button onClick={onEdit}>
+        <Pencil />
+        Edit
+      </Button>
+    </>
+  );
+
   return (
-    <div className="space-y-6 pb-8 max-w-2xl">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground"
-            onClick={onBack}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Button>
-          <h2 className="text-lg font-semibold text-foreground">Receipt</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 cursor-pointer"
-            onClick={onClone}
-          >
-            <Copy className="h-3.5 w-3.5" />
-            Clone
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 cursor-pointer"
-            onClick={onEdit}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            Edit
-          </Button>
-        </div>
+    <div className="max-w-prose">
+      <PageHeader back={<BackButton onClick={onBack} />} title="Receipt" actions={actions} />
+      <div className="space-y-6">
+        <ReceiptViewInfo receipt={receipt} />
+        <ReceiptViewLines
+          lines={receipt.lines}
+          total={receipt.total}
+          showLineNumber={receipt.show_line_number}
+          showDescription={receipt.show_description}
+          showQty={receipt.show_qty}
+          showDiscount={receipt.show_discount}
+        />
       </div>
-
-      <ReceiptViewInfo receipt={receipt} />
-
-      <ReceiptViewLines
-        lines={receipt.lines}
-        total={receipt.total}
-        showLineNumber={receipt.show_line_number}
-        showDescription={receipt.show_description}
-        showQty={receipt.show_qty}
-        showDiscount={receipt.show_discount}
-      />
     </div>
+  );
+}
+
+/* ── Receipts list table ─────────────────────────────────────────────────── */
+
+function listCellValue(key, receipt) {
+  const lines = receipt.lines ?? [];
+  switch (key) {
+    case 'reference': return receipt.reference || '—';
+    case 'paid_by': return receipt.paid_by_other || receipt.paid_by_name || '—';
+    case 'received_in': return receipt.received_in_account_name || '—';
+    case 'description': return receipt.description || '—';
+    case 'qty': return lines.some((l) => l.qty) ? formatMoney(sumMoney(lines.map((l) => l.qty))) : '—';
+    case 'discount': {
+      const totalDiscount = sumMoney(lines.map((l) => l.discount));
+      return Number(totalDiscount) > 0 ? formatMoney(totalDiscount) : '—';
+    }
+    case 'amount': return formatMoney(receipt.total);
+    default: return null;
+  }
+}
+
+function ReceiptListCell({ colKey, receipt, onView }) {
+  if (colKey === 'date') {
+    return (
+      <TableCell className="whitespace-nowrap">
+        <Button variant="link" className="h-auto px-0 text-foreground hover:text-link" onClick={onView}>
+          {formatDate(receipt.date)}
+        </Button>
+      </TableCell>
+    );
+  }
+  if (colKey === 'attachment') {
+    return (
+      <TableCell className="whitespace-nowrap text-muted-foreground">
+        {receipt.image_url ? (
+          <a href={receipt.image_url} target="_blank" rel="noopener noreferrer" className="text-link underline-offset-4 hover:underline">
+            View
+          </a>
+        ) : '—'}
+      </TableCell>
+    );
+  }
+  const value = listCellValue(colKey, receipt);
+  if (value === null) return null;
+  const muted = colKey !== 'amount' || Number(receipt.total) === 0;
+  return (
+    <TableCell className={cn('whitespace-nowrap', NUMERIC_COLS.has(colKey) && 'num', muted ? 'text-muted-foreground' : 'text-foreground')}>
+      {value}
+    </TableCell>
+  );
+}
+
+function ReceiptsTable({ visibleCols, rows, onView, onEdit }) {
+  const showTotals = visibleCols.some((c) => c.key === 'amount');
+  const total = formatMoney(sumMoney(rows.map((r) => r.total)));
+
+  return (
+    <Table className="min-w-xl">
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          {visibleCols.map((col) => (
+            <TableHead key={col.key} className={NUMERIC_COLS.has(col.key) ? 'w-28 text-end' : undefined}>
+              {col.label}
+            </TableHead>
+          ))}
+          <TableHead className="w-12"><span className="sr-only">Actions</span></TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((receipt) => (
+          <TableRow key={receipt.id}>
+            {visibleCols.map((col) => (
+              <ReceiptListCell key={col.key} colKey={col.key} receipt={receipt} onView={() => onView(receipt.id)} />
+            ))}
+            <TableCell className="w-12 pe-2 ps-0 text-end">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Edit receipt ${receipt.reference || formatDate(receipt.date)}`}
+                onClick={() => onEdit(receipt.id)}
+              >
+                <Pencil />
+              </Button>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+      {showTotals && (
+        <TableFooter>
+          <TableRow className="hover:bg-transparent">
+            {visibleCols.map((col) => (
+              <TableCell key={col.key} className={col.key === 'amount' ? 'num' : undefined}>
+                {col.key === 'amount' ? total : null}
+              </TableCell>
+            ))}
+            <TableCell />
+          </TableRow>
+        </TableFooter>
+      )}
+    </Table>
   );
 }
 
@@ -1340,227 +1384,46 @@ export default function BusinessReceipts({ business, onBankRefresh, bankRefreshK
   /* ── List view ──────────────────────────────────────────────────────── */
   if (isLoading) return <ReceiptsSkeleton />;
 
+  const visibleCols = cols.filter((c) => c.visible);
+  const headerActions = (
+    <>
+      <MoreMenu items={[{ label: 'Edit columns', icon: Columns, onSelect: openColEditor }]} />
+      <Button onClick={goCreate}>
+        <Plus />
+        New Receipt
+      </Button>
+    </>
+  );
+
   return (
-    <div className="space-y-4">
-      {/* Page header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold text-foreground">Receipts</h1>
-          <span className="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full bg-muted text-xs font-semibold text-muted-foreground tabular-nums">
-            {receipts.length}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search receipts…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-9 pl-8 text-sm w-52"
-            />
-          </div>
-          <Button
-            size="sm"
-            className="gap-1.5 cursor-pointer"
-            onClick={goCreate}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New Receipt
-          </Button>
-        </div>
-      </div>
+    <div>
+      <PageHeader title="Receipts" actions={headerActions} />
 
-      {/* Error state */}
-      {error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      {error && <div className="mb-4"><ErrorAlert>{error}</ErrorAlert></div>}
 
-      {/* Table */}
-      <div className="rounded-lg border border-border overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm min-w-[540px]">
-          <thead>
-            <tr className="border-b border-border bg-muted/30">
-              <th className="px-3 py-2 w-16 border-r border-border text-center text-xs font-semibold text-muted-foreground">
-                <span className="flex items-center justify-center">
-                  <Pencil className="h-3 w-3" />
-                </span>
-              </th>
-              <th className="px-3 py-2 w-16 border-r border-border text-center text-xs font-semibold text-muted-foreground">
-                <span className="flex items-center justify-center">
-                  <Eye className="h-3 w-3" />
-                </span>
-              </th>
-              {cols.filter((c) => c.visible).map((col) => (
-                <th
-                  key={col.key}
-                  className={`px-4 py-2 text-xs font-semibold text-muted-foreground border-r border-border ${'amount qty discount'.includes(col.key) ? 'w-28 text-right' : 'text-left'}`}
-                >
-                  {col.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {filtered.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={2 + cols.filter((c) => c.visible).length}
-                  className="px-4 py-12 text-center text-sm text-muted-foreground"
-                >
-                  {search.trim() ? 'No receipts match your search.' : 'No receipts yet'}
-                </td>
-              </tr>
-            ) : (
-              filtered.map((receipt) => {
-                const lines = receipt.lines ?? [];
-                return (
-                  <tr
-                    key={receipt.id}
-                    className="hover:bg-muted/30 transition-colors duration-150"
-                  >
-                    <td className="px-3 py-2 w-16 border-r border-border text-center">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs cursor-pointer"
-                        onClick={() => goEdit(receipt.id)}
-                      >
-                        Edit
-                      </Button>
-                    </td>
-                    <td className="px-3 py-2 w-16 border-r border-border text-center">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs cursor-pointer"
-                        onClick={() => goView(receipt.id)}
-                      >
-                        View
-                      </Button>
-                    </td>
-                    {cols.filter((c) => c.visible).map((col) => {
-                      if (col.key === 'date') {
-                        return (
-                          <td key="date" className="px-4 py-2.5 text-foreground border-r border-border whitespace-nowrap">
-                            {formatDate(receipt.date)}
-                          </td>
-                        );
-                      }
-                      if (col.key === 'reference') {
-                        return (
-                          <td key="reference" className="px-4 py-2.5 text-muted-foreground border-r border-border whitespace-nowrap">
-                            {receipt.reference || '—'}
-                          </td>
-                        );
-                      }
-                      if (col.key === 'paid_by') {
-                        return (
-                          <td key="paid_by" className="px-4 py-2.5 text-muted-foreground border-r border-border whitespace-nowrap">
-                            {receipt.paid_by_other || receipt.paid_by_name || '—'}
-                          </td>
-                        );
-                      }
-                      if (col.key === 'received_in') {
-                        return (
-                          <td key="received_in" className="px-4 py-2.5 text-muted-foreground border-r border-border whitespace-nowrap">
-                            {receipt.received_in_account_name || '—'}
-                          </td>
-                        );
-                      }
-                      if (col.key === 'description') {
-                        return (
-                          <td key="description" className="px-4 py-2.5 text-muted-foreground border-r border-border whitespace-nowrap">
-                            {receipt.description || '—'}
-                          </td>
-                        );
-                      }
-                      if (col.key === 'attachment') {
-                        return (
-                          <td key="attachment" className="px-4 py-2.5 text-muted-foreground border-r border-border whitespace-nowrap">
-                            {receipt.image_url ? (
-                              <a href={receipt.image_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline underline-offset-2">
-                                View
-                              </a>
-                            ) : '—'}
-                          </td>
-                        );
-                      }
-                      if (col.key === 'qty') {
-                        const hasQty = lines.some((l) => l.qty);
-                        return (
-                          <td key="qty" className="px-4 py-2.5 text-right text-muted-foreground tabular-nums border-r border-border whitespace-nowrap">
-                            {hasQty ? formatMoney(sumMoney(lines.map((l) => l.qty))) : '—'}
-                          </td>
-                        );
-                      }
-                      if (col.key === 'discount') {
-                        const totalDiscount = sumMoney(lines.map((l) => l.discount));
-                        return (
-                          <td key="discount" className="px-4 py-2.5 text-right text-muted-foreground tabular-nums border-r border-border whitespace-nowrap">
-                            {Number(totalDiscount) > 0 ? formatMoney(totalDiscount) : '—'}
-                          </td>
-                        );
-                      }
-                      if (col.key === 'amount') {
-                        return (
-                          <td key="amount" className="px-4 py-2.5 text-right text-foreground tabular-nums border-r border-border whitespace-nowrap">
-                            {formatMoney(receipt.total)}
-                          </td>
-                        );
-                      }
-                      return null;
-                    })}
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-          {filtered.length > 0 && cols.some((c) => c.visible && c.key === 'amount') && (
-            <tfoot>
-              <tr className="border-t border-border bg-muted/30">
-                <td
-                  colSpan={2 + cols.filter((c) => c.visible && c.key !== 'amount').length}
-                  className="border-r border-border"
-                />
-                <td className="px-4 py-2 text-right border-r border-border">
-                  <div className="text-sm font-semibold text-muted-foreground tabular-nums">
-                    {formatMoney(sumMoney(filtered.map((r) => r.total)))}
-                  </div>
-                </td>
-              </tr>
-            </tfoot>
-          )}
-        </table>
+      <ListToolbar>
+        <SearchInput value={search} onChange={setSearch} placeholder="Search receipts…" />
+      </ListToolbar>
 
-        {/* Footer bar */}
-        <div className="border-t border-border bg-muted/20 px-4 py-2 flex items-center justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 cursor-pointer text-xs text-muted-foreground hover:text-foreground h-7"
-            onClick={openColEditor}
-          >
-            <Columns className="h-3.5 w-3.5" />
-            Edit columns
-          </Button>
-        </div>
+      <ListCard>
+        {filtered.length === 0 ? (
+          <EmptyState icon={Receipt} title={search.trim() ? 'No receipts match your search.' : 'No receipts yet'} />
+        ) : (
+          <ReceiptsTable visibleCols={visibleCols} rows={filtered} onView={goView} onEdit={goEdit} />
+        )}
+      </ListCard>
 
-        {/* Column editor dialog */}
-        <ColEditorDialog
-          open={colEditorOpen}
-          onOpenChange={setColEditorOpen}
-          cols={cols}
-          onApply={(newCols) => {
-            setCols(newCols);
-            const columns = newCols.map((c, i) => ({ col_key: c.key, visible: c.visible, order_index: i }));
-            updateTabColumns(business.id, RECEIPTS_TAB, columns)
-              .catch((err) => console.error('Failed to save column preferences:', err?.message ?? err));
-          }}
-        />
-      </div>
+      <ColEditorDialog
+        open={colEditorOpen}
+        onOpenChange={setColEditorOpen}
+        cols={cols}
+        onApply={(newCols) => {
+          setCols(newCols);
+          const columns = newCols.map((c, i) => ({ col_key: c.key, visible: c.visible, order_index: i }));
+          updateTabColumns(business.id, RECEIPTS_TAB, columns)
+            .catch((err) => console.error('Failed to save column preferences:', err?.message ?? err));
+        }}
+      />
     </div>
   );
 }

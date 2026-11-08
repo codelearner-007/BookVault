@@ -6,10 +6,10 @@ import {
   memberAccessSchema,
 } from '../../src/lib/schemas/member-access.js';
 
-const VALID_USER = { full_name: 'Ann', email: 'Ann@Example.com', password: 'Str0ng!Pass' };
+const VALID_USER = { full_name: 'Ann', email: 'Ann@Example.com', password: 'correct horse battery' };
 
-test('test_created_user_password_policy_enforced (D-30)', () => {
-  for (const password of ['short1!', 'alllowercase1!', 'NoDigits!!', 'NoSpecial123']) {
+test('test_created_user_password_policy_enforced (D-30, D-26: 12 characters)', () => {
+  for (const password of ['short1!', 'Elevenchars', '', 'x'.repeat(73)]) {
     assert.equal(createBusinessUserSchema.safeParse({ ...VALID_USER, password }).success, false, password);
   }
   assert.equal(createBusinessUserSchema.safeParse(VALID_USER).success, true);

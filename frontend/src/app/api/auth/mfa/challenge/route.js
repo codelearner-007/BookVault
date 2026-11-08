@@ -1,45 +1,22 @@
 import { NextResponse } from 'next/server';
-import { createSSRClient } from '@/lib/supabase/server';
-import { enforceSameOrigin } from '@/lib/utils/origin';
+import { startMfaRoute } from '@/lib/server/mfa';
+import { AUTH_COPY } from '@/lib/copy/auth';
 
 export async function POST(request) {
   try {
-    const originError = enforceSameOrigin(request);
-    if (originError) return originError;
+    const started = await startMfaRoute(request, 'mfa_verify');
+    if (started instanceof NextResponse) return started;
 
-    const supabase = await createSSRClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const body = await request.json();
-    const { factorId } = body;
-
+    const { factorId } = await request.json().catch(() => ({}));
     if (!factorId || typeof factorId !== 'string') {
-      return NextResponse.json(
-        { error: 'Factor ID is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Factor ID is required' }, { status: 400 });
     }
 
-    const { data, error } = await supabase.auth.mfa.challenge({
-      factorId
-    });
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-
-    return NextResponse.json({
-      challengeId: data.id
-    });
+    const { data, error } = await started.supabase.auth.mfa.challenge({ factorId });
+    if (error) return NextResponse.json({ error: AUTH_COPY.failed }, { status: 400 });
+    return NextResponse.json({ challengeId: data.id });
   } catch (error) {
-    console.error('Error creating MFA challenge:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Error creating MFA challenge:', error?.message);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

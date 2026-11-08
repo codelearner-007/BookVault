@@ -15,6 +15,7 @@ from app.models.business_member import (
     Module,
 )
 from app.models.business_details import BusinessDetails
+from app.models.business_settings import BusinessSettings
 from app.models.business_tab_column import BusinessTabColumn
 from app.models.business_format import BusinessFormat
 from app.models.business_tab import BusinessTab
@@ -23,6 +24,7 @@ from app.models.coa_group import CoaGroup
 from app.models.country import Country
 from app.models.customer import Customer
 from app.models.idempotency_key import IdempotencyKey
+from app.models.mfa_recovery_code import MfaRecoveryCode
 from app.models.receipt import Receipt
 from app.models.supplier import Supplier
 from app.models.permission import Permission
@@ -36,8 +38,10 @@ __all__ = [
     "AdminTab",
     "AuditLog",
     "Business",
+    "BusinessSettings",
     "Country",
     "IdempotencyKey",
+    "MfaRecoveryCode",
     "AccessPreset",
     "AccessPresetRight",
     "Area",

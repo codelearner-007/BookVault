@@ -1,22 +1,34 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { PageHeader } from '@/components/common/page';
 import { isVersionConflict } from '@/lib/services/api-client';
 import { getBusiness, updateBusiness, resetBusiness } from '@/lib/services/business.service';
 import { listCountries } from '@/lib/services/countries.service';
 
-function Spinner({ className = '' }) {
+// Radix Select items cannot use an empty value; this sentinel clears the country.
+const NO_COUNTRY = '__none__';
+
+function Optional() {
+  return <span className="font-normal text-muted-foreground">(optional)</span>;
+}
+
+function BusyLabel({ busy, busyText, idleText }) {
+  if (!busy) return idleText;
   return (
-    <span
-      className={`h-3.5 w-3.5 rounded-full border-2 border-current/30 border-t-current animate-spin ${className}`}
-      aria-hidden="true"
-    />
+    <>
+      <Loader2 className="animate-spin" aria-hidden="true" />
+      {busyText}
+    </>
   );
 }
 
@@ -87,21 +99,28 @@ export default function BusinessDetails({ business, onBusinessUpdated }) {
     }
   }
 
-  return (
-    <div className="space-y-6 max-w-3xl mx-auto">
-      <div>
-        <h2 className="text-xl font-bold text-foreground">Business Details</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">Update your business information.</p>
-      </div>
+  const isBusy = saving || resetting;
 
-      <Card className="border-border shadow-sm">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-base font-semibold">General Information</CardTitle>
+  return (
+    <>
+      <PageHeader
+        title="Business Details"
+        description="Update your business information."
+        back={(
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="?tab=settings" aria-label="Back to settings"><ArrowLeft /></Link>
+          </Button>
+        )}
+      />
+
+      <Card className="max-w-prose">
+        <CardHeader>
+          <CardTitle>General Information</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-1.5">
+        <CardContent className="space-y-5">
+          <div className="space-y-2">
             <Label htmlFor="details-name">
-              Name <span className="text-destructive" aria-hidden="true">*</span>
+              Name <span className="text-bad" aria-hidden="true">*</span>
             </Label>
             <Input
               id="details-name"
@@ -110,86 +129,55 @@ export default function BusinessDetails({ business, onBusinessUpdated }) {
                 setName(e.target.value);
                 if (error) setError(null);
               }}
-              disabled={saving || resetting}
+              disabled={isBusy}
               placeholder="e.g. Acme Corp"
               aria-required="true"
-              className={error && !name.trim() ? 'border-destructive focus-visible:ring-destructive' : ''}
+              aria-invalid={Boolean(error && !name.trim())}
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="details-address">
-              Address <span className="text-muted-foreground font-normal">(optional)</span>
-            </Label>
+          <div className="space-y-2">
+            <Label htmlFor="details-address">Address <Optional /></Label>
             <Textarea
               id="details-address"
               value={address}
-              onChange={(e) => {
-                setAddress(e.target.value);
-              }}
-              disabled={saving || resetting}
+              onChange={(e) => setAddress(e.target.value)}
+              disabled={isBusy}
               placeholder="e.g. 123 Main St, Springfield"
               rows={3}
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="details-country">
-              Country <span className="text-muted-foreground font-normal">(optional)</span>
-            </Label>
-            <select
-              id="details-country"
+          <div className="space-y-2">
+            <Label htmlFor="details-country">Country <Optional /></Label>
+            <Select
               value={country}
-              onChange={(e) => {
-                setCountry(e.target.value);
-              }}
-              disabled={saving || resetting}
-              className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring text-foreground"
+              onValueChange={(value) => setCountry(value === NO_COUNTRY ? '' : value)}
+              disabled={isBusy}
             >
-              <option value="">Select a country...</option>
-              {countries.map((c) => (
-                <option key={c.id} value={c.name}>{c.name}</option>
-              ))}
-            </select>
+              <SelectTrigger id="details-country">
+                <SelectValue placeholder="Select a country..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_COUNTRY}>No country</SelectItem>
+                {countries.map((c) => (
+                  <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          {error && (
-            <p className="text-xs text-destructive" role="alert">{error}</p>
-          )}
-
-          <div className="flex gap-2 justify-end pt-2">
-            <Button
-              variant="outline"
-              onClick={handleReset}
-              disabled={resetting || saving}
-              className="min-w-[72px]"
-            >
-              {resetting ? (
-                <span className="flex items-center gap-2">
-                  <Spinner />
-                  Resetting…
-                </span>
-              ) : (
-                'Reset'
-              )}
-            </Button>
-            <Button
-              onClick={handleUpdate}
-              disabled={saving || resetting}
-              className="min-w-[80px]"
-            >
-              {saving ? (
-                <span className="flex items-center gap-2">
-                  <Spinner />
-                  Updating…
-                </span>
-              ) : (
-                'Update'
-              )}
-            </Button>
-          </div>
+          {error && <p className="text-sm text-bad" role="alert">{error}</p>}
         </CardContent>
+        <CardFooter className="justify-end">
+          <Button variant="ghost" className="text-bad hover:text-bad" onClick={handleReset} disabled={isBusy}>
+            <BusyLabel busy={resetting} busyText="Resetting…" idleText="Reset" />
+          </Button>
+          <Button onClick={handleUpdate} disabled={isBusy}>
+            <BusyLabel busy={saving} busyText="Updating…" idleText="Update" />
+          </Button>
+        </CardFooter>
       </Card>
-    </div>
+    </>
   );
 }

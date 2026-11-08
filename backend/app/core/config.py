@@ -68,6 +68,16 @@ class Settings(BaseSettings):
     # Permanent purge (B0.8): the password (and TOTP, when enrolled) sign-in must be this recent
     REAUTH_MAX_AGE_SECONDS: int = 300
 
+    # 2FA recovery codes (B0.7, D-23, AC-40); limits in limits syntax
+    MFA_RECOVERY_CODE_COUNT: int = 10
+    MFA_RECOVERY_ACCOUNT_RATE_LIMIT: str = "5 per 15 minutes"
+    MFA_RECOVERY_CODES_GENERATE_RATE_LIMIT: str = "10/hour"
+    AUTH_EVENT_RATE_LIMIT: str = "30/minute"
+
+    # GoTrue audit ingest into audit_logs (B0.7, H1); interval 0 turns the job off
+    AUTH_AUDIT_INGEST_INTERVAL_SECONDS: int = 30
+    AUTH_AUDIT_INGEST_BATCH: int = 500
+
     # CSRF (AC-28): mutating requests need an allowed Origin or this header
     CSRF_HEADER: str = "X-BookVault-Client"
 

@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -21,6 +22,7 @@ from app.core.logging_config import setup_logging
 from app.core.rate_limit import limiter
 from app.core.request_context import current_request_id, request_context_middleware
 from app.db.session import get_session_manager
+from app.services.auth_audit_service import run_gotrue_audit_ingest_loop
 from app.services.startup_service import run_startup_checks
 
 # Setup logging
@@ -39,10 +41,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Starting FastAPI application...")
     async with get_session_manager().session() as session:
         await run_startup_checks(session)
+    ingest = (
+        asyncio.create_task(run_gotrue_audit_ingest_loop())
+        if settings.AUTH_AUDIT_INGEST_INTERVAL_SECONDS > 0
+        else None
+    )
     yield
 
     # Shutdown
     logger.info("Shutting down FastAPI application...")
+    if ingest is not None:
+        ingest.cancel()
     session_manager = get_session_manager()
     await session_manager.close()
     logger.info("Database connections closed")

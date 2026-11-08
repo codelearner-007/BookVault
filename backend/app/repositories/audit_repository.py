@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import distinct, func, select
+from sqlalchemy import distinct, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import AuditLog
@@ -74,3 +74,10 @@ class AuditRepository:
     async def add(self, row: AuditLog) -> None:
         self.session.add(row)
         await self.session.flush()
+
+    async def ingest_gotrue_events(self, batch: int) -> int:
+        """Copy new auth.audit_log_entries rows into audit_logs (idempotent, SECURITY DEFINER)."""
+        result = await self.session.execute(
+            text("SELECT public.ingest_auth_audit_log(:batch)"), {"batch": batch}
+        )
+        return int(result.scalar_one())

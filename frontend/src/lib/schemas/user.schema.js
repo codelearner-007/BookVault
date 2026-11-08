@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getPasswordStrength, strongPasswordSchema } from '@/lib/schemas/password.schema';
+import { getPasswordStrength } from '@/lib/schemas/password.schema';
 
 export const userProfileSchema = z.object({
   full_name: z.string().min(1, 'Name is required').optional(),
@@ -7,16 +7,7 @@ export const userProfileSchema = z.object({
   department: z.string().optional(),
 });
 
-export const passwordChangeSchema = z.object({
-  currentPassword: z.string().min(1, 'Current password is required'),
-  newPassword: strongPasswordSchema,
-  confirmPassword: z.string(),
-}).refine((data) => data.newPassword === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ['confirmPassword'],
-}).refine((data) => data.currentPassword !== data.newPassword, {
-  message: "New password must be different from current password",
-  path: ['newPassword'],
-});
+// One definition for the form and the change-password route.
+export { changePasswordSchema as passwordChangeSchema } from '@/lib/schemas/auth.schema';
 
 export { getPasswordStrength };

@@ -2,7 +2,7 @@
 
 ## Design work (2026-11-08)
 - [Design sample rules](feedback_design_samples.md) — Manager content parity, calm density, all 40 tabs in sidebar, how to verify samples
-- [Redesign v2 status](project_redesign_v2.md) — round 1 rejected; v2 options A/B/C await owner pick
+- [Redesign v2 status](project_redesign_v2.md) — A Nightglass chosen and built (tokens, AppShell, page blocks); known gaps
 - NOTE: "Section headers: uppercase label above heading" (Key Conventions below) is superseded for the redesign: no kicker above headings.
 
 ## API contract

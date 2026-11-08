@@ -1,6 +1,8 @@
 """User profile model."""
 
-from sqlalchemy import Boolean, String, Text, text
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,3 +28,10 @@ class UserProfile(Base, TimestampMixin):
         Boolean, nullable=False, server_default=text("false")
     )
     created_by_user_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    # Asked at signup (B0.7, M11); NULL for users from before B0.7 until they answer.
+    country_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("countries.id", ondelete="RESTRICT"), nullable=True
+    )
+    country_prompt_dismissed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

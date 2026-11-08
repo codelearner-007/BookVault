@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 TOKEN_TTL = timedelta(hours=1)
 EMAIL_DOMAIN = "bookvault-test.dev"
+SUPER_ADMIN_AAL = "aal2"
 
 
 @dataclass(frozen=True)
@@ -73,7 +74,9 @@ class UserFactory:
         )
         await self.set_role(user_id, role)
         self.created.append(user_id)
-        token = make_token(self.secret, user_id, email, token_role or role)
+        # The platform routes need an AAL2 super admin session (B0.7, mfa_required_for_super_admin).
+        extra = {"aal": SUPER_ADMIN_AAL} if role == "super_admin" else None
+        token = make_token(self.secret, user_id, email, token_role or role, extra=extra)
         return TestUser(user_id, email, role, {"Authorization": f"Bearer {token}"})
 
     async def create_member(

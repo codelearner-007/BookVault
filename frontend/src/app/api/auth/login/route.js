@@ -4,6 +4,9 @@ import { loginSchema } from '@/lib/schemas/auth.schema';
 import { checkMFAStatus } from '@/lib/utils/mfa-check';
 import { enforceSameOrigin } from '@/lib/utils/origin';
 import { zodToApiError } from '@/lib/utils/api-errors';
+import { enforceAuthRateLimit, TOO_MANY_ATTEMPTS } from '@/lib/server/auth-guard';
+import { isRateLimited } from '@/lib/server/auth-session';
+import { AUTH_COPY } from '@/lib/copy/auth';
 import { z } from 'zod';
 
 export async function POST(request) {
@@ -11,8 +14,9 @@ export async function POST(request) {
     const originError = enforceSameOrigin(request);
     if (originError) return originError;
 
-    const body = await request.json();
-    const validated = loginSchema.parse(body);
+    const validated = loginSchema.parse(await request.json());
+    const limited = enforceAuthRateLimit(request, 'login', validated.email);
+    if (limited) return limited;
 
     const supabase = await createSSRClient();
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -20,27 +24,23 @@ export async function POST(request) {
       password: validated.password,
     });
 
+    // One answer for a wrong password, an unknown or unconfirmed email and a banned
+    // account (AC-37). Failed checks are audited by the GoTrue password hook.
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      if (isRateLimited(error)) return NextResponse.json({ error: TOO_MANY_ATTEMPTS }, { status: 429 });
+      return NextResponse.json({ error: AUTH_COPY.invalidCredentials }, { status: 401 });
     }
 
-    // Check AAL level and MFA status using utility
-    const { currentLevel, requiresMFA } = await checkMFAStatus(supabase);
+    const { hasVerifiedMFA, requiresMFA, currentLevel } = await checkMFAStatus(supabase);
 
-    // Only return safe user metadata - tokens are already set as httpOnly cookies
-    // by the Supabase SSR client. Exposing them in the response body would allow
-    // exfiltration via XSS.
+    // Tokens stay in the httpOnly cookies set by the SSR client; never in the body.
     return NextResponse.json({
-      user: data.user
-        ? {
-            id: data.user.id,
-            email: data.user.email,
-            user_metadata: data.user.user_metadata,
-            app_metadata: data.user.app_metadata,
-          }
-        : null,
+      user: { id: data.user.id, email: data.user.email },
       requiresMFA,
+      hasVerifiedMFA,
       currentAAL: currentLevel,
+      mustChangePassword: Boolean(data.user.app_metadata?.must_change_password),
+      mfaReenrollRequired: Boolean(data.user.app_metadata?.mfa_reenroll_required),
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

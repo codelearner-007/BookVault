@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useImperativeHandle, useRef } from 'react';
+import Link from 'next/link';
 import {
   DndContext,
   closestCenter,
@@ -21,16 +22,23 @@ import {
   Pencil,
   Trash2,
   ArrowUpDown,
+  ArrowLeft,
+  ChevronDown,
   Loader2,
-  X,
   Lock,
-  ChevronRight,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Select,
   SelectContent,
@@ -55,6 +63,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { MoreMenu, PageHeader } from '@/components/common/page';
 import {
   listCoaGroups,
   createCoaGroup,
@@ -95,68 +104,35 @@ const CASH_FLOW_OPTIONS = [
   { value: 'cash_equivalent', label: 'Cash Equivalent' },
 ];
 
+const PANEL_TITLES = { balance_sheet: 'Balance Sheet', pl: 'Profit and Loss Statement' };
+const ROW_ICON_CLASS = 'text-muted-foreground hover:text-foreground';
+
 /* ── Loading skeleton ────────────────────────────────────────────────────── */
 
 function CoaSkeleton() {
   return (
-    <div className="space-y-6">
-      {/* Page header skeleton */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1.5">
-          <Skeleton className="h-6 w-44" />
-          <Skeleton className="h-4 w-72" />
-        </div>
+    <>
+      <div className="mb-8 flex items-end justify-between gap-4 max-md:mb-6">
+        <Skeleton className="h-9 w-56" />
+        <Skeleton className="h-control w-36 rounded-full" />
       </div>
-
-      {/* Two-panel skeleton */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 divide-y xl:divide-y-0 xl:divide-x divide-border gap-0">
-        {/* BS panel */}
-        <div className="pb-8 xl:pb-0 xl:pr-6 space-y-3">
-          <div className="flex items-center justify-between">
-            <Skeleton className="h-5 w-32" />
-            <div className="flex gap-1.5">
-              <Skeleton className="h-8 w-24" />
-              <Skeleton className="h-8 w-28" />
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-border overflow-hidden">
-            <Skeleton className="h-10 w-full rounded-none" />
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i}>
-                <Skeleton className="h-10 w-full rounded-none" />
-                <Skeleton className="h-9 w-full rounded-none opacity-60" />
-                <Skeleton className="h-9 w-full rounded-none opacity-60" />
-                <Skeleton className="h-9 w-full rounded-none opacity-40" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* PL panel */}
-        <div className="pt-8 xl:pt-0 xl:pl-6 space-y-3">
-          <div className="flex items-center justify-between">
-            <Skeleton className="h-5 w-40" />
-            <div className="flex gap-1.5">
-              <Skeleton className="h-8 w-24" />
-              <Skeleton className="h-8 w-28" />
-              <Skeleton className="h-8 w-24" />
-            </div>
-          </div>
-          <div className="rounded-lg border border-border overflow-hidden">
-            <Skeleton className="h-10 w-full rounded-none" />
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i}>
-                <Skeleton className="h-10 w-full rounded-none" />
-                <Skeleton className="h-9 w-full rounded-none opacity-60" />
-                <Skeleton className="h-9 w-full rounded-none opacity-60" />
-                <Skeleton className="h-9 w-full rounded-none opacity-40" />
-              </div>
-            ))}
-          </div>
-        </div>
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
+        {[0, 1].map((panel) => (
+          <Card key={panel}>
+            <CardHeader><Skeleton className="h-5 w-40" /></CardHeader>
+            <CardContent className="space-y-2">
+              {[0, 1, 2].map((group) => (
+                <div key={group} className="space-y-2">
+                  <Skeleton className="h-row w-full" />
+                  <Skeleton className="ms-6 h-row" />
+                  <Skeleton className="ms-6 h-row" />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ))}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -170,25 +146,26 @@ function SortableItem({ id, label }) {
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`flex items-center gap-3 px-4 py-3 bg-card border border-border rounded-lg select-none transition-shadow duration-150 ${
-        isDragging ? 'shadow-lg opacity-90 z-10' : ''
+      className={`flex select-none items-center gap-2 rounded-control border border-border bg-popover pe-4 ps-1 ${
+        isDragging ? 'z-10 shadow-pop' : ''
       }`}
     >
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="icon-sm"
         {...attributes}
         {...listeners}
-        className="flex-shrink-0 text-muted-foreground/50 hover:text-muted-foreground cursor-grab active:cursor-grabbing touch-none transition-colors duration-150"
-        aria-label="Drag to reorder"
+        className="cursor-grab touch-none active:cursor-grabbing"
+        aria-label={`Drag to reorder ${label}`}
       >
-        <GripVertical className="h-4 w-4" />
-      </button>
-      <span className="text-sm text-foreground flex-1 truncate">{label}</span>
+        <GripVertical />
+      </Button>
+      <span className="min-w-0 flex-1 truncate py-2.5">{label}</span>
     </li>
   );
 }
 
-/* ── Reorder modal (shared) ──────────────────────────────────────────────── */
+/* ── Reorder dialog (shared) ─────────────────────────────────────────────── */
 
 function ReorderModal({ title, items, onSave, onClose, saving }) {
   const [order, setOrder] = useState(items);
@@ -206,66 +183,35 @@ function ReorderModal({ title, items, onSave, onClose, saving }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-background/70 backdrop-blur-sm" />
-      <Card
-        className="relative z-10 w-full max-w-sm border-border shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <CardContent className="p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-foreground">{title}</p>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              aria-label="Close"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="md:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
 
-          {order.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-2">Nothing to reorder.</p>
-          ) : (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext items={order.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-                <ul className="space-y-2 max-h-72 overflow-y-auto">
-                  {order.map((item) => (
-                    <SortableItem key={item.id} id={item.id} label={item.name} />
-                  ))}
-                </ul>
-              </SortableContext>
-            </DndContext>
-          )}
+        {order.length === 0 ? (
+          <p className="py-2 text-sm text-muted-foreground">Nothing to reorder.</p>
+        ) : (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={order.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+              <ul className="max-h-72 space-y-2 overflow-y-auto">
+                {order.map((item) => (
+                  <SortableItem key={item.id} id={item.id} label={item.name} />
+                ))}
+              </ul>
+            </SortableContext>
+          </DndContext>
+        )}
 
-          <div className="flex gap-2 pt-1">
-            <Button
-              size="sm"
-              onClick={() => onSave(order)}
-              disabled={saving || order.length === 0}
-              className="cursor-pointer"
-            >
-              {saving && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
-              {saving ? 'Saving...' : 'Save Order'}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={onClose}
-              disabled={saving}
-              className="cursor-pointer"
-            >
-              Cancel
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={() => onSave(order)} disabled={saving || order.length === 0}>
+            {saving && <Loader2 className="animate-spin" aria-hidden="true" />}
+            {saving ? 'Saving...' : 'Save Order'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -302,15 +248,15 @@ function GroupDialog({ open, onOpenChange, panelType, initialData, onSave }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="md:max-w-sm">
         <DialogHeader>
           <DialogTitle>{initialData ? 'Edit Group' : 'New Group'}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-1">
-          <div className="space-y-1.5">
+        <div className="space-y-4">
+          <div className="space-y-2">
             <Label htmlFor="group-name">
-              Group Name <span className="text-destructive" aria-hidden="true">*</span>
+              Group Name <span className="text-bad" aria-hidden="true">*</span>
             </Label>
             <Input
               id="group-name"
@@ -321,16 +267,16 @@ function GroupDialog({ open, onOpenChange, panelType, initialData, onSave }) {
               disabled={saving}
               autoFocus
             />
-            {error && <p className="text-xs text-destructive" role="alert">{error}</p>}
+            {error && <p className="text-sm text-bad" role="alert">{error}</p>}
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving} className="cursor-pointer">
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saving} className="cursor-pointer min-w-[72px]">
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="animate-spin" aria-label="Saving" /> : 'Save'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -390,15 +336,15 @@ function AccountDialog({ open, onOpenChange, panelType, groups, initialData, onS
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="md:max-w-sm">
         <DialogHeader>
           <DialogTitle>{initialData ? 'Edit Account' : 'New Account'}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-1">
-          <div className="space-y-1.5">
+        <div className="space-y-4">
+          <div className="space-y-2">
             <Label htmlFor="account-name">
-              Account Name <span className="text-destructive" aria-hidden="true">*</span>
+              Account Name <span className="text-bad" aria-hidden="true">*</span>
             </Label>
             <Input
               id="account-name"
@@ -409,10 +355,10 @@ function AccountDialog({ open, onOpenChange, panelType, groups, initialData, onS
               disabled={saving}
               autoFocus
             />
-            {error && <p className="text-xs text-destructive" role="alert">{error}</p>}
+            {error && <p className="text-sm text-bad" role="alert">{error}</p>}
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <Label htmlFor="account-code">Code</Label>
             <Input
               id="account-code"
@@ -423,8 +369,8 @@ function AccountDialog({ open, onOpenChange, panelType, groups, initialData, onS
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="account-type">Type <span className="text-destructive" aria-hidden="true">*</span></Label>
+          <div className="space-y-2">
+            <Label htmlFor="account-type">Type <span className="text-bad" aria-hidden="true">*</span></Label>
             <Select value={accountType} onValueChange={setAccountType} disabled={saving}>
               <SelectTrigger id="account-type" className="w-full">
                 <SelectValue />
@@ -437,7 +383,7 @@ function AccountDialog({ open, onOpenChange, panelType, groups, initialData, onS
             </Select>
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <Label htmlFor="account-group">Group</Label>
             <Select value={groupId} onValueChange={setGroupId} disabled={saving}>
               <SelectTrigger id="account-group" className="w-full">
@@ -452,7 +398,7 @@ function AccountDialog({ open, onOpenChange, panelType, groups, initialData, onS
           </div>
 
           {panelType === 'pl' && (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label htmlFor="account-cashflow">Cash Flow Activity</Label>
               <Select value={cashFlow} onValueChange={setCashFlow} disabled={saving}>
                 <SelectTrigger id="account-cashflow" className="w-full">
@@ -469,11 +415,11 @@ function AccountDialog({ open, onOpenChange, panelType, groups, initialData, onS
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving} className="cursor-pointer">
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saving} className="cursor-pointer min-w-[72px]">
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="animate-spin" aria-label="Saving" /> : 'Save'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -514,14 +460,14 @@ function TotalDialog({ open, onOpenChange, panelType, onSave }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="md:max-w-sm">
         <DialogHeader>
           <DialogTitle>New Total Row</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-1">
-          <div className="space-y-1.5">
+        <div className="space-y-4">
+          <div className="space-y-2">
             <Label htmlFor="total-name">
-              Name <span className="text-destructive" aria-hidden="true">*</span>
+              Name <span className="text-bad" aria-hidden="true">*</span>
             </Label>
             <Input
               id="total-name"
@@ -532,15 +478,15 @@ function TotalDialog({ open, onOpenChange, panelType, onSave }) {
               disabled={saving}
               autoFocus
             />
-            {error && <p className="text-xs text-destructive" role="alert">{error}</p>}
+            {error && <p className="text-sm text-bad" role="alert">{error}</p>}
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving} className="cursor-pointer">
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saving} className="cursor-pointer min-w-[72px]">
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="animate-spin" aria-label="Saving" /> : 'Save'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -548,63 +494,49 @@ function TotalDialog({ open, onOpenChange, panelType, onSave }) {
   );
 }
 
-/* ── Group rows (group row + account rows + total row) ───────────────────── */
+/* ── Row actions (ghost icon buttons) ───────────────────────────────────── */
+
+function RowIconButton({ label, onClick, icon: Icon, destructive = false }) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className={destructive ? 'text-muted-foreground hover:text-bad' : ROW_ICON_CLASS}
+      onClick={onClick}
+      aria-label={label}
+    >
+      <Icon />
+    </Button>
+  );
+}
+
+function SystemLock({ title }) {
+  return <Lock className="ms-1.5 inline-block size-3 text-muted-foreground" aria-label={title} title={title} />;
+}
+
+/* ── Group rows (group row + account rows) ───────────────────────────────── */
 
 function GroupRows({ group, accounts, onEditGroup, onDeleteGroup, onEditAccount, onDeleteAccount, onReorderGroups, onReorderAccounts }) {
   return (
     <>
-      {/* Group row */}
-      <tr className="bg-muted/30 border-l-2 border-primary/40">
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-1.5">
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60 flex-shrink-0" />
-            <span className="text-sm font-semibold text-foreground">{group.name}</span>
-            {group.is_system && (
-              <Lock
-                className="h-3 w-3 text-muted-foreground/40 ml-1 flex-shrink-0"
-                title="System group — cannot be modified"
-              />
-            )}
-          </div>
-        </td>
-        <td className="px-4 py-3 w-24 text-right">
+      <TableRow>
+        <TableCell className="font-semibold">
+          {group.name}
+          {group.is_system && <SystemLock title="System group — cannot be modified" />}
+        </TableCell>
+        <TableCell className="w-32 pe-2">
           <div className="flex items-center justify-end gap-0.5">
             {!group.is_system && (
               <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-muted-foreground hover:text-foreground cursor-pointer transition-colors duration-150"
-                  onClick={() => onEditGroup(group)}
-                  aria-label={`Edit group ${group.name}`}
-                >
-                  <Pencil className="h-3 w-3" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-muted-foreground hover:text-destructive cursor-pointer transition-colors duration-150"
-                  onClick={() => onDeleteGroup(group)}
-                  aria-label={`Delete group ${group.name}`}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
+                <RowIconButton label={`Edit group ${group.name}`} icon={Pencil} onClick={() => onEditGroup(group)} />
+                <RowIconButton label={`Delete group ${group.name}`} icon={Trash2} onClick={() => onDeleteGroup(group)} destructive />
               </>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-muted-foreground hover:text-foreground cursor-pointer transition-colors duration-150"
-              onClick={onReorderGroups}
-              aria-label="Reorder groups"
-            >
-              <ArrowUpDown className="h-3 w-3" />
-            </Button>
+            <RowIconButton label="Reorder groups" icon={ArrowUpDown} onClick={onReorderGroups} />
           </div>
-        </td>
-      </tr>
+        </TableCell>
+      </TableRow>
 
-      {/* Account rows */}
       {accounts.map((account) => (
         <AccountRow
           key={account.id}
@@ -615,7 +547,6 @@ function GroupRows({ group, accounts, onEditGroup, onDeleteGroup, onEditAccount,
           indented
         />
       ))}
-
     </>
   );
 }
@@ -624,71 +555,100 @@ function GroupRows({ group, accounts, onEditGroup, onDeleteGroup, onEditAccount,
 
 function AccountRow({ account, onEdit, onDelete, onReorderAccounts, indented }) {
   return (
-    <tr className="group hover:bg-muted/40 transition-colors duration-150">
-      <td className={`px-4 py-3 text-sm ${indented ? 'pl-10' : ''}`}>
-        {account.type === 'total' ? (
-          <span className="italic text-muted-foreground">{account.name}</span>
-        ) : (
-          <span className="text-foreground">{account.name}</span>
-        )}
-        {account.is_system && (
-          <Lock
-            className="inline-block h-3 w-3 text-muted-foreground/40 ml-1.5 relative -top-px"
-            title="System account — cannot be modified"
-          />
-        )}
-      </td>
-      <td className="px-4 py-3 w-24 text-right">
-        <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+    <TableRow className="group">
+      <TableCell className={indented ? 'ps-10' : undefined}>
+        <span className={account.type === 'total' ? 'italic text-muted-foreground' : undefined}>{account.name}</span>
+        {account.is_system && <SystemLock title="System account — cannot be modified" />}
+      </TableCell>
+      <TableCell className="w-32 pe-2">
+        <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">
           {!account.is_system && (
             <>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-foreground cursor-pointer transition-colors duration-150"
-                onClick={() => onEdit(account)}
-                aria-label={`Edit account ${account.name}`}
-              >
-                <Pencil className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-destructive cursor-pointer transition-colors duration-150"
-                onClick={() => onDelete(account)}
-                aria-label={`Delete account ${account.name}`}
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
+              <RowIconButton label={`Edit account ${account.name}`} icon={Pencil} onClick={() => onEdit(account)} />
+              <RowIconButton label={`Delete account ${account.name}`} icon={Trash2} onClick={() => onDelete(account)} destructive />
             </>
           )}
           {onReorderAccounts && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-muted-foreground hover:text-foreground cursor-pointer transition-colors duration-150"
-              onClick={onReorderAccounts}
-              aria-label="Reorder accounts in this group"
-            >
-              <ArrowUpDown className="h-3 w-3" />
-            </Button>
+            <RowIconButton label="Reorder accounts in this group" icon={ArrowUpDown} onClick={onReorderAccounts} />
           )}
         </div>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+/* ── Delete confirmation ─────────────────────────────────────────────────── */
+
+function DeleteConfirm({ target, onCancel, onConfirm }) {
+  const isGroup = target?.type === 'group';
+  return (
+    <AlertDialog open={!!target} onOpenChange={(v) => !v && onCancel()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete {isGroup ? 'Group' : 'Account'}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {isGroup
+              ? `"${target?.item?.name}" will be deleted. Accounts in this group will become ungrouped.`
+              : `"${target?.item?.name}" will be permanently deleted.`}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm} className={buttonVariants({ variant: 'destructive' })}>
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/* ── Panel table ─────────────────────────────────────────────────────────── */
+
+function PanelTable({ panelGroups, ungrouped, accounts, handlers }) {
+  if (panelGroups.length === 0 && ungrouped.length === 0) {
+    return (
+      <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+        No accounts yet. Add a group or account to get started.
+      </p>
+    );
+  }
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Name</TableHead>
+          <TableHead className="w-32"><span className="sr-only">Actions</span></TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {panelGroups.map((group) => (
+          <GroupRows
+            key={group.id}
+            group={group}
+            accounts={accounts.filter((a) => a.group_id === group.id)}
+            {...handlers}
+          />
+        ))}
+        {ungrouped.map((account) => (
+          <AccountRow
+            key={account.id}
+            account={account}
+            onEdit={handlers.onEditAccount}
+            onDelete={handlers.onDeleteAccount}
+            indented={false}
+          />
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
 /* ── Panel ───────────────────────────────────────────────────────────────── */
 
-function CoaPanel({
-  title,
-  panelType,
-  groups,
-  accounts,
-  onRefresh,
-  businessId,
-}) {
+// `ref` exposes the panel's create actions so the page header can open them.
+function CoaPanel({ ref, panelType, groups, accounts, onRefresh, businessId }) {
   const panelGroups = groups.filter((g) => g.type === panelType);
   const ungrouped = accounts.filter((a) => PANEL_ACCOUNT_TYPES[panelType].includes(a.type) && !a.group_id);
 
@@ -707,21 +667,11 @@ function CoaPanel({
   // Total dialog state
   const [totalDialog, setTotalDialog] = useState(false);
 
-  function openNewGroup() {
-    setGroupDialog({ open: true, data: null });
-  }
-
-  function openEditGroup(group) {
-    setGroupDialog({ open: true, data: group });
-  }
-
-  function openNewAccount() {
-    setAccountDialog({ open: true, data: null });
-  }
-
-  function openEditAccount(account) {
-    setAccountDialog({ open: true, data: account });
-  }
+  useImperativeHandle(ref, () => ({
+    openNewGroup: () => setGroupDialog({ open: true, data: null }),
+    openNewAccount: () => setAccountDialog({ open: true, data: null }),
+    openNewTotal: () => setTotalDialog(true),
+  }), []);
 
   // A version conflict reloads the chart (with the message) so the next edit uses fresh versions.
   async function reloadOnConflict(err) {
@@ -755,14 +705,6 @@ function CoaPanel({
   async function handleTotalSave(payload) {
     await createCoaAccount(businessId, payload);
     await onRefresh();
-  }
-
-  function handleDeleteGroup(group) {
-    setDeleteTarget({ type: 'group', item: group });
-  }
-
-  function handleDeleteAccount(account) {
-    setDeleteTarget({ type: 'account', item: account });
   }
 
   async function confirmDelete() {
@@ -809,36 +751,19 @@ function CoaPanel({
     }
   }
 
-  const isPl = panelType === 'pl';
+  const rowHandlers = {
+    onEditGroup: (group) => setGroupDialog({ open: true, data: group }),
+    onDeleteGroup: (group) => setDeleteTarget({ type: 'group', item: group }),
+    onEditAccount: (account) => setAccountDialog({ open: true, data: account }),
+    onDeleteAccount: (account) => setDeleteTarget({ type: 'account', item: account }),
+    onReorderGroups: () => setReorderGroupsOpen(true),
+    onReorderAccounts: (g) => setReorderAccounts({ open: true, group: g }),
+  };
 
   return (
     <>
-      {/* Delete AlertDialog */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Delete {deleteTarget?.type === 'group' ? 'Group' : 'Account'}?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteTarget?.type === 'group'
-                ? `"${deleteTarget?.item?.name}" will be deleted. Accounts in this group will become ungrouped.`
-                : `"${deleteTarget?.item?.name}" will be permanently deleted.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              className="cursor-pointer bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteConfirm target={deleteTarget} onCancel={() => setDeleteTarget(null)} onConfirm={confirmDelete} />
 
-      {/* Reorder groups modal */}
       {reorderGroupsOpen && (
         <ReorderModal
           title="Reorder Groups"
@@ -849,7 +774,6 @@ function CoaPanel({
         />
       )}
 
-      {/* Reorder accounts modal */}
       {reorderAccounts.open && (
         <ReorderModal
           title={`Reorder: ${reorderAccounts.group?.name ?? 'Ungrouped'}`}
@@ -864,7 +788,6 @@ function CoaPanel({
         />
       )}
 
-      {/* Group dialog */}
       <GroupDialog
         open={groupDialog.open}
         onOpenChange={(v) => setGroupDialog((s) => ({ ...s, open: v }))}
@@ -873,7 +796,6 @@ function CoaPanel({
         onSave={handleGroupSave}
       />
 
-      {/* Account dialog */}
       <AccountDialog
         open={accountDialog.open}
         onOpenChange={(v) => setAccountDialog((s) => ({ ...s, open: v }))}
@@ -883,7 +805,6 @@ function CoaPanel({
         onSave={handleAccountSave}
       />
 
-      {/* Total dialog */}
       <TotalDialog
         open={totalDialog}
         onOpenChange={setTotalDialog}
@@ -891,100 +812,50 @@ function CoaPanel({
         onSave={handleTotalSave}
       />
 
-      <div className="space-y-0">
-        {/* Panel header */}
-        <div className="flex items-center justify-between gap-4 mb-4">
-          <h2 className="text-lg font-semibold text-foreground whitespace-nowrap">{title}</h2>
-          <div className="flex items-center gap-2 flex-nowrap">
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5 cursor-pointer"
-              onClick={openNewGroup}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              New Group
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5 cursor-pointer"
-              onClick={openNewAccount}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              New Account
-            </Button>
-            {isPl && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1.5 cursor-pointer"
-                onClick={() => setTotalDialog(true)}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                New Total
-              </Button>
-            )}
-          </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>{PANEL_TITLES[panelType]}</CardTitle>
+        </CardHeader>
+        <div className="px-2 pb-2 max-md:px-1">
+          <PanelTable panelGroups={panelGroups} ungrouped={ungrouped} accounts={accounts} handlers={rowHandlers} />
         </div>
-
-        {/* Table */}
-        <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-muted/40 border-b border-border">
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Name
-                </th>
-                <th className="px-4 py-3 w-24 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {panelGroups.length === 0 && ungrouped.length === 0 ? (
-                <tr>
-                  <td colSpan={2} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                    No accounts yet. Add a group or account to get started.
-                  </td>
-                </tr>
-              ) : (
-                <>
-                  {panelGroups.map((group) => {
-                    const groupAccounts = accounts.filter((a) => a.group_id === group.id);
-                    return (
-                      <GroupRows
-                        key={group.id}
-                        group={group}
-                        accounts={groupAccounts}
-                        onEditGroup={openEditGroup}
-                        onDeleteGroup={handleDeleteGroup}
-                        onEditAccount={openEditAccount}
-                        onDeleteAccount={handleDeleteAccount}
-                        onReorderGroups={() => setReorderGroupsOpen(true)}
-                        onReorderAccounts={(g) => setReorderAccounts({ open: true, group: g })}
-                      />
-                    );
-                  })}
-
-                  {/* Ungrouped accounts */}
-                  {ungrouped.map((account) => (
-                    <AccountRow
-                      key={account.id}
-                      account={account}
-                      onEdit={openEditAccount}
-                      onDelete={handleDeleteAccount}
-                      indented={false}
-                    />
-                  ))}
-                </>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      </Card>
     </>
   );
+}
+
+/* ── Page header actions ─────────────────────────────────────────────────── */
+
+// One primary ("New Account", choosing the statement); other create actions in the More menu.
+function CoaHeaderActions({ bsRef, plRef }) {
+  return (
+    <>
+      <MoreMenu
+        items={[
+          { label: 'New Balance Sheet group', icon: Plus, onSelect: () => bsRef.current?.openNewGroup() },
+          { label: 'New Profit and Loss group', icon: Plus, onSelect: () => plRef.current?.openNewGroup() },
+          { label: 'New Total', icon: Plus, onSelect: () => plRef.current?.openNewTotal(), separatorBefore: true },
+        ]}
+      />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button>
+            <Plus />
+            New Account
+            <ChevronDown aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => bsRef.current?.openNewAccount()}>{PANEL_TITLES.balance_sheet}</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => plRef.current?.openNewAccount()}>{PANEL_TITLES.pl}</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  );
+}
+
+function Notice({ children }) {
+  return <div role="alert" className="mb-6 rounded-control bg-bad-soft px-4 py-3 text-sm text-bad">{children}</div>;
 }
 
 /* ── Main component ──────────────────────────────────────────────────────── */
@@ -995,6 +866,8 @@ export default function BusinessChartOfAccounts({ business }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+  const bsRef = useRef(null);
+  const plRef = useRef(null);
 
   // notice: message of a failed change, shown above the reloaded chart.
   const fetchData = useCallback(async (nextNotice = null) => {
@@ -1021,55 +894,41 @@ export default function BusinessChartOfAccounts({ business }) {
 
   if (isLoading) return <CoaSkeleton />;
 
-  if (error) {
-    return (
-      <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-        {error}
-      </div>
-    );
-  }
+  const back = (
+    <Button variant="ghost" size="icon" asChild>
+      <Link href="?tab=settings" aria-label="Back to settings"><ArrowLeft /></Link>
+    </Button>
+  );
 
   return (
-    <div className="space-y-8">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Chart of Accounts</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage your account structure for financial reporting.
-          </p>
-        </div>
-      </div>
+    <>
+      <PageHeader
+        title="Chart of Accounts"
+        description="Manage your account structure for financial reporting."
+        back={back}
+        actions={!error && <CoaHeaderActions bsRef={bsRef} plRef={plRef} />}
+      />
 
-      {notice && (
-        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {notice}
-        </div>
+      {error ? (
+        <Notice>{error}</Notice>
+      ) : (
+        <>
+          {notice && <Notice>{notice}</Notice>}
+          <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
+            {['balance_sheet', 'pl'].map((panelType) => (
+              <CoaPanel
+                key={panelType}
+                ref={panelType === 'pl' ? plRef : bsRef}
+                panelType={panelType}
+                groups={groups}
+                accounts={accounts}
+                onRefresh={fetchData}
+                businessId={business.id}
+              />
+            ))}
+          </div>
+        </>
       )}
-
-      {/* Two-panel layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 divide-y xl:divide-y-0 xl:divide-x divide-border gap-0">
-        <div className="pb-10 xl:pb-0 xl:pr-10">
-          <CoaPanel
-            title="Balance Sheet"
-            panelType="balance_sheet"
-            groups={groups}
-            accounts={accounts}
-            onRefresh={fetchData}
-            businessId={business.id}
-          />
-        </div>
-        <div className="pt-10 xl:pt-0 xl:pl-10">
-          <CoaPanel
-            title="Profit and Loss Statement"
-            panelType="pl"
-            groups={groups}
-            accounts={accounts}
-            onRefresh={fetchData}
-            businessId={business.id}
-          />
-        </div>
-      </div>
-    </div>
+    </>
   );
 }

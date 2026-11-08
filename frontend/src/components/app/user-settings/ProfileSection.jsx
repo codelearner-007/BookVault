@@ -62,20 +62,20 @@ export function ProfileSection() {
   return (
     <div className="space-y-6">
       {success && (
-        <Alert className="border-green-500/30 bg-green-500/5 text-green-600">
-          <CheckCircle className="h-4 w-4" />
+        <Alert className="bg-ok-soft text-ok [&>svg]:text-ok">
+          <CheckCircle />
           <AlertDescription>
             Profile updated successfully!
           </AlertDescription>
         </Alert>
       )}
 
-      <Card className="border-border/50 shadow-sm">
-        <CardHeader className="pb-4">
+      <Card>
+        <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               {isProfileLoading ? (
-                <Skeleton className="w-20 h-20 rounded-full flex-shrink-0" />
+                <Skeleton className="size-20 shrink-0 rounded-full" />
               ) : profile?.avatar_url ? (
                 <Image
                   src={profile.avatar_url}
@@ -83,11 +83,11 @@ export function ProfileSection() {
                   width={80}
                   height={80}
                   unoptimized
-                  className="w-20 h-20 rounded-full object-cover border-2 border-border"
+                  className="size-20 rounded-full border border-card-border object-cover"
                 />
               ) : (
-                <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center border-2 border-border flex-shrink-0">
-                  <span className="text-2xl text-primary font-semibold">
+                <div className="flex size-20 shrink-0 items-center justify-center rounded-full bg-mono">
+                  <span className="text-2xl font-semibold text-mono-foreground">
                     {user?.email ? user.email.charAt(0).toUpperCase() : '?'}
                   </span>
                 </div>
@@ -96,16 +96,16 @@ export function ProfileSection() {
                 {isProfileLoading ? (
                   <>
                     <Skeleton className="h-6 w-40" />
-                    <Skeleton className="h-4 w-52 mt-1" />
-                    <Skeleton className="h-5 w-16 mt-2 rounded-full" />
+                    <Skeleton className="mt-1 h-4 w-52" />
+                    <Skeleton className="mt-2 h-pill w-16 rounded-full" />
                   </>
                 ) : (
                   <>
-                    <CardTitle className="text-xl">{profile?.full_name || 'Unnamed User'}</CardTitle>
+                    <CardTitle className="text-lg">{profile?.full_name || 'Unnamed User'}</CardTitle>
                     <CardDescription className="mt-1">{user?.email}</CardDescription>
                     <div className="flex items-center gap-2 mt-2">
                       {roleName && (
-                        <Badge variant="secondary" className="text-xs capitalize font-normal">
+                        <Badge variant="role" className="capitalize">
                           {roleName.replace('_', ' ')}
                         </Badge>
                       )}
@@ -115,13 +115,8 @@ export function ProfileSection() {
               </div>
             </div>
             {!isEditing && !isProfileLoading && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditing(true)}
-                className="gap-2"
-              >
-                <Edit2 className="h-3.5 w-3.5" />
+              <Button variant="secondary" onClick={() => setIsEditing(true)}>
+                <Edit2 />
                 Edit Profile
               </Button>
             )}
@@ -148,11 +143,11 @@ export function ProfileSection() {
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Skeleton className="h-3.5 w-14" />
-                <Skeleton className="h-8 w-72 rounded" />
+                <Skeleton className="h-8 w-72" />
               </div>
             </div>
           ) : isEditing ? (
-            <div className="pt-4 border-t border-border/50">
+            <div className="max-w-prose border-t border-border pt-4">
               <ProfileForm
                 defaultValues={{
                   full_name: profile?.full_name || '',
@@ -184,7 +179,7 @@ export function ProfileSection() {
               </div>
               <div className="space-y-1 sm:col-span-2">
                 <div className="text-sm font-medium text-muted-foreground">User ID</div>
-                <div className="text-sm font-mono bg-muted/50 p-2 rounded border border-border/50 inline-block">
+                <div className="inline-block rounded-control bg-muted p-2 font-mono text-sm">
                   {user?.id || 'N/A'}
                 </div>
               </div>

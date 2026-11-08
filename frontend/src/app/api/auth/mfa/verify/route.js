@@ -1,45 +1,38 @@
 import { NextResponse } from 'next/server';
-import { createSSRClient } from '@/lib/supabase/server';
-import { enforceSameOrigin } from '@/lib/utils/origin';
+import { createServerAdminClient } from '@/lib/supabase/serverAdminClient';
+import { startMfaRoute } from '@/lib/server/mfa';
+import { recordAuthEvent } from '@/lib/server/auth-session';
+import { AUTH_COPY } from '@/lib/copy/auth';
 
+/** Verify a TOTP code: the login challenge, or the last step of an enrollment. */
 export async function POST(request) {
   try {
-    const originError = enforceSameOrigin(request);
-    if (originError) return originError;
+    const started = await startMfaRoute(request, 'mfa_verify');
+    if (started instanceof NextResponse) return started;
+    const { supabase, user } = started;
 
-    const supabase = await createSSRClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const body = await request.json();
-    const { factorId, challengeId, code } = body;
-
+    const { factorId, challengeId, code } = await request.json().catch(() => ({}));
     if (!factorId || !challengeId || !code) {
-      return NextResponse.json(
-        { error: 'Factor ID, challenge ID, and code are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Factor ID, challenge ID, and code are required' }, { status: 400 });
     }
 
-    const { error } = await supabase.auth.mfa.verify({
-      factorId,
-      challengeId,
-      code
-    });
+    const { data: factors } = await supabase.auth.mfa.listFactors();
+    const enrolling = (factors?.all ?? []).some((f) => f.id === factorId && f.status === 'unverified');
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+    const { data: verified, error } = await supabase.auth.mfa.verify({ factorId, challengeId, code });
+    if (error) return NextResponse.json({ error: AUTH_COPY.invalidCode }, { status: 400 });
+
+    if (enrolling) {
+      await recordAuthEvent(verified.access_token, 'mfa_enrolled');
+      if (user.app_metadata?.mfa_reenroll_required) {
+        const adminClient = await createServerAdminClient();
+        await adminClient.auth.admin.updateUserById(user.id, { app_metadata: { mfa_reenroll_required: false } });
+        await supabase.auth.refreshSession();
+      }
     }
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, enrolled: enrolling });
   } catch (error) {
-    console.error('Error verifying MFA code:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Error verifying MFA code:', error?.message);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

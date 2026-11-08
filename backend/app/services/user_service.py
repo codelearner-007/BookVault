@@ -31,16 +31,23 @@ class UserService:
         self.user_role_service = UserRoleService(session)
         self.business_repo = BusinessRepository(session)
 
-    async def assert_account_usable(self, aal: str | None) -> None:
+    async def assert_account_usable(self, aal: str | None, allow_pending_mfa: bool = False) -> None:
         """Live identity (CS-26, AC-12, AC-13): banned or deleted accounts and AAL1
-        sessions of users with a verified MFA factor are refused, whatever the JWT says."""
+        sessions of users with a verified MFA factor are refused, whatever the JWT says.
+
+        allow_pending_mfa: only the recovery-code route accepts such an AAL1 session (D-23).
+        """
         state = await self.user_repo.my_account_state()
         if state is None or state[0]:
             raise InvalidTokenError("Account is not active")
-        if state[1] and aal != MFA_AAL:
+        if state[1] and aal != MFA_AAL and not allow_pending_mfa:
             raise AppException(
                 "Two-factor verification required", status_code=403, details={"code": "mfa_required"}
             )
+
+    async def has_verified_factor(self) -> bool:
+        state = await self.user_repo.my_account_state()
+        return bool(state and state[1])
 
     async def get_access_summary(self, user_id: str) -> UserAccessSummaryResponse:
         """Live platform role and owned-business count of a user (CS-04, CS-10)."""

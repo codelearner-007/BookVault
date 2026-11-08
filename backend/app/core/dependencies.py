@@ -25,6 +25,7 @@ from app.db.session import get_session_manager
 from app.schemas.auth import CurrentUser
 from app.services.access_service import AccessService, BusinessContext
 from app.services.entitlements import can_create_business
+from app.services.mfa_service import MfaService
 from app.services.user_role_service import UserRoleService
 from app.services.user_service import UserService
 
@@ -195,10 +196,28 @@ async def get_current_user(
 
     The account state is read live once per request (FastAPI caches this dependency).
     """
+    return await _authenticated_user(request, claims, db, allow_pending_mfa=False)
+
+
+async def get_current_user_pending_mfa(
+    request: Request,
+    claims: Optional[dict] = Depends(get_verified_claims),
+    db: AsyncSession = Depends(get_db),
+) -> CurrentUser:
+    """Like get_current_user, but an AAL1 session of a user with a verified factor is accepted.
+
+    Only for the 2FA recovery-code route (D-23): that user cannot reach AAL2 by definition.
+    """
+    return await _authenticated_user(request, claims, db, allow_pending_mfa=True)
+
+
+async def _authenticated_user(
+    request: Request, claims: Optional[dict], db: AsyncSession, allow_pending_mfa: bool
+) -> CurrentUser:
     if claims is None:
         raise InvalidTokenError("Missing authentication token (header or Supabase SSR cookie)")
     user = CurrentUser(**claims)
-    await UserService(db).assert_account_usable(user.aal)
+    await UserService(db).assert_account_usable(user.aal, allow_pending_mfa)
     if user.must_change_password and request.url.path not in PASSWORD_CHANGE_EXEMPT_PATHS:
         raise AppException(
             "You must change your password before continuing",
@@ -244,6 +263,7 @@ async def require_live_super_admin(
     """
     if not await UserRoleService(db).is_super_admin(current_user.user_id):
         raise RoleDeniedError(SUPER_ADMIN_ROLE)
+    await MfaService(db).assert_super_admin_session(current_user)
     return current_user
 
 
@@ -260,7 +280,8 @@ def _business_access(
         db: AsyncSession = Depends(get_db),
     ) -> BusinessContext:
         return await AccessService(db).resolve(
-            business_id, current_user.user_id, area_key, right, include_deleted
+            business_id, current_user.user_id, area_key, right, include_deleted,
+            aal=current_user.aal,
         )
 
     business_access.grants_business_access = True  # read by the route-inventory test
@@ -296,11 +317,13 @@ def require_tab_area_access(right: AreaRight) -> Callable:
         db: AsyncSession = Depends(get_db),
     ) -> BusinessContext:
         service = AccessService(db)
-        await service.resolve(business_id, current_user.user_id, None, None)
+        await service.resolve(business_id, current_user.user_id, None, None, aal=current_user.aal)
         area_key = await service.area_for_tab(tab_key)
         if area_key is None:
             raise ResourceNotFoundError("Tab", tab_key)
-        return await service.resolve(business_id, current_user.user_id, area_key, right)
+        return await service.resolve(
+            business_id, current_user.user_id, area_key, right, aal=current_user.aal
+        )
 
     tab_area_access.grants_business_access = True
     return tab_area_access

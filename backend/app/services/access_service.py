@@ -10,10 +10,11 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.access_rights import IMPLIES_VIEW, AccessMode, AreaRight, MemberStatus
-from app.core.exceptions import PermissionDeniedError, ValidationError
+from app.core.exceptions import MfaEnrollmentRequiredError, PermissionDeniedError, ValidationError
 from app.core.ids import is_uuid
 from app.repositories.member_repository import MemberRepository
 from app.schemas.request.member import AreaAccessIn
+from app.services.user_service import MFA_AAL
 
 BUSINESS_NOT_FOUND = "Business not found"
 
@@ -90,8 +91,14 @@ class AccessService:
         area_key: str | None,
         right: AreaRight | None,
         include_deleted: bool = False,
+        *,
+        aal: str | None,
     ) -> BusinessContext:
-        """404 unless the caller is an active member of a live business; 403 without the right."""
+        """404 unless the caller is an active member of a live business; 403 without the right.
+
+        A business with require_member_mfa refuses members other than the owner below AAL2
+        (checked per membership, L1), before any right is evaluated.
+        """
         if not is_uuid(business_id):
             raise _not_found()
         row = await self.repo.get_membership(
@@ -101,6 +108,8 @@ class AccessService:
             raise _not_found()
         if row.deleted_at is not None and not include_deleted:
             raise _not_found()
+        if row.requires_mfa and row.owner_id != user_id and aal != MFA_AAL:
+            raise MfaEnrollmentRequiredError()
         if not row.allowed:
             raise PermissionDeniedError(f"{area_key}:{right}")
         return BusinessContext(business_id, user_id, row.member_id, row.access_mode, row.owner_id)

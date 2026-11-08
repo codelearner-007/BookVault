@@ -23,3 +23,7 @@ class CountryRepository:
             self._filtered(select(Country), search).order_by(Country.name).offset(offset).limit(limit)
         )
         return list(result.scalars().all()), total
+
+    async def exists(self, country_id: str) -> bool:
+        result = await self.session.execute(select(Country.id).where(Country.id == country_id))
+        return result.first() is not None

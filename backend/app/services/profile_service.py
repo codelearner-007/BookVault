@@ -1,10 +1,13 @@
 """Profile service with business logic."""
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import ValidationError
 from app.models.user_profile import UserProfile
+from app.repositories.country_repository import CountryRepository
 from app.repositories.profile_repository import ProfileRepository
 from app.schemas.request.profile import UpdateProfileRequest
 
@@ -14,6 +17,7 @@ class ProfileService:
 
     def __init__(self, session: AsyncSession):
         self.repository = ProfileRepository(session)
+        self.countries = CountryRepository(session)
 
     async def get_profile(self, user_id: str) -> Optional[UserProfile]:
         """
@@ -55,6 +59,11 @@ class ProfileService:
         """
         profile = await self.get_or_create_profile(user_id)
         update_data = data.model_dump(exclude_unset=True)
+        if update_data.pop("dismiss_country_prompt", None):
+            update_data["country_prompt_dismissed_at"] = datetime.now(timezone.utc)
+        country_id = update_data.get("country_id")
+        if country_id is not None and not await self.countries.exists(country_id):
+            raise ValidationError("Unknown country", field="country_id")
         if not update_data:
             return profile
         return await self.repository.update_profile(profile, **update_data)

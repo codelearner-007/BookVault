@@ -97,26 +97,31 @@ file_size_limit = "50MiB"
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://localhost:3000"
+site_url = "env(AUTH_SITE_URL)"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
 additional_redirect_urls = ["https://127.0.0.1:3000/**", "http://localhost:3000/**", "https://localhost:3000/**"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
-jwt_expiry = 3600
+jwt_expiry = "env(AUTH_JWT_EXPIRY_SECONDS)"
 # If disabled, the refresh token will never expire.
 enable_refresh_token_rotation = true
 # Allows refresh tokens to be reused after expiry, up to the specified interval in seconds.
 # Requires enable_refresh_token_rotation = true.
-refresh_token_reuse_interval = 10
+refresh_token_reuse_interval = "env(AUTH_REFRESH_TOKEN_REUSE_INTERVAL_SECONDS)"
 # Allow/disallow new user signups to your project.
 enable_signup = true
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
 enable_manual_linking = false
+# B0.7 (D-26, AC-36): values come from supabase/.env (see supabase/.env.example and
+# docs/runbooks/auth-config.md), so a direct GoTrue call with the anon key meets the same
+# policy as the Next.js routes. The breached-password (HIBP) check has no local switch in
+# this CLI (3.0.0 / GoTrue v2.197): it is enabled on the hosted project only (runbook).
 # Passwords shorter than this value will be rejected as weak. Minimum 6, recommended 8 or more.
-minimum_password_length = 6
+minimum_password_length = "env(AUTH_PASSWORD_MIN_LENGTH)"
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
+# D-26: no composition rules (an empty env value cannot be substituted, so this stays literal).
 password_requirements = ""
 
 [auth.email]
@@ -128,23 +133,24 @@ double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
 enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
-secure_password_change = false
+secure_password_change = true
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
-max_frequency = "1m0s"
+max_frequency = "env(AUTH_EMAIL_MAX_FREQUENCY)"
 # Number of characters used in the email OTP.
 otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
-otp_expiry = 3600
+otp_expiry = "env(AUTH_EMAIL_OTP_EXPIRY_SECONDS)"
 
-# Use a production-ready SMTP server
-# [auth.email.smtp]
-# enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# SMTP (B0.7): locally GoTrue sends to the local_smtp mail catcher (Mailpit) while this is
+# disabled. The hosted project sets the same keys from its own env (runbook).
+[auth.email.smtp]
+enabled = false
+host = "env(AUTH_SMTP_HOST)"
+port = 587
+user = "env(AUTH_SMTP_USER)"
+pass = "env(AUTH_SMTP_PASS)"
+admin_email = "env(AUTH_SMTP_ADMIN_EMAIL)"
+sender_name = "env(AUTH_SMTP_SENDER_NAME)"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
@@ -155,7 +161,9 @@ otp_expiry = 3600
 # Allow/disallow new user signups via SMS to your project.
 enable_signup = false
 # If enabled, users need to confirm their phone number before signing in.
-enable_confirmations = false
+# B0.7 (AC-37): must stay true even with SMS off. GoTrue answers a signup for an existing
+# email with "user_already_exists" whenever SMS autoconfirm is on, which reveals accounts.
+enable_confirmations = true
 # Template for sending OTP to users
 template = "Your code is {{ .Code }}"
 # Controls the minimum amount of time that must pass before sending another sms otp.
@@ -165,17 +173,34 @@ max_frequency = "5s"
 # [auth.sms.test_otp]
 # 4152127777 = "123456"
 
-# Configure logged in session timeouts.
-# [auth.sessions]
+# Configure logged in session timeouts (B0.7, from env).
+[auth.sessions]
 # Force log out after the specified duration.
-# timebox = "24h"
+timebox = "env(AUTH_SESSION_TIMEBOX)"
 # Force log out if the user has been inactive longer than the specified duration.
-# inactivity_timeout = "8h"
+inactivity_timeout = "env(AUTH_SESSION_INACTIVITY_TIMEOUT)"
+
+# GoTrue's own rate limits (B0.7, H1/AC-36): they also cover direct calls with the anon key.
+# The Next.js per-IP/per-account limits are a second, stricter layer.
+[auth.rate_limit]
+# Emails sent per hour (signup confirmation, recovery, email change).
+email_sent = "env(AUTH_RATE_LIMIT_EMAIL_SENT)"
+# Token refreshes per 5 minutes per IP.
+token_refresh = "env(AUTH_RATE_LIMIT_TOKEN_REFRESH)"
+# Sign-ups and sign-ins (password grant, OTP) per 5 minutes per IP.
+sign_in_sign_ups = "env(AUTH_RATE_LIMIT_SIGN_IN_SIGN_UPS)"
+# OTP / magic-link / verify-link checks per 5 minutes per IP.
+token_verifications = "env(AUTH_RATE_LIMIT_TOKEN_VERIFICATIONS)"
 
 # This hook runs before a token is issued and allows you to add additional claims based on the authentication method used.
 [auth.hook.custom_access_token]
 enabled = true
 uri = "pg-functions://postgres/public/custom_access_token_hook"
+
+# Audits failed password checks and banned sign-in attempts (B0.7); never blocks a sign-in.
+[auth.hook.password_verification_attempt]
+enabled = true
+uri = "pg-functions://postgres/public/password_verification_attempt_hook"
 
 # Configure one of the supported SMS providers: `twilio`, `twilio_verify`, `messagebird`, `textlocal`, `vonage`.
 [auth.sms.twilio]

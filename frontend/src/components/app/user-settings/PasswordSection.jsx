@@ -22,7 +22,7 @@ import {
 const securityTips = [
   {
     icon: Lock,
-    text: 'Use at least 8 characters with a mix of letters, numbers, and symbols',
+    text: 'Use at least 12 characters; a passphrase of a few words works well',
   },
   {
     icon: RefreshCw,
@@ -53,8 +53,8 @@ export function PasswordSection() {
   return (
     <div className="space-y-6">
       {success && (
-        <Alert className="border-green-500/30 bg-green-500/5 text-green-600">
-          <CheckCircle className="h-4 w-4" />
+        <Alert className="bg-ok-soft text-ok [&>svg]:text-ok">
+          <CheckCircle />
           <AlertDescription>
             Password changed successfully! Other sessions have been signed out.
           </AlertDescription>
@@ -63,39 +63,39 @@ export function PasswordSection() {
 
       {error && (
         <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
+          <AlertCircle />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
       {/* Password change card */}
-      <Card className="border-border/50 shadow-sm">
+      <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Change Password</CardTitle>
+          <CardTitle>Change Password</CardTitle>
           <CardDescription>
             Update your password to keep your account secure
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="max-w-md">
+          <div className="max-w-prose">
             <ChangePasswordForm onSubmit={handleSubmit} loading={loading} />
           </div>
         </CardContent>
       </Card>
 
       {/* Security tips */}
-      <Card className="border-border/50 shadow-sm bg-muted/20">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-medium flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-primary" />
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
             Password Best Practices
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-3">
             {securityTips.map((tip, i) => (
-              <div key={i} className="flex flex-col gap-2 p-3 rounded-lg bg-background/50 border border-border/50">
-                <tip.icon className="h-5 w-5 text-muted-foreground" />
+              <div key={i} className="flex flex-col gap-2 rounded-control bg-muted p-3">
+                <tip.icon className="size-5 text-muted-foreground" aria-hidden="true" />
                 <p className="text-sm text-muted-foreground leading-snug">
                   {tip.text}
                 </p>

@@ -1,12 +1,16 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Loader2, Trash2, AlertTriangle, Pencil, Eye, Search, Columns } from 'lucide-react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Plus, Loader2, Trash2, Pencil, Columns3, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
 import {
   Dialog,
   DialogContent,
@@ -14,6 +18,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  PageHeader, MoreMenu, SearchInput, ListToolbar, ListCard, EmptyState,
+} from '@/components/common/page';
 import {
   listCustomers,
   createCustomer,
@@ -33,26 +40,136 @@ const DEFAULT_COLS = [
   { key: 'email', label: 'Email', visible: true,  locked: false },
 ];
 
+const EMPTY_FORM = { name: '', code: '', billing_address: '', delivery_address: '', email: '' };
+const CREATE_PAGE = 'create';
+const SKELETON_ROWS = 5;
+
 function formatDate(iso) {
   if (!iso) return '—';
   const [y, m, d] = String(iso).slice(0, 10).split('-');
   return `${parseInt(d)}/${parseInt(m)}/${y}`;
 }
 
+function formFromRecord(record) {
+  return {
+    name: record.name ?? '',
+    code: record.code ?? '',
+    billing_address: record.billing_address ?? '',
+    delivery_address: record.delivery_address ?? '',
+    email: record.email ?? '',
+  };
+}
+
+function payloadFromForm(form) {
+  return {
+    name: form.name.trim(),
+    code: form.code.trim() || null,
+    billing_address: form.billing_address.trim() || null,
+    delivery_address: form.delivery_address.trim() || null,
+    email: form.email.trim() || null,
+  };
+}
+
+// Saved column order and visibility merged over the defaults; new default columns go last.
+function mergeSavedCols(saved) {
+  const merged = [...saved]
+    .sort((a, b) => a.order_index - b.order_index)
+    .map(({ col_key, visible }) => {
+      const def = DEFAULT_COLS.find((d) => d.key === col_key);
+      return def ? { ...def, visible: def.locked ? true : visible } : null;
+    })
+    .filter(Boolean);
+  const savedKeys = new Set(saved.map((s) => s.col_key));
+  return [...merged, ...DEFAULT_COLS.filter((d) => !savedKeys.has(d.key))];
+}
+
 /* ── Loading skeleton ────────────────────────────────────────────────────── */
 
 function CustomersSkeleton() {
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Skeleton className="h-7 w-40" />
-        <Skeleton className="h-9 w-36" />
+    <div>
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-3 max-md:mb-6">
+        <Skeleton className="h-9 w-44" />
+        <div className="flex gap-2">
+          <Skeleton className="size-control rounded-full" />
+          <Skeleton className="h-control w-40 rounded-full" />
+        </div>
       </div>
-      <div className="rounded-lg border border-border overflow-hidden">
-        <Skeleton className="h-10 w-full rounded-none" />
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-10 w-full rounded-none border-t border-border" />
+      <Skeleton className="mb-4 h-control w-full rounded-control md:w-search" />
+      <div className="glass rounded-card border border-card-border p-2 shadow-card">
+        <Skeleton className="h-row-head w-full rounded-control" />
+        {Array.from({ length: SKELETON_ROWS }, (_, i) => (
+          <Skeleton key={i} className="mt-1 h-row w-full rounded-control" />
         ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── Shared form fields ──────────────────────────────────────────────────── */
+
+function FormError({ error }) {
+  if (!error) return null;
+  return <p className="text-sm text-bad" role="alert">{error}</p>;
+}
+
+function CustomerFields({ idPrefix, form, setField, disabled, onEnter }) {
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-2">
+        <Label htmlFor={`${idPrefix}-name`}>Name <span className="text-bad">*</span></Label>
+        <Input
+          id={`${idPrefix}-name`}
+          placeholder="e.g. Acme Corp"
+          value={form.name}
+          onChange={(e) => setField('name', e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onEnter()}
+          disabled={disabled}
+          autoFocus
+        />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor={`${idPrefix}-code`}>Code</Label>
+        <Input
+          id={`${idPrefix}-code`}
+          placeholder="e.g. CUST-001"
+          value={form.code}
+          onChange={(e) => setField('code', e.target.value)}
+          disabled={disabled}
+        />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor={`${idPrefix}-billing`}>Billing Address</Label>
+        <Textarea
+          id={`${idPrefix}-billing`}
+          placeholder="Optional billing address…"
+          value={form.billing_address}
+          onChange={(e) => setField('billing_address', e.target.value)}
+          disabled={disabled}
+          rows={3}
+        />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor={`${idPrefix}-delivery`}>Delivery Address</Label>
+        <Textarea
+          id={`${idPrefix}-delivery`}
+          placeholder="Optional delivery address…"
+          value={form.delivery_address}
+          onChange={(e) => setField('delivery_address', e.target.value)}
+          disabled={disabled}
+          rows={3}
+        />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor={`${idPrefix}-email`}>Email</Label>
+        <Input
+          id={`${idPrefix}-email`}
+          type="email"
+          placeholder="e.g. contact@acme.com"
+          value={form.email}
+          onChange={(e) => setField('email', e.target.value)}
+          disabled={disabled}
+        />
       </div>
     </div>
   );
@@ -61,40 +178,31 @@ function CustomersSkeleton() {
 /* ── Create dialog ───────────────────────────────────────────────────────── */
 
 function CreateDialog({ open, onOpenChange, businessId, onCreated }) {
-  const [name, setName] = useState('');
-  const [code, setCode] = useState('');
-  const [billingAddress, setBillingAddress] = useState('');
-  const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [email, setEmail] = useState('');
+  const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (open) {
-      setName('');
-      setCode('');
-      setBillingAddress('');
-      setDeliveryAddress('');
-      setEmail('');
+      setForm(EMPTY_FORM);
       setError(null);
     }
   }, [open]);
 
+  function setField(key, value) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    if (key === 'name' && error) setError(null);
+  }
+
   async function handleSave() {
-    if (!name.trim()) {
+    if (!form.name.trim()) {
       setError('Name is required.');
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      await createCustomer(businessId, {
-        name: name.trim(),
-        code: code.trim() || null,
-        billing_address: billingAddress.trim() || null,
-        delivery_address: deliveryAddress.trim() || null,
-        email: email.trim() || null,
-      });
+      await createCustomer(businessId, payloadFromForm(form));
       onCreated();
       onOpenChange(false);
     } catch (err) {
@@ -106,103 +214,18 @@ function CreateDialog({ open, onOpenChange, businessId, onCreated }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>New Customer</DialogTitle>
         </DialogHeader>
-
-        <table className="w-full text-sm">
-          <tbody>
-            <tr className="border-b border-border">
-              <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap w-32">
-                <Label htmlFor="cust-name">Name <span className="text-destructive">*</span></Label>
-              </td>
-              <td className="py-2">
-                <Input
-                  id="cust-name"
-                  placeholder="e.g. Acme Corp"
-                  value={name}
-                  onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-                  disabled={saving}
-                  autoFocus
-                  className="h-8 text-sm"
-                />
-                {error && <p className="text-xs text-destructive mt-1" role="alert">{error}</p>}
-              </td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap">
-                <Label htmlFor="cust-code">Code</Label>
-              </td>
-              <td className="py-2">
-                <Input
-                  id="cust-code"
-                  placeholder="e.g. CUST-001"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  disabled={saving}
-                  className="h-8 text-sm"
-                />
-              </td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap align-top">
-                <Label htmlFor="cust-billing">Billing Address</Label>
-              </td>
-              <td className="py-2">
-                <Textarea
-                  id="cust-billing"
-                  placeholder="Optional billing address…"
-                  value={billingAddress}
-                  onChange={(e) => setBillingAddress(e.target.value)}
-                  disabled={saving}
-                  rows={3}
-                  className="text-sm"
-                />
-              </td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap align-top">
-                <Label htmlFor="cust-delivery">Delivery Address</Label>
-              </td>
-              <td className="py-2">
-                <Textarea
-                  id="cust-delivery"
-                  placeholder="Optional delivery address…"
-                  value={deliveryAddress}
-                  onChange={(e) => setDeliveryAddress(e.target.value)}
-                  disabled={saving}
-                  rows={3}
-                  className="text-sm"
-                />
-              </td>
-            </tr>
-            <tr>
-              <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap">
-                <Label htmlFor="cust-email">Email</Label>
-              </td>
-              <td className="py-2">
-                <Input
-                  id="cust-email"
-                  type="email"
-                  placeholder="e.g. contact@acme.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={saving}
-                  className="h-8 text-sm"
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-
+        <CustomerFields idPrefix="cust" form={form} setField={setField} disabled={saving} onEnter={handleSave} />
+        <FormError error={error} />
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving} className="cursor-pointer">
+          <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saving} className="cursor-pointer min-w-[72px]">
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Create'}
+          <Button onClick={handleSave} disabled={saving} className="min-w-20">
+            {saving ? <Loader2 className="animate-spin" /> : 'Create'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -212,12 +235,27 @@ function CreateDialog({ open, onOpenChange, businessId, onCreated }) {
 
 /* ── Edit dialog (with delete) ───────────────────────────────────────────── */
 
+function DeleteConfirm({ name, error, deleting, onCancel, onConfirm }) {
+  return (
+    <>
+      <p className="rounded-control bg-bad-soft px-4 py-3 text-sm text-bad">
+        Delete <span className="font-semibold">{name}</span>? This cannot be undone.
+      </p>
+      <FormError error={error} />
+      <DialogFooter>
+        <Button variant="secondary" onClick={onCancel} disabled={deleting}>
+          Cancel
+        </Button>
+        <Button variant="destructive" onClick={onConfirm} disabled={deleting} className="min-w-20">
+          {deleting ? <Loader2 className="animate-spin" /> : 'Delete'}
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
+
 function EditDialog({ open, onOpenChange, businessId, customer, onUpdated, onDeleted }) {
-  const [name, setName] = useState('');
-  const [code, setCode] = useState('');
-  const [billingAddress, setBillingAddress] = useState('');
-  const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [email, setEmail] = useState('');
+  const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -227,12 +265,13 @@ function EditDialog({ open, onOpenChange, businessId, customer, onUpdated, onDel
   const busy = saving || deleting;
 
   function fillForm(record) {
-    setName(record.name ?? '');
-    setCode(record.code ?? '');
-    setBillingAddress(record.billing_address ?? '');
-    setDeliveryAddress(record.delivery_address ?? '');
-    setEmail(record.email ?? '');
+    setForm(formFromRecord(record));
     setVersion(record.version);
+  }
+
+  function setField(key, value) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    if (key === 'name' && error) setError(null);
   }
 
   // Version conflict: keep the message, reload the record and the list so a retry uses fresh data.
@@ -253,18 +292,11 @@ function EditDialog({ open, onOpenChange, businessId, customer, onUpdated, onDel
   }, [open, customer]);
 
   async function handleSave() {
-    if (!name.trim()) { setError('Name is required.'); return; }
+    if (!form.name.trim()) { setError('Name is required.'); return; }
     setSaving(true);
     setError(null);
     try {
-      await updateCustomer(businessId, customer.id, {
-        name: name.trim(),
-        code: code.trim() || null,
-        billing_address: billingAddress.trim() || null,
-        delivery_address: deliveryAddress.trim() || null,
-        email: email.trim() || null,
-        version,
-      });
+      await updateCustomer(businessId, customer.id, { ...payloadFromForm(form), version });
       onUpdated();
       onOpenChange(false);
     } catch (err) {
@@ -291,132 +323,39 @@ function EditDialog({ open, onOpenChange, businessId, customer, onUpdated, onDel
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!busy) { setConfirmDelete(false); onOpenChange(v); } }}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit Customer</DialogTitle>
         </DialogHeader>
 
         {confirmDelete ? (
-          <>
-            <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
-              <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-destructive">
-                Delete <span className="font-medium">{customer?.name}</span>? This cannot be undone.
-              </p>
-            </div>
-            {error && <p className="text-xs text-destructive" role="alert">{error}</p>}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirmDelete(false)} disabled={deleting} className="cursor-pointer">
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={handleDelete} disabled={deleting} className="cursor-pointer min-w-[72px]">
-                {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Delete'}
-              </Button>
-            </DialogFooter>
-          </>
+          <DeleteConfirm
+            name={customer?.name}
+            error={error}
+            deleting={deleting}
+            onCancel={() => setConfirmDelete(false)}
+            onConfirm={handleDelete}
+          />
         ) : (
           <>
-            <table className="w-full text-sm">
-              <tbody>
-                <tr className="border-b border-border">
-                  <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap w-32">
-                    <Label htmlFor="edit-cust-name">Name <span className="text-destructive">*</span></Label>
-                  </td>
-                  <td className="py-2">
-                    <Input
-                      id="edit-cust-name"
-                      value={name}
-                      onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-                      disabled={busy}
-                      autoFocus
-                      className="h-8 text-sm"
-                    />
-                    {error && <p className="text-xs text-destructive mt-1" role="alert">{error}</p>}
-                  </td>
-                </tr>
-                <tr className="border-b border-border">
-                  <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap">
-                    <Label htmlFor="edit-cust-code">Code</Label>
-                  </td>
-                  <td className="py-2">
-                    <Input
-                      id="edit-cust-code"
-                      placeholder="e.g. CUST-001"
-                      value={code}
-                      onChange={(e) => setCode(e.target.value)}
-                      disabled={busy}
-                      className="h-8 text-sm"
-                    />
-                  </td>
-                </tr>
-                <tr className="border-b border-border">
-                  <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap align-top">
-                    <Label htmlFor="edit-cust-billing">Billing Address</Label>
-                  </td>
-                  <td className="py-2">
-                    <Textarea
-                      id="edit-cust-billing"
-                      placeholder="Optional billing address…"
-                      value={billingAddress}
-                      onChange={(e) => setBillingAddress(e.target.value)}
-                      disabled={busy}
-                      rows={3}
-                      className="text-sm"
-                    />
-                  </td>
-                </tr>
-                <tr className="border-b border-border">
-                  <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap align-top">
-                    <Label htmlFor="edit-cust-delivery">Delivery Address</Label>
-                  </td>
-                  <td className="py-2">
-                    <Textarea
-                      id="edit-cust-delivery"
-                      placeholder="Optional delivery address…"
-                      value={deliveryAddress}
-                      onChange={(e) => setDeliveryAddress(e.target.value)}
-                      disabled={busy}
-                      rows={3}
-                      className="text-sm"
-                    />
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap">
-                    <Label htmlFor="edit-cust-email">Email</Label>
-                  </td>
-                  <td className="py-2">
-                    <Input
-                      id="edit-cust-email"
-                      type="email"
-                      placeholder="e.g. contact@acme.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      disabled={busy}
-                      className="h-8 text-sm"
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <DialogFooter className="flex-row gap-2 sm:justify-between">
+            <CustomerFields idPrefix="edit-cust" form={form} setField={setField} disabled={busy} onEnter={handleSave} />
+            <FormError error={error} />
+            <DialogFooter className="sm:justify-between">
               <Button
                 variant="ghost"
-                size="sm"
                 onClick={() => setConfirmDelete(true)}
                 disabled={busy}
-                className="cursor-pointer text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5"
+                className="text-bad hover:text-bad"
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 />
                 Delete
               </Button>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy} className="cursor-pointer">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={busy}>
                   Cancel
                 </Button>
-                <Button onClick={handleSave} disabled={busy} className="cursor-pointer min-w-[72px]">
-                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
+                <Button onClick={handleSave} disabled={busy} className="min-w-20">
+                  {saving ? <Loader2 className="animate-spin" /> : 'Save'}
                 </Button>
               </div>
             </DialogFooter>
@@ -428,6 +367,48 @@ function EditDialog({ open, onOpenChange, businessId, customer, onUpdated, onDel
 }
 
 /* ── View dialog ─────────────────────────────────────────────────────────── */
+
+function DetailItem({ label, value, multiline }) {
+  return (
+    <div>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className={multiline ? 'mt-1 whitespace-pre-wrap' : 'mt-1'}>{value || '—'}</dd>
+    </div>
+  );
+}
+
+function ReceiptsList({ receipts, loading }) {
+  if (loading) {
+    return (
+      <div className="space-y-1">
+        {[1, 2].map((i) => <Skeleton key={i} className="h-row w-full rounded-control" />)}
+      </div>
+    );
+  }
+  if (receipts.length === 0) {
+    return <p className="py-2 text-sm text-muted-foreground">No receipts linked to this customer.</p>;
+  }
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Date</TableHead>
+          <TableHead>Reference</TableHead>
+          <TableHead className="text-end">Amount</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {receipts.map((r) => (
+          <TableRow key={r.id}>
+            <TableCell>{formatDate(r.date)}</TableCell>
+            <TableCell className="text-muted-foreground">{r.reference || '—'}</TableCell>
+            <TableCell className="num">{formatMoney(r.total)}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
 
 function ViewDialog({ open, onOpenChange, customer, businessId }) {
   const [receipts, setReceipts] = useState([]);
@@ -446,75 +427,26 @@ function ViewDialog({ open, onOpenChange, customer, businessId }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Customer Details</DialogTitle>
         </DialogHeader>
 
-        <table className="w-full text-sm">
-          <tbody>
-            <tr className="border-b border-border">
-              <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap w-32">Name</td>
-              <td className="py-2.5 text-foreground">{customer.name}</td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap">Code</td>
-              <td className="py-2.5 text-foreground">{customer.code || '—'}</td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap align-top">Billing Address</td>
-              <td className="py-2.5 text-foreground whitespace-pre-wrap">{customer.billing_address || '—'}</td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap align-top">Delivery Address</td>
-              <td className="py-2.5 text-foreground whitespace-pre-wrap">{customer.delivery_address || '—'}</td>
-            </tr>
-            <tr>
-              <td className="py-2.5 pr-4 text-xs font-medium text-muted-foreground whitespace-nowrap">Email</td>
-              <td className="py-2.5 text-foreground">{customer.email || '—'}</td>
-            </tr>
-          </tbody>
-        </table>
+        <dl className="grid gap-4 sm:grid-cols-2">
+          <DetailItem label="Name" value={customer.name} />
+          <DetailItem label="Code" value={customer.code} />
+          <DetailItem label="Billing Address" value={customer.billing_address} multiline />
+          <DetailItem label="Delivery Address" value={customer.delivery_address} multiline />
+          <DetailItem label="Email" value={customer.email} />
+        </dl>
 
-        {/* Receipts section */}
-        <div className="space-y-2 pt-2 border-t border-border">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Receipts
-          </p>
-          {loadingReceipts ? (
-            <div className="space-y-1.5">
-              {[1, 2].map((i) => <Skeleton key={i} className="h-8 w-full rounded" />)}
-            </div>
-          ) : receipts.length === 0 ? (
-            <p className="text-xs text-muted-foreground py-2">No receipts linked to this customer.</p>
-          ) : (
-            <div className="rounded-md border border-border overflow-hidden">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-muted/30 border-b border-border">
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Date</th>
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Reference</th>
-                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {receipts.map((r) => (
-                      <tr key={r.id} className="hover:bg-muted/20">
-                        <td className="px-3 py-2 text-foreground">{formatDate(r.date)}</td>
-                        <td className="px-3 py-2 text-muted-foreground">{r.reference || '—'}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                          {formatMoney(r.total)}
-                        </td>
-                      </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <section className="space-y-2 border-t border-border pt-4">
+          <h3 className="text-md font-semibold">Receipts</h3>
+          <ReceiptsList receipts={receipts} loading={loadingReceipts} />
+        </section>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Close
           </Button>
         </DialogFooter>
@@ -523,9 +455,62 @@ function ViewDialog({ open, onOpenChange, customer, businessId }) {
   );
 }
 
+/* ── List table ──────────────────────────────────────────────────────────── */
+
+function CustomerCell({ col, customer, onView }) {
+  if (col.key === 'name') {
+    return (
+      <TableCell className="whitespace-nowrap">
+        <Button variant="link" onClick={() => onView(customer)} className="text-foreground hover:text-link">
+          {customer.name}
+        </Button>
+      </TableCell>
+    );
+  }
+  const value = col.key === 'code' ? customer.code : customer.email;
+  return <TableCell className="whitespace-nowrap text-muted-foreground">{value || '—'}</TableCell>;
+}
+
+function CustomersTable({ customers, visibleCols, onView, onEdit }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          {visibleCols.map((col) => <TableHead key={col.key}>{col.label}</TableHead>)}
+          <TableHead className="w-0"><span className="sr-only">Actions</span></TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {customers.map((customer) => (
+          <TableRow key={customer.id}>
+            {visibleCols.map((col) => (
+              <CustomerCell key={col.key} col={col} customer={customer} onView={onView} />
+            ))}
+            <TableCell className="text-end">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onEdit(customer)}
+                aria-label={`Edit ${customer.name}`}
+              >
+                <Pencil />
+              </Button>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
 /* ── Main component ──────────────────────────────────────────────────────── */
 
 export default function BusinessCustomers({ business }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const createFromUrl = searchParams.get('page') === CREATE_PAGE;
+
   const [customers, setCustomers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -547,19 +532,7 @@ export default function BusinessCustomers({ business }) {
       ]);
       setCustomers(data.items);
       const saved = colRes?.columns;
-      if (Array.isArray(saved) && saved.length > 0) {
-        const sorted = [...saved].sort((a, b) => a.order_index - b.order_index);
-        const merged = sorted
-          .map(({ col_key, visible }) => {
-            const def = DEFAULT_COLS.find((d) => d.key === col_key);
-            if (!def) return null;
-            return { ...def, visible: def.locked ? true : visible };
-          })
-          .filter(Boolean);
-        const savedKeys = new Set(saved.map((s) => s.col_key));
-        const newCols = DEFAULT_COLS.filter((d) => !savedKeys.has(d.key));
-        setCols([...merged, ...newCols]);
-      }
+      if (Array.isArray(saved) && saved.length > 0) setCols(mergeSavedCols(saved));
     } catch (err) {
       setError(err?.message ?? 'Failed to load customers.');
     } finally {
@@ -571,24 +544,34 @@ export default function BusinessCustomers({ business }) {
     fetchCustomers();
   }, [fetchCustomers]);
 
-  const filtered = search.trim()
-    ? customers.filter((c) => {
-        const q = search.toLowerCase();
-        return (
-          c.name.toLowerCase().includes(q) ||
-          (c.email ?? '').toLowerCase().includes(q)
-        );
-      })
+  // The top bar's New menu opens this dialog with ?page=create; closing it drops the param.
+  function handleCreateOpenChange(open) {
+    setCreateOpen(open);
+    if (open || !createFromUrl) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('page');
+    router.replace(`${pathname}?${params.toString()}`);
+  }
+
+  function applyCols(newCols) {
+    setCols(newCols);
+    const columns = newCols.map((c, i) => ({ col_key: c.key, visible: c.visible, order_index: i }));
+    updateTabColumns(business.id, 'customers', columns)
+      .catch((err) => console.error('Failed to save column preferences:', err?.message ?? err));
+  }
+
+  const query = search.trim().toLowerCase();
+  const filtered = query
+    ? customers.filter((c) => c.name.toLowerCase().includes(query) || (c.email ?? '').toLowerCase().includes(query))
     : customers;
 
   if (isLoading) return <CustomersSkeleton />;
 
   return (
-    <div className="space-y-4">
-      {/* Dialogs */}
+    <div>
       <CreateDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
+        open={createOpen || createFromUrl}
+        onOpenChange={handleCreateOpenChange}
         businessId={business.id}
         onCreated={fetchCustomers}
       />
@@ -606,144 +589,41 @@ export default function BusinessCustomers({ business }) {
         customer={viewTarget}
         businessId={business.id}
       />
+      <ColEditorDialog open={colEditorOpen} onOpenChange={setColEditorOpen} cols={cols} onApply={applyCols} />
 
-      {/* Page header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold text-foreground">Customers</h1>
-          <span className="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full bg-muted text-xs font-semibold text-muted-foreground tabular-nums">
-            {customers.length}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search by name or email…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-9 pl-8 text-sm w-56"
-            />
-          </div>
-          <Button
-            size="sm"
-            className="gap-1.5 cursor-pointer"
-            onClick={() => setCreateOpen(true)}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New Customer
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Customers"
+        actions={(
+          <>
+            <MoreMenu items={[{ label: 'Edit columns', icon: Columns3, onSelect: () => setColEditorOpen(true) }]} />
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus />
+              New Customer
+            </Button>
+          </>
+        )}
+      />
 
-      {/* Error state */}
+      <ListToolbar>
+        <SearchInput value={search} onChange={setSearch} placeholder="Search by name or email" />
+      </ListToolbar>
+
       {error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
+        <p className="mb-4 rounded-control bg-bad-soft px-4 py-3 text-sm text-bad" role="alert">{error}</p>
       )}
 
-      {/* Table */}
-      <div className="rounded-lg border border-border overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm min-w-[480px]">
-          <thead>
-            <tr className="border-b border-border bg-muted/30">
-              <th className="px-3 py-2 w-16 border-r border-border text-center text-xs font-semibold text-muted-foreground">
-                <span className="flex items-center justify-center">
-                  <Pencil className="h-3 w-3" />
-                </span>
-              </th>
-              <th className="px-3 py-2 w-16 border-r border-border text-center text-xs font-semibold text-muted-foreground">
-                <span className="flex items-center justify-center">
-                  <Eye className="h-3 w-3" />
-                </span>
-              </th>
-              {cols.filter((c) => c.visible).map((col) => (
-                <th key={col.key} className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border-r border-border">
-                  {col.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={2 + cols.filter((c) => c.visible).length} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  {search.trim() ? 'No customers match your search.' : 'No customers yet'}
-                </td>
-              </tr>
-            ) : (
-              filtered.map((customer) => (
-                <tr key={customer.id} className="hover:bg-muted/30 transition-colors duration-150">
-                  <td className="px-3 py-2 w-16 border-r border-border text-center">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2 text-xs cursor-pointer"
-                      onClick={() => setEditTarget(customer)}
-                    >
-                      Edit
-                    </Button>
-                  </td>
-                  <td className="px-3 py-2 w-16 border-r border-border text-center">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2 text-xs cursor-pointer"
-                      onClick={() => setViewTarget(customer)}
-                    >
-                      View
-                    </Button>
-                  </td>
-                  {cols.filter((c) => c.visible).map((col) => {
-                    if (col.key === 'name') return (
-                      <td key="name" className="px-4 py-2.5 text-foreground border-r border-border whitespace-nowrap">
-                        {customer.name}
-                      </td>
-                    );
-                    if (col.key === 'code') return (
-                      <td key="code" className="px-4 py-2.5 text-muted-foreground border-r border-border whitespace-nowrap">
-                        {customer.code || '—'}
-                      </td>
-                    );
-                    if (col.key === 'email') return (
-                      <td key="email" className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
-                        {customer.email || '—'}
-                      </td>
-                    );
-                    return null;
-                  })}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-
-        {/* Footer bar */}
-        <div className="border-t border-border bg-muted/20 px-4 py-2 flex items-center justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 cursor-pointer text-xs text-muted-foreground hover:text-foreground h-7"
-            onClick={() => setColEditorOpen(true)}
-          >
-            <Columns className="h-3.5 w-3.5" />
-            Edit columns
-          </Button>
-        </div>
-
-        <ColEditorDialog
-          open={colEditorOpen}
-          onOpenChange={setColEditorOpen}
-          cols={cols}
-          onApply={(newCols) => {
-            setCols(newCols);
-            const columns = newCols.map((c, i) => ({ col_key: c.key, visible: c.visible, order_index: i }));
-            updateTabColumns(business.id, 'customers', columns)
-              .catch((err) => console.error('Failed to save column preferences:', err?.message ?? err));
-          }}
-        />
-      </div>
+      <ListCard>
+        {filtered.length === 0 ? (
+          <EmptyState icon={Users} title={query ? 'No customers match your search.' : 'No customers yet'} />
+        ) : (
+          <CustomersTable
+            customers={filtered}
+            visibleCols={cols.filter((c) => c.visible)}
+            onView={setViewTarget}
+            onEdit={setEditTarget}
+          />
+        )}
+      </ListCard>
     </div>
   );
 }

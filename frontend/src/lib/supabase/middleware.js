@@ -58,9 +58,11 @@ export async function updateSession(request) {
     }
 
     // MFA enforcement for authenticated users accessing protected routes
+    let mfaStatus = null
     if (user && user.user && isProtectedArea) {
         try {
-            const { hasVerifiedMFA, currentLevel } = await checkMFAStatus(supabase)
+            mfaStatus = await checkMFAStatus(supabase)
+            const { hasVerifiedMFA, currentLevel } = mfaStatus
 
             // If user has MFA but hasn't verified it this session (AAL1), redirect to MFA page
             if (hasVerifiedMFA && currentLevel !== 'aal2') {
@@ -106,6 +108,19 @@ export async function updateSession(request) {
         if (user.user.app_metadata?.must_change_password && !pathname.startsWith(profilePath)) {
             const url = request.nextUrl.clone()
             url.pathname = profilePath
+            return NextResponse.redirect(url)
+        }
+
+        // Enroll first (B0.7): the super admin always needs AAL2 (FastAPI enforces it on
+        // platform routes), and a user who spent a recovery code must enroll again (D-23).
+        // Users with a verified factor were already sent to /auth/2fa above.
+        const mustEnroll =
+            (isSuperAdmin || user.user.app_metadata?.mfa_reenroll_required) && !mfaStatus?.hasVerifiedMFA
+        if (mustEnroll && !pathname.startsWith(profilePath)) {
+            const url = request.nextUrl.clone()
+            url.pathname = profilePath
+            url.search = ''
+            url.searchParams.set('enrollMfa', '1')
             return NextResponse.redirect(url)
         }
 

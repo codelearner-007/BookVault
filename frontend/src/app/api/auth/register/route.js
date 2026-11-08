@@ -3,6 +3,9 @@ import { createSSRClient } from '@/lib/supabase/server';
 import { registerSchema } from '@/lib/schemas/auth.schema';
 import { enforceSameOrigin } from '@/lib/utils/origin';
 import { zodToApiError } from '@/lib/utils/api-errors';
+import { enforceAuthRateLimit, siteUrl, TOO_MANY_ATTEMPTS } from '@/lib/server/auth-guard';
+import { breachedPasswordError, isRateLimited, passwordUpdateError } from '@/lib/server/auth-session';
+import { AUTH_COPY } from '@/lib/copy/auth';
 import { z } from 'zod';
 
 export async function POST(request) {
@@ -10,51 +13,35 @@ export async function POST(request) {
     const originError = enforceSameOrigin(request);
     if (originError) return originError;
 
-    const body = await request.json();
-    const validated = registerSchema.parse(body);
+    const validated = registerSchema.parse(await request.json());
+    const limited = enforceAuthRateLimit(request, 'signup', validated.email);
+    if (limited) return limited;
+
+    const breached = await breachedPasswordError(validated.password);
+    if (breached) return NextResponse.json({ error: breached }, { status: 400 });
 
     const supabase = await createSSRClient();
-
-    // Get origin with production-safe fallback
-    const origin = request.headers.get('origin') ||
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      'http://localhost:3000';
-
-    // Log config error in production
-    if (!request.headers.get('origin') && !process.env.NEXT_PUBLIC_SITE_URL) {
-      console.error(
-        'Registration without origin header and NEXT_PUBLIC_SITE_URL not set. ' +
-        'Email verification links may not work correctly.'
-      );
-    }
-
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email: validated.email,
       password: validated.password,
       options: {
-        emailRedirectTo: `${origin}/app`,
-        data: {
-          full_name: validated.full_name || '',
-        },
+        emailRedirectTo: `${siteUrl(request)}/api/auth/callback?next=/admin`,
+        // handle_new_user keeps country_id only when it names a real country.
+        data: { full_name: validated.full_name || '', country_id: validated.country_id },
       },
     });
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      if (isRateLimited(error)) return NextResponse.json({ error: TOO_MANY_ATTEMPTS }, { status: 429 });
+      if (error.code === 'weak_password') {
+        return NextResponse.json({ error: passwordUpdateError(error) }, { status: 400 });
+      }
+      // Anything else (e.g. a refused address) gets the same answer as a success (AC-37).
+      console.error('Signup refused by Supabase Auth:', error.code);
     }
 
-    // Only return safe user metadata - tokens are set as httpOnly cookies by Supabase SSR
-    return NextResponse.json({
-      user: data.user
-        ? {
-            id: data.user.id,
-            email: data.user.email,
-            user_metadata: data.user.user_metadata,
-            app_metadata: data.user.app_metadata,
-          }
-        : null,
-      message: 'Please check your email to verify your account',
-    });
+    // With confirmations on, GoTrue answers an existing email like a new one; so do we.
+    return NextResponse.json({ message: AUTH_COPY.signupSent });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(zodToApiError(error), { status: 400 });

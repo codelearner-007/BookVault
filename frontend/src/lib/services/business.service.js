@@ -74,3 +74,8 @@ export async function getTabColumns(businessId, tabKey) {
 export async function updateTabColumns(businessId, tabKey, columns) {
   return apiClient.put(`/v1/businesses/${businessId}/tab-columns/${tabKey}`, { columns });
 }
+
+// My rights in one business (UI hiding only; the server enforces every action).
+export async function getMyBusinessAccess(businessId) {
+  return apiClient.get(`/v1/businesses/${businessId}/me`);
+}

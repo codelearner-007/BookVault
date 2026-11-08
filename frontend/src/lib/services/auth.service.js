@@ -14,7 +14,7 @@ export const authService = {
   },
 
   async resendVerificationEmail(email) {
-    return apiClient.post('/auth/register', { email, resend: true });
+    return apiClient.post('/auth/resend-verification', { email });
   },
 
   async logout() {
@@ -27,14 +27,6 @@ export const authService = {
 
   async resetPassword(data) {
     return apiClient.post('/auth/reset-password', data);
-  },
-
-  async setupMFA() {
-    return apiClient.post('/auth/mfa/setup');
-  },
-
-  async verifyMFA(code) {
-    return apiClient.post('/auth/mfa/verify', { code });
   },
 
   // MFA Management
@@ -56,6 +48,18 @@ export const authService = {
 
   async unenrollMFAFactor(factorId) {
     return apiClient.post('/auth/mfa/unenroll', { factorId });
+  },
+
+  async generateRecoveryCodes() {
+    return apiClient.post('/auth/mfa/recovery-codes');
+  },
+
+  async useRecoveryCode(code) {
+    return apiClient.post('/auth/mfa/recover', { code });
+  },
+
+  async revokeOtherSessions() {
+    return apiClient.post('/auth/sessions/revoke-others');
   },
 
   async getMFAStatus() {

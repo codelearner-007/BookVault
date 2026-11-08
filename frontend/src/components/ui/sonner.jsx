@@ -1,38 +1,34 @@
 "use client"
 
-import {
-  CircleCheck,
-  Info,
-  LoaderCircle,
-  OctagonX,
-  TriangleAlert,
-} from "lucide-react"
+import { CircleCheck, Info, LoaderCircle, OctagonX, TriangleAlert } from "lucide-react"
 import { useTheme } from "next-themes"
 import { Toaster as Sonner } from "sonner"
 
+// One quiet card per toast; only the icon carries the verdict colour.
 const Toaster = ({ ...props }) => {
-  const { theme = "system" } = useTheme()
+  const { resolvedTheme = "light" } = useTheme()
 
   return (
     <Sonner
-      theme={theme}
+      theme={resolvedTheme}
       className="toaster group"
       icons={{
-        success: <CircleCheck className="h-4 w-4" />,
-        info: <Info className="h-4 w-4" />,
-        warning: <TriangleAlert className="h-4 w-4" />,
-        error: <OctagonX className="h-4 w-4" />,
-        loading: <LoaderCircle className="h-4 w-4 animate-spin" />,
+        success: <CircleCheck className="size-4 text-ok" />,
+        info: <Info className="size-4 text-info" />,
+        warning: <TriangleAlert className="size-4 text-warn" />,
+        error: <OctagonX className="size-4 text-bad" />,
+        loading: <LoaderCircle className="size-4 animate-spin" />,
       }}
       toastOptions={{
+        unstyled: true,
         classNames: {
           toast:
-            "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg",
-          description: "group-[.toast]:text-muted-foreground",
-          actionButton:
-            "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
-          cancelButton:
-            "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
+            "flex w-full items-center gap-3 rounded-menu border border-popover-border bg-popover px-4 py-3 font-sans text-sm text-popover-foreground shadow-pop",
+          title: "font-semibold",
+          description: "text-muted-foreground",
+          actionButton: "ms-auto rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground",
+          cancelButton: "rounded-full bg-accent px-3 py-1 text-xs font-semibold text-muted-foreground",
+          closeButton: "rounded-full border border-popover-border bg-popover text-muted-foreground",
         },
       }}
       {...props}

@@ -4,42 +4,40 @@ import { resetPasswordSchema } from '@/lib/schemas/auth.schema';
 import { enforceMFAForOperation } from '@/lib/utils/mfa-check';
 import { enforceSameOrigin } from '@/lib/utils/origin';
 import { zodToApiError } from '@/lib/utils/api-errors';
+import { enforceAuthRateLimit } from '@/lib/server/auth-guard';
+import { breachedPasswordError, passwordUpdateError } from '@/lib/server/auth-session';
+import { AUTH_COPY } from '@/lib/copy/auth';
 import { z } from 'zod';
 
-// TODO: Add rate limiting for production
-// Consider Vercel Edge Config, Upstash Redis, or middleware-based solutions
-// Recommended: 5 attempts per 15 minutes per IP address
+/**
+ * Set a new password from the recovery session the emailed link opened (the link is
+ * single-use and expires, GoTrue otp_expiry). Every other session is signed out (AC-38).
+ */
 export async function POST(request) {
   try {
     const originError = enforceSameOrigin(request);
     if (originError) return originError;
 
-    const body = await request.json();
-    const validated = resetPasswordSchema.parse(body);
-
+    const validated = resetPasswordSchema.parse(await request.json());
     const supabase = await createSSRClient();
-
-    // Get current user to check MFA status
-    // Note: reset-password can be called in two contexts:
-    // 1. Authenticated user with reset token (session exists) → enforce MFA
-    // 2. Unauthenticated user with email reset token (no session) → skip MFA check
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: AUTH_COPY.resetLinkInvalid }, { status: 401 });
 
-    if (user) {
-      // User is authenticated - enforce MFA if they have it enabled
-      const mfaError = await enforceMFAForOperation(supabase);
-      if (mfaError) return mfaError;
-    }
+    const limited = enforceAuthRateLimit(request, 'reset', user.id);
+    if (limited) return limited;
 
-    const { error } = await supabase.auth.updateUser({
-      password: validated.password,
-    });
+    // A user with 2FA must finish the second step before the password changes.
+    const mfaError = await enforceMFAForOperation(supabase);
+    if (mfaError) return mfaError;
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
+    const breached = await breachedPasswordError(validated.password);
+    if (breached) return NextResponse.json({ error: breached }, { status: 400 });
 
-    return NextResponse.json({ message: 'Password updated successfully' });
+    const { error } = await supabase.auth.updateUser({ password: validated.password });
+    if (error) return NextResponse.json({ error: passwordUpdateError(error) }, { status: 400 });
+
+    await supabase.auth.signOut({ scope: 'others' });
+    return NextResponse.json({ message: AUTH_COPY.resetDone });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(zodToApiError(error), { status: 400 });

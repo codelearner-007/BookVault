@@ -1,9 +1,14 @@
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { Providers } from '@/components/common/Providers';
-import SuperAdminShellLayout from '@/components/super-admin/SuperAdminShellLayout';
-import { getMe } from '@/lib/server/me';
+import AppShell from '@/components/shell/AppShell';
+import { AdminClaimsProvider } from '@/components/admin/AdminClaimsContext';
+import { getMe, getUserClaims } from '@/lib/server/me';
+import { SIDEBAR_COOKIE, readSidebarState } from '@/lib/navigation/sidebar-state';
 
 export const dynamic = 'force-dynamic';
+
+const SUPER_ADMIN_ROLE = 'super_admin';
 
 export default async function Layout({ children }) {
   const user = await getMe();
@@ -12,10 +17,12 @@ export default async function Layout({ children }) {
     redirect('/auth/login?returnTo=/super-admin');
   }
 
+  const claims = getUserClaims(user);
   // Only super_admin users may access this section
-  if (user.app_metadata?.user_role !== 'super_admin') {
-    redirect('/app');
+  if (claims.user_role !== SUPER_ADMIN_ROLE) {
+    redirect('/admin');
   }
+  const sidebar = readSidebarState((await cookies()).get(SIDEBAR_COOKIE)?.value);
 
   return (
     <Providers
@@ -30,7 +37,11 @@ export default async function Layout({ children }) {
         mfaRequired: user.requiresMFA,
       }}
     >
-      <SuperAdminShellLayout>{children}</SuperAdminShellLayout>
+      <AdminClaimsProvider claims={claims}>
+        <AppShell role={claims.user_role} initialSidebar={sidebar}>
+          {children}
+        </AppShell>
+      </AdminClaimsProvider>
     </Providers>
   );
 }

@@ -91,7 +91,7 @@ export function ResetPasswordForm({ onSubmit, loading }) {
                 </div>
               )}
               <FormDescription>
-                Must contain at least 8 characters, including uppercase, lowercase, number, and special character
+                At least 12 characters. A passphrase of a few words works well.
               </FormDescription>
               <FormMessage />
             </FormItem>

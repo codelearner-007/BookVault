@@ -35,39 +35,39 @@ export function SecuritySection() {
   return (
     <div className="space-y-6">
       {/* 2FA setup card */}
-      <Card className="border-border/50 shadow-sm">
+      <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Two-Factor Authentication</CardTitle>
+          <CardTitle>Two-Factor Authentication</CardTitle>
           <CardDescription>
             Add an extra layer of security to your account
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="max-w-prose">
           <MFASetup />
         </CardContent>
       </Card>
 
       {/* How it works */}
-      <Card className="border-border/50 shadow-sm bg-muted/20">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-medium flex items-center gap-2">
-            <Shield className="h-4 w-4 text-primary" />
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="size-4 text-muted-foreground" aria-hidden="true" />
             How It Works
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-3">
             {howItWorks.map((step, i) => (
-              <div key={i} className="flex flex-col gap-2 p-3 rounded-lg bg-background/50 border border-border/50">
+              <div key={i} className="flex flex-col gap-2 rounded-control bg-muted p-3">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold">
+                  <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-mono text-xs font-bold text-mono-foreground">
                     {i + 1}
                   </div>
-                  <step.icon className="h-4 w-4 text-muted-foreground" />
+                  <step.icon className="size-4 text-muted-foreground" aria-hidden="true" />
                 </div>
                 <div>
-                  <p className="font-medium text-sm">{step.title}</p>
-                  <p className="text-xs text-muted-foreground mt-1 leading-snug">
+                  <p className="font-medium">{step.title}</p>
+                  <p className="mt-1 text-sm leading-snug text-muted-foreground">
                     {step.description}
                   </p>
                 </div>

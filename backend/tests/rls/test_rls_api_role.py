@@ -103,6 +103,8 @@ async def test_rls_helpers_are_security_definer_with_empty_search_path(db_conn):
 
 
 APPEND_ONLY = {"audit_logs"}
+# One row per business, inserted by a trigger and removed by the FK cascade (B0.7).
+SINGLETONS = {"business_settings"}
 
 
 async def test_business_tables_have_policies_for_every_command(db_conn):
@@ -119,6 +121,8 @@ async def test_business_tables_have_policies_for_every_command(db_conn):
             continue
         # audit_logs is append-only (B0.5): read and insert, never update or delete.
         expected = {"SELECT", "INSERT"} if table in APPEND_ONLY else {"SELECT", "INSERT", "DELETE"}
+        if table in SINGLETONS:
+            expected = {"SELECT"}
         assert expected <= commands, table
 
 

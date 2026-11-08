@@ -30,6 +30,7 @@ class MembershipRow:
     access_mode: str
     status_key: str
     allowed: bool
+    requires_mfa: bool
 
 
 _MEMBERSHIP_SQL = text(
@@ -38,11 +39,13 @@ _MEMBERSHIP_SQL = text(
            CASE WHEN CAST(:area_key AS text) IS NULL THEN true
                 ELSE public.member_has_area_access(
                     b.id, CAST(:user_id AS uuid), CAST(:area_key AS text), CAST(:right_key AS text))
-           END
+           END,
+           COALESCE(bs.require_member_mfa, false)
     FROM public.businesses b
     JOIN public.business_members bm
       ON bm.business_id = b.id AND bm.user_id = CAST(:user_id AS uuid)
     JOIN public.member_statuses s ON s.id = bm.status_id
+    LEFT JOIN public.business_settings bs ON bs.business_id = b.id
     WHERE b.id = CAST(:business_id AS uuid)
     """
 )

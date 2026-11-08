@@ -1,8 +1,10 @@
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { Providers } from '@/components/common/Providers';
-import AdminShellLayout from '@/components/admin/AdminShellLayout';
+import AppShell from '@/components/shell/AppShell';
 import { AdminClaimsProvider } from '@/components/admin/AdminClaimsContext';
 import { getMe, getUserClaims } from '@/lib/server/me';
+import { SIDEBAR_COOKIE, readSidebarState } from '@/lib/navigation/sidebar-state';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +16,7 @@ export default async function Layout({ children }) {
   }
 
   const claims = getUserClaims(user);
+  const sidebar = readSidebarState((await cookies()).get(SIDEBAR_COOKIE)?.value);
 
   return (
     <Providers
@@ -29,7 +32,9 @@ export default async function Layout({ children }) {
       }}
     >
       <AdminClaimsProvider claims={claims}>
-        <AdminShellLayout>{children}</AdminShellLayout>
+        <AppShell role={claims.user_role} initialSidebar={sidebar}>
+          {children}
+        </AppShell>
       </AdminClaimsProvider>
     </Providers>
   );

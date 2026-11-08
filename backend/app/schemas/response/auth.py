@@ -11,3 +11,13 @@ class CurrentUserResponse(BaseModel):
     user_role: str
     hierarchy_level: int
     must_change_password: bool
+
+
+class RecoveryCodesResponse(BaseModel):
+    """A new set of recovery codes; shown once, never retrievable again."""
+
+    codes: list[str]
+
+
+class RecoveryCodesStatusResponse(BaseModel):
+    remaining: int

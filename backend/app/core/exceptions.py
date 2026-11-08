@@ -146,3 +146,14 @@ class IdempotencyKeyReusedError(ConflictError):
             "This Idempotency-Key was already used with a different request",
             "idempotency_key_reused",
         )
+
+
+class MfaEnrollmentRequiredError(AppException):
+    """403: this area needs an AAL2 session; the client sends the user to 2FA (enroll or verify)."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            message="Two-factor authentication is required here",
+            status_code=403,
+            details={"code": "mfa_enrollment_required"},
+        )

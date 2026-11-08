@@ -35,32 +35,34 @@ function SortableColRow({ col, onToggle, isLast }) {
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`flex items-center gap-3 px-4 py-2.5 select-none transition-colors ${isLast ? '' : 'border-b border-border'} ${isDragging ? 'opacity-50 bg-muted/40' : 'bg-card hover:bg-muted/20'}`}
+      className={`flex h-row items-center gap-3 px-2 select-none transition-colors ${isLast ? '' : 'border-b border-row-divider'} ${isDragging ? 'opacity-50 bg-row-selected' : 'hover:bg-row-hover'}`}
     >
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon-sm"
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none flex-shrink-0"
+        className="cursor-grab touch-none active:cursor-grabbing"
         aria-label="Drag to reorder"
       >
-        <GripVertical className="h-3.5 w-3.5" />
-      </button>
+        <GripVertical />
+      </Button>
       <Checkbox
         id={`col-editor-${col.key}`}
         checked={col.visible}
         onCheckedChange={() => !col.locked && onToggle(col.key)}
         disabled={col.locked}
-        className="h-3.5 w-3.5 flex-shrink-0"
+        className="shrink-0"
       />
       <Label
         htmlFor={`col-editor-${col.key}`}
-        className={`text-sm flex-1 ${col.locked ? 'text-muted-foreground cursor-not-allowed' : 'text-foreground cursor-pointer'}`}
+        className={`flex-1 text-base ${col.locked ? 'text-muted-foreground cursor-not-allowed' : ''}`}
       >
         {col.label}
       </Label>
       {col.locked && (
-        <Lock className="h-3 w-3 text-muted-foreground/50 flex-shrink-0" />
+        <Lock className="me-2 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       )}
     </div>
   );
@@ -109,9 +111,9 @@ export default function ColEditorDialog({ open, onOpenChange, cols, onApply }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-64 p-0 gap-0 overflow-hidden">
-        <DialogHeader className="px-4 py-3 border-b border-border bg-muted/30">
-          <DialogTitle className="text-sm font-semibold">Edit Columns</DialogTitle>
+      <DialogContent className="md:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Edit Columns</DialogTitle>
         </DialogHeader>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={draftCols.map((c) => c.key)} strategy={verticalListSortingStrategy}>
@@ -125,17 +127,12 @@ export default function ColEditorDialog({ open, onOpenChange, cols, onApply }) {
             ))}
           </SortableContext>
         </DndContext>
-        <DialogFooter className="px-4 py-3 border-t border-border bg-muted/20 flex-row gap-2 sm:justify-start">
-          <Button size="sm" className="cursor-pointer h-7 text-xs" onClick={handleApply}>
-            Apply
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="cursor-pointer h-7 text-xs text-muted-foreground"
-            onClick={() => onOpenChange(false)}
-          >
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Cancel
+          </Button>
+          <Button onClick={handleApply}>
+            Apply
           </Button>
         </DialogFooter>
       </DialogContent>

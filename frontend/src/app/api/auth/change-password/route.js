@@ -3,103 +3,54 @@ import { createSSRClient } from '@/lib/supabase/server';
 import { createServerAdminClient } from '@/lib/supabase/serverAdminClient';
 import { enforceMFAForOperation } from '@/lib/utils/mfa-check';
 import { enforceSameOrigin } from '@/lib/utils/origin';
-import { strongPasswordSchema } from '@/lib/schemas/password.schema';
+import { changePasswordSchema } from '@/lib/schemas/auth.schema';
 import { zodToApiError } from '@/lib/utils/api-errors';
+import { enforceAuthRateLimit } from '@/lib/server/auth-guard';
+import { breachedPasswordError, passwordUpdateError, verifyPassword } from '@/lib/server/auth-session';
+import { AUTH_COPY } from '@/lib/copy/auth';
 import { z } from 'zod';
 
-// TODO: Add rate limiting for production
-// Consider Vercel Edge Config, Upstash Redis, or middleware-based solutions
-// Recommended: 5 attempts per 15 minutes per IP address
+/** Change password with re-authentication (current password, plus AAL2 when 2FA is on). */
 export async function POST(request) {
   try {
     const originError = enforceSameOrigin(request);
     if (originError) return originError;
 
     const supabase = await createSSRClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: AUTH_COPY.unauthorized }, { status: 401 });
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const limited = enforceAuthRateLimit(request, 'change_password', user.id);
+    if (limited) return limited;
 
-    // Change password is a sensitive operation - enforce MFA if user has it enabled
     const mfaError = await enforceMFAForOperation(supabase);
     if (mfaError) return mfaError;
 
-    const body = await request.json();
-    const { currentPassword, newPassword, confirmPassword } = body;
-
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      return NextResponse.json(
-        { error: 'All fields are required' },
-        { status: 400 }
-      );
+    const { currentPassword, newPassword } = changePasswordSchema.parse(await request.json());
+    if (!(await verifyPassword(user.email, currentPassword))) {
+      return NextResponse.json({ error: AUTH_COPY.currentPasswordWrong }, { status: 401 });
     }
 
-    if (newPassword !== confirmPassword) {
-      return NextResponse.json(
-        { error: 'New passwords do not match' },
-        { status: 400 }
-      );
-    }
+    const breached = await breachedPasswordError(newPassword);
+    if (breached) return NextResponse.json({ error: breached }, { status: 400 });
 
-    strongPasswordSchema.parse(newPassword);
-
-    if (currentPassword === newPassword) {
-      return NextResponse.json(
-        { error: 'New password must be different from current password' },
-        { status: 400 }
-      );
-    }
-
-    // Verify current password before allowing the change
-    const adminClient = await createServerAdminClient();
-    const { error: verifyError } = await adminClient.auth.signInWithPassword({
-      email: user.email,
-      password: currentPassword,
-    });
-
-    if (verifyError) {
-      return NextResponse.json(
-        { error: 'Current password is incorrect' },
-        { status: 401 }
-      );
-    }
-
-    // Update to new password
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword,
-    });
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) return NextResponse.json({ error: passwordUpdateError(error) }, { status: 400 });
 
     // A forced change (D-30) is done: clear the flag and refresh the session token.
     if (user.app_metadata?.must_change_password) {
-      await adminClient.auth.admin.updateUserById(user.id, {
-        app_metadata: { must_change_password: false },
-      });
+      const adminClient = await createServerAdminClient();
+      await adminClient.auth.admin.updateUserById(user.id, { app_metadata: { must_change_password: false } });
       await supabase.auth.refreshSession();
     }
 
-    // Sign out all other sessions for security (keep current session)
     await supabase.auth.signOut({ scope: 'others' });
-
-    return NextResponse.json({
-      success: true,
-      message: 'Password changed successfully',
-    });
+    return NextResponse.json({ success: true, message: AUTH_COPY.passwordChanged });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(zodToApiError(error), { status: 400 });
     }
-    console.error('Error changing password:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Error changing password:', error?.message);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

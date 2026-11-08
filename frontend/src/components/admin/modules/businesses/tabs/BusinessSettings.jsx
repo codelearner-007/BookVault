@@ -1,7 +1,9 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Building2, BookOpen, ChevronRight } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { PageHeader } from '@/components/common/page';
 
 const SETTING_PAGES = [
   {
@@ -19,44 +21,28 @@ const SETTING_PAGES = [
 ];
 
 export default function BusinessSettings({ business }) {
-  const router = useRouter();
-
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
-      <div>
-        <h2 className="text-xl font-bold text-foreground">Settings</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Manage settings for {business.name}.
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        {SETTING_PAGES.map(({ key, label, description, icon: Icon, comingSoon }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => !comingSoon && router.push(`?tab=settings&page=${key}`)}
-            className={`w-full flex items-center gap-4 px-4 py-3 rounded-lg border border-border bg-card text-left transition-colors
-              ${comingSoon ? 'opacity-60 cursor-not-allowed' : 'hover:bg-muted cursor-pointer'}`}
-          >
-            <div className="h-9 w-9 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
-              <Icon className="h-4 w-4 text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground flex items-center gap-2">
-                {label}
-                {comingSoon && (
-                  <span className="text-xs font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                    Coming Soon
-                  </span>
-                )}
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-            </div>
-            {!comingSoon && <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
-          </button>
-        ))}
-      </div>
-    </div>
+    <>
+      <PageHeader title="Settings" description={`Manage settings for ${business.name}.`} />
+      <Card className="max-w-prose p-2">
+        <ul>
+          {SETTING_PAGES.map(({ key, label, description, icon: Icon }) => (
+            <li key={key} className="border-b border-row-divider last:border-b-0">
+              <Link
+                href={`?tab=settings&page=${key}`}
+                className="flex items-center gap-4 rounded-control px-3 py-3 transition-colors duration-150 hover:bg-row-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <Icon className="size-5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">{label}</span>
+                  <span className="mt-0.5 block text-sm text-muted-foreground">{description}</span>
+                </span>
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </>
   );
 }

@@ -2,21 +2,21 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const Input = React.forwardRef(
-  ({ className, type, ...props }, ref) => {
-    return (
-      <input
-        type={type}
-        className={cn(
-          "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-          className
-        )}
-        ref={ref}
-        {...props}
-      />
-    )
-  }
-)
+export const fieldClass =
+  "w-full rounded-control border border-input bg-field text-field text-foreground shadow-field transition-[border-color,box-shadow] duration-150 ease-out placeholder:text-placeholder hover:border-input-hover focus-visible:border-ring focus-visible:shadow-[0_0_0_2px_var(--ring-soft)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45 aria-[invalid=true]:border-bad"
+
+const Input = React.forwardRef(({ className, type, ...props }, ref) => (
+  <input
+    type={type}
+    className={cn(
+      fieldClass,
+      "flex h-control px-3.5 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground",
+      className
+    )}
+    ref={ref}
+    {...props}
+  />
+))
 Input.displayName = "Input"
 
 export { Input }

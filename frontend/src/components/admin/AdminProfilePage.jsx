@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { User, Key, Shield } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PageHeader } from '@/components/common/page';
 import { ProfileSection } from '@/components/app/user-settings/ProfileSection';
 import { PasswordSection } from '@/components/app/user-settings/PasswordSection';
 import { SecuritySection } from '@/components/app/user-settings/SecuritySection';
@@ -21,27 +22,21 @@ export default function AdminProfilePage() {
   };
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Profile</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage your profile, password, and security settings
-        </p>
-      </div>
+    <div>
+      <PageHeader title="Account" description="Manage your profile, password, and security settings" />
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="profile" className="gap-2">
-            <User className="h-4 w-4" />
+        <TabsList>
+          <TabsTrigger value="profile">
+            <User className="size-4" aria-hidden="true" />
             Profile
           </TabsTrigger>
-          <TabsTrigger value="password" className="gap-2">
-            <Key className="h-4 w-4" />
+          <TabsTrigger value="password">
+            <Key className="size-4" aria-hidden="true" />
             Password
           </TabsTrigger>
-          <TabsTrigger value="security" className="gap-2">
-            <Shield className="h-4 w-4" />
+          <TabsTrigger value="security">
+            <Shield className="size-4" aria-hidden="true" />
             Security
           </TabsTrigger>
         </TabsList>

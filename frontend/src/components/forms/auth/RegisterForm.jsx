@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { registerSchema } from '@/lib/schemas/auth.schema';
-import { getPasswordStrength } from '@/lib/schemas/password.schema';
+import { getPasswordStrength, PASSWORD_MIN_LENGTH } from '@/lib/schemas/password.schema';
+import { listCountries } from '@/lib/services/countries.service';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -16,10 +17,21 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+
+// Region of the browser locale ("en-PK" -> "PK"), used to prefill the country (B0.7).
+function browserRegion() {
+  try {
+    return new Intl.Locale(navigator.language).maximize().region ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export function RegisterForm({ onSubmit, loading }) {
   const [passwordStrength, setPasswordStrength] = useState(0);
+  const [countries, setCountries] = useState([]);
   const form = useForm({
     resolver: zodResolver(registerSchema),
     defaultValues: {
@@ -27,8 +39,19 @@ export function RegisterForm({ onSubmit, loading }) {
       password: '',
       confirmPassword: '',
       full_name: '',
+      country_id: '',
     },
   });
+
+  useEffect(() => {
+    listCountries()
+      .then(({ items }) => {
+        setCountries(items);
+        const match = items.find((country) => country.code === browserRegion());
+        if (match && !form.getValues('country_id')) form.setValue('country_id', match.id);
+      })
+      .catch(() => setCountries([]));
+  }, [form]);
 
   const handleSubmit = async (data) => {
     const result = await onSubmit(data);
@@ -69,6 +92,31 @@ export function RegisterForm({ onSubmit, loading }) {
               <FormControl>
                 <Input type="email" placeholder="you@example.com" autoComplete="email" {...field} />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="country_id"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Country</FormLabel>
+              <Select value={field.value} onValueChange={field.onChange}>
+                <FormControl>
+                  <SelectTrigger aria-label="Country">
+                    <SelectValue placeholder="Select your country" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {countries.map((country) => (
+                    <SelectItem key={country.id} value={country.id}>
+                      {country.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}
@@ -117,7 +165,7 @@ export function RegisterForm({ onSubmit, loading }) {
                 </div>
               )}
               <FormDescription>
-                Must contain at least 8 characters, including uppercase, lowercase, number, and special character
+                At least {PASSWORD_MIN_LENGTH} characters. A passphrase of a few words works well.
               </FormDescription>
               <FormMessage />
             </FormItem>

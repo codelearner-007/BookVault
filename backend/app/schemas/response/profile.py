@@ -14,6 +14,8 @@ class ProfileResponse(BaseModel):
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
     department: Optional[str] = None
+    country_id: Optional[str] = None
+    country_prompt_dismissed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
