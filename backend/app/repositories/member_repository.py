@@ -69,7 +69,7 @@ _MEMBER_LIST_SQL = text(
     FROM public.business_members bm
     JOIN public.businesses b ON b.id = bm.business_id
     JOIN public.member_statuses s ON s.id = bm.status_id
-    JOIN auth.users u ON u.id = bm.user_id
+    JOIN private.accounts u ON u.id = bm.user_id
     LEFT JOIN public.user_profiles p ON p.user_id = bm.user_id
     WHERE bm.business_id = CAST(:business_id AS uuid) AND s.key <> 'removed'
     ORDER BY bm.created_at

@@ -21,8 +21,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Database
-    DATABASE_URL: str = "postgresql://postgres:postgres@127.0.0.1:55322/postgres"
+    # Database: the bookvault_api role (B0.4). No default, so credentials never live in code (CS-22).
+    DATABASE_URL: str
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
 

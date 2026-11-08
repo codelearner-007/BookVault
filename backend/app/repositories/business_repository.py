@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import text, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.admin_tab import AdminTab
@@ -50,11 +50,15 @@ class BusinessRepository(BaseRepository[Business]):
         return result.scalar_one_or_none()
 
     async def count_all_by_owner(self, owner_id: str) -> int:
-        """Return how many businesses (active or soft-deleted) the given auth user owns."""
+        """How many businesses (active or soft-deleted) the user owns; caller is self or super admin.
+
+        A SECURITY DEFINER function, because the platform path has no tenant row access (D-14).
+        """
         result = await self.session.execute(
-            select(func.count()).select_from(Business).where(Business.owner_id == owner_id)
+            text("SELECT public.count_owned_businesses(CAST(:owner_id AS uuid), true)"),
+            {"owner_id": owner_id},
         )
-        return result.scalar_one()
+        return int(result.scalar() or 0)
 
     async def hard_delete(self, business_id: str, owner_id: str) -> None:
         """Permanently delete a business from the database if it belongs to the given owner."""

@@ -1,5 +1,7 @@
 # DB Migration Manager - Agent Memory
 
+- [Supabase role/RLS constraints](supabase_role_constraints.md) — postgres not superuser; owner-change order; auth.users RLS; app.user_id '' after SET LOCAL
+
 ## Project Schema (as of 2026-04-05)
 
 ### RBAC Tables (6, migration 20260201000001)

@@ -1,12 +1,37 @@
-"""Database session management with connection pooling."""
+"""Database session management with connection pooling and per-transaction RLS context."""
 
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
+
+# session.info keys read at the start of every transaction (B0.4, platform-model 5.2)
+REQUEST_USER_KEY = "app_user_id"
+DB_ROLE_KEY = "db_role"  # tests only: SET LOCAL ROLE for a session bound to a postgres connection
+
+_SET_CONTEXT = text("SELECT set_config('app.user_id', :user_id, true)")
+
+
+@event.listens_for(Session, "after_begin")
+def _apply_rls_context(session: Session, _transaction, connection) -> None:
+    """SET LOCAL the verified caller for RLS at the start of each transaction.
+
+    Transaction-scoped, so a pooled connection never carries a previous caller; a
+    session without a caller sets '' and the policies see no tenant rows.
+    """
+    role = session.info.get(DB_ROLE_KEY)
+    if role:
+        connection.exec_driver_sql(f'SET LOCAL ROLE "{role}"')
+    connection.execute(_SET_CONTEXT, {"user_id": session.info.get(REQUEST_USER_KEY) or ""})
+
+
+def bind_request_user(session: AsyncSession, user_id: str | None) -> None:
+    """Attach the verified JWT subject (never client input) to the session."""
+    session.sync_session.info[REQUEST_USER_KEY] = str(user_id) if user_id else None
 
 
 class SessionManager:
@@ -14,19 +39,16 @@ class SessionManager:
 
     def __init__(self) -> None:
         """Initialize the session manager with connection pool."""
-        # Convert postgresql:// to postgresql+asyncpg://
-        database_url = settings.DATABASE_URL.replace(
-            "postgresql://", "postgresql+asyncpg://"
-        )
+        database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 
         self.engine: AsyncEngine = create_async_engine(
             database_url,
-            pool_size=settings.DB_POOL_SIZE,  # Base pool size
-            max_overflow=settings.DB_MAX_OVERFLOW,  # Additional connections
-            pool_timeout=30,  # Wait time before error
-            pool_recycle=1800,  # Recycle connections after 30 minutes
-            pool_pre_ping=True,  # Verify connection health before use
-            echo=settings.ENVIRONMENT == "development",  # Log SQL in dev mode
+            pool_size=settings.DB_POOL_SIZE,
+            max_overflow=settings.DB_MAX_OVERFLOW,
+            pool_timeout=30,
+            pool_recycle=1800,
+            pool_pre_ping=True,
+            echo=settings.ENVIRONMENT == "development",
         )
 
         self.async_session_maker = sessionmaker(
@@ -36,18 +58,10 @@ class SessionManager:
         )
 
     @asynccontextmanager
-    async def session(self) -> AsyncGenerator[AsyncSession, None]:
-        """
-        Provide a transactional scope for database operations.
-
-        Yields:
-            AsyncSession instance
-
-        Example:
-            async with session_manager.session() as session:
-                result = await session.execute(query)
-        """
+    async def session(self, user_id: str | None = None) -> AsyncGenerator[AsyncSession, None]:
+        """Transactional scope; `user_id` is the verified caller the RLS policies see."""
         async with self.async_session_maker() as session:
+            bind_request_user(session, user_id)
             try:
                 yield session
                 await session.commit()

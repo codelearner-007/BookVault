@@ -32,23 +32,6 @@ PASSWORD_CHANGE_EXEMPT_PATHS = frozenset({"/api/v1/auth/me", "/api/v1/profile"})
 security = HTTPBearer(auto_error=False)
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Provide database session for dependency injection.
-
-    Yields:
-        AsyncSession instance
-
-    Example:
-        @router.get("/users")
-        async def get_users(db: AsyncSession = Depends(get_db)):
-            ...
-    """
-    session_manager = get_session_manager()
-    async with session_manager.session() as session:
-        yield session
-
-
 def _reassemble_cookie_value(cookies: dict[str, str], base_name: str) -> Optional[str]:
     """
     Reassemble possibly-chunked cookie values.
@@ -158,45 +141,40 @@ def extract_token_from_cookies(request: Request) -> Optional[str]:
     return _maybe_extract_access_token(payload)
 
 
-async def get_current_user(
+async def get_verified_claims(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-) -> CurrentUser:
+) -> Optional[dict]:
+    """Verified JWT claims of the caller, or None when the request carries no token.
+
+    Token from the Authorization header first, then the Supabase SSR cookies. A token
+    that is present is always verified (never blindly decoded); an invalid one is a 401.
+    FastAPI caches this per request, so get_current_user and get_db share one check.
     """
-    Extract and validate current user from JWT token.
-
-    Supports token from:
-    1. Authorization: Bearer <token> header (if present)
-    2. Supabase SSR cookies (fallback for Next.js/Vercel rewrite flows)
-
-    Args:
-        request: FastAPI request object
-        credentials: HTTP Authorization header with Bearer token (optional)
-
-    Returns:
-        CurrentUser instance with user_id, email, role, permissions
-
-    Raises:
-        HTTPException: 401 if token is invalid or expired
-
-    Example:
-        @router.get("/profile")
-        async def get_profile(current_user: CurrentUser = Depends(get_current_user)):
-            print(current_user.user_id, current_user.permissions)
-    """
-    # Priority 1: Authorization header
     token = credentials.credentials if credentials else None
-
-    # Priority 2: Supabase SSR cookies (for Next.js/Vercel rewrite flows)
     if not token:
         token = extract_token_from_cookies(request)
-
     if not token:
-        raise InvalidTokenError("Missing authentication token (header or Supabase SSR cookie)")
+        return None
+    return extract_user_claims(await verify_token(token))
 
-    # Always verify JWT, never blindly decode
-    payload = await verify_token(token)
-    claims = extract_user_claims(payload)
+
+async def get_db(
+    claims: Optional[dict] = Depends(get_verified_claims),
+) -> AsyncGenerator[AsyncSession, None]:
+    """Session whose transactions carry the verified caller as app.user_id (RLS, B0.4)."""
+    user_id = claims.get("user_id") if claims else None
+    async with get_session_manager().session(user_id) as session:
+        yield session
+
+
+async def get_current_user(
+    request: Request,
+    claims: Optional[dict] = Depends(get_verified_claims),
+) -> CurrentUser:
+    """The authenticated caller (user_id, email, role, permissions); 401 without a valid token."""
+    if claims is None:
+        raise InvalidTokenError("Missing authentication token (header or Supabase SSR cookie)")
     user = CurrentUser(**claims)
     if user.must_change_password and request.url.path not in PASSWORD_CHANGE_EXEMPT_PATHS:
         raise AppException(

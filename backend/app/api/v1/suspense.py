@@ -44,15 +44,11 @@ async def get_suspense_balance(
     db: AsyncSession = Depends(get_db),
 ) -> SuspenseBalanceResponse:
     result = await db.execute(
-        text(
-            "SELECT suspense_balance"
-            " FROM private.business_suspense_balance"
-            " WHERE business_id = :business_id"
-        ),
+        # The view has no RLS; the function checks suspense:view for the caller (B0.4).
+        text("SELECT public.business_suspense_balance_for(CAST(:business_id AS uuid))"),
         {"business_id": business_id},
     )
-    row = result.mappings().one_or_none()
-    balance = float(row["suspense_balance"]) if row else 0.0
+    balance = float(result.scalar() or 0)
     return SuspenseBalanceResponse(business_id=business_id, suspense_balance=balance)
 
 

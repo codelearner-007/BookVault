@@ -51,8 +51,7 @@ class ManagedUserService:
         self.repo = ManagedUserRepository(session)
 
     async def email_is_usable(self, email: str) -> bool:
-        bootstrap = normalize_email(await self.repo.get_bootstrap_email())
-        if bootstrap and normalize_email(email) == bootstrap:
+        if await self.repo.is_bootstrap_email(normalize_email(email)):
             return False
         return not await self.repo.email_has_account(email)
 

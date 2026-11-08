@@ -1,12 +1,9 @@
-"""Read-only queries about accounts for business user management (auth.users is Supabase-owned)."""
+"""Read-only queries about accounts for business user management (auth.users via private.accounts)."""
 
 from dataclasses import dataclass
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-
-BOOTSTRAP_EMAIL_KEY = "bootstrap_super_admin_email"
-
 
 @dataclass(frozen=True)
 class AccountRow:
@@ -26,7 +23,7 @@ _ACCOUNT_SQL = text(
             WHERE ur.user_id = u.id ORDER BY r.hierarchy_level DESC LIMIT 1),
            COALESCE(p.is_provisioned, false), p.created_by_user_id::text,
            COALESCE(u.banned_until > now(), false)
-    FROM auth.users u
+    FROM private.accounts u
     LEFT JOIN public.user_profiles p ON p.user_id = u.id
     WHERE u.id = CAST(:user_id AS uuid)
     """
@@ -39,7 +36,7 @@ _CREATED_BY_SQL = text(
             WHERE ur.user_id = u.id ORDER BY r.hierarchy_level DESC LIMIT 1),
            p.is_provisioned, p.created_by_user_id::text, COALESCE(u.banned_until > now(), false)
     FROM public.user_profiles p
-    JOIN auth.users u ON u.id = p.user_id
+    JOIN private.accounts u ON u.id = p.user_id
     WHERE p.created_by_user_id = CAST(:creator_id AS uuid)
     ORDER BY u.created_at
     LIMIT :limit OFFSET :offset
@@ -71,26 +68,21 @@ class ManagedUserRepository:
 
     async def email_has_account(self, email: str) -> bool:
         result = await self.session.execute(
-            text("SELECT EXISTS (SELECT 1 FROM auth.users WHERE lower(email) = lower(:email))"),
+            text("SELECT public.email_has_account(:email)"),
             {"email": email},
         )
         return bool(result.scalar())
 
-    async def get_bootstrap_email(self) -> str | None:
+    async def is_bootstrap_email(self, email: str) -> bool:
+        # platform_settings is reachable only through SECURITY DEFINER functions (B0.4).
         result = await self.session.execute(
-            text("SELECT text_value FROM public.platform_settings WHERE key = :key"),
-            {"key": BOOTSTRAP_EMAIL_KEY},
+            text("SELECT public.is_bootstrap_super_admin_email(:email)"), {"email": email}
         )
-        return result.scalar_one_or_none()
+        return bool(result.scalar())
 
     async def set_bootstrap_email(self, email: str | None) -> None:
         await self.session.execute(
-            text(
-                "INSERT INTO public.platform_settings (key, value_type, text_value, updated_at)"
-                " VALUES (:key, 'text', :email, now())"
-                " ON CONFLICT (key) DO UPDATE SET text_value = EXCLUDED.text_value, updated_at = now()"
-            ),
-            {"key": BOOTSTRAP_EMAIL_KEY, "email": email},
+            text("SELECT public.set_bootstrap_super_admin_email(:email)"), {"email": email}
         )
 
     async def update_full_name(self, user_id: str, full_name: str) -> None:
@@ -101,9 +93,9 @@ class ManagedUserRepository:
         )
 
     async def count_active_owned_businesses(self, user_id: str) -> int:
+        # SECURITY DEFINER: the super admin sees the count, never the businesses (D-14).
         result = await self.session.execute(
-            text("SELECT count(*) FROM public.businesses"
-                 " WHERE owner_id = CAST(:user_id AS uuid) AND deleted_at IS NULL"),
+            text("SELECT public.count_owned_businesses(CAST(:user_id AS uuid), false)"),
             {"user_id": user_id},
         )
-        return int(result.scalar_one())
+        return int(result.scalar() or 0)

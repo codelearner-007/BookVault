@@ -29,14 +29,18 @@ from collections.abc import AsyncGenerator  # noqa: E402
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402
+from fastapi import Depends  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine  # noqa: E402
 from sqlalchemy.pool import NullPool  # noqa: E402
 
-from app.core.dependencies import get_db  # noqa: E402
+from app.core.dependencies import get_db, get_verified_claims  # noqa: E402
+from app.db.session import DB_ROLE_KEY, bind_request_user  # noqa: E402
 from app.main import app  # noqa: E402
 from tests.support.factories import UserFactory  # noqa: E402
 from tests.support.test_db import build_test_database  # noqa: E402
 
+API_DB_ROLE = "bookvault_api"
 ASYNC_TEST_DATABASE_URL = TEST_DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 
 
@@ -73,16 +77,25 @@ async def db_conn() -> AsyncGenerator[AsyncConnection, None]:
 async def client(db_conn: AsyncConnection) -> AsyncGenerator[httpx.AsyncClient, None]:
     """HTTP client whose requests run inside the test's rolled-back transaction."""
 
-    async def _get_test_db() -> AsyncGenerator[AsyncSession, None]:
+    async def _get_test_db(
+        claims: dict | None = Depends(get_verified_claims),
+    ) -> AsyncGenerator[AsyncSession, None]:
+        """Like get_db, but as the API role on the test connection (RLS applies, B0.4)."""
         async with AsyncSession(
             bind=db_conn, join_transaction_mode="create_savepoint", expire_on_commit=False
         ) as session:
+            session.sync_session.info[DB_ROLE_KEY] = API_DB_ROLE
+            bind_request_user(session, claims.get("user_id") if claims else None)
             try:
                 yield session
                 await session.commit()
             except Exception:
                 await session.rollback()
                 raise
+            finally:
+                # A released savepoint keeps SET LOCAL; give the test its postgres session back.
+                await db_conn.execute(text("RESET ROLE"))
+                await db_conn.execute(text("SELECT set_config('app.user_id', '', true)"))
 
     app.dependency_overrides[get_db] = _get_test_db
     transport = httpx.ASGITransport(app=app)

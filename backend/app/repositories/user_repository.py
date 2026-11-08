@@ -1,4 +1,4 @@
-"""User repository for auth.users queries."""
+"""User repository: account queries through private.accounts (filtered view of auth.users)."""
 
 from typing import Any, Dict, List, Optional
 
@@ -21,7 +21,7 @@ class UserRepository:
                     COUNT(*) FILTER (WHERE banned_until > NOW()) as banned_users,
                     COUNT(*) FILTER (WHERE email_confirmed_at IS NOT NULL) as verified_users,
                     COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days') as new_users_30d
-                FROM auth.users
+                FROM private.accounts
             """)
         )
         row = result.one()
@@ -41,7 +41,7 @@ class UserRepository:
         search: Optional[str] = None,
     ) -> int:
         where_clause, params = self._build_where(role, email_verified, status, search)
-        query = text(f"SELECT COUNT(DISTINCT u.id) FROM auth.users u {where_clause}")
+        query = text(f"SELECT COUNT(DISTINCT u.id) FROM private.accounts u {where_clause}")
         result = await self.session.execute(query.bindparams(**params))
         return result.scalar() or 0
 
@@ -64,7 +64,7 @@ class UserRepository:
                 u.last_sign_in_at,
                 u.email_confirmed_at,
                 u.banned_until
-            FROM auth.users u
+            FROM private.accounts u
             {where_clause}
             ORDER BY u.created_at DESC
             LIMIT :limit OFFSET :offset

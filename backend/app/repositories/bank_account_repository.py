@@ -102,25 +102,12 @@ class BankAccountRepository(BaseRepository[BankAccount]):
     ) -> None:
         """Recompute current_balance from opening_balance + sum of all receipt line totals.
 
-        Uses a raw SQL expression to aggregate the JSONB ``lines`` array totals from
-        the receipts table.  This mirrors the DB trigger as a belt-and-suspenders
-        safety net run after every receipt write.
+        Calls the same SECURITY DEFINER function as the receipts trigger, so a member with
+        receipts rights but no bank-account edit right still gets a correct balance (B0.4).
+        The account was already checked to belong to ``business_id`` by the caller.
         """
         await self.session.execute(
-            text(
-                """
-                UPDATE bank_accounts
-                SET current_balance = opening_balance + COALESCE((
-                    SELECT SUM((line->>'total')::numeric)
-                    FROM   receipts,
-                           LATERAL jsonb_array_elements(lines) AS line
-                    WHERE  receipts.received_in_account_id = :account_id
-                    AND    receipts.business_id            = :business_id
-                ), 0)
-                WHERE id          = :account_id
-                AND   business_id = :business_id
-                """
-            ),
-            {"account_id": bank_account_id, "business_id": business_id},
+            text("SELECT public.recalculate_bank_account_balance(CAST(:account_id AS uuid))"),
+            {"account_id": bank_account_id},
         )
         await self.session.flush()

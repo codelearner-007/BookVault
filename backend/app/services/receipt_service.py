@@ -32,7 +32,7 @@ class ReceiptService:
     async def _refresh_suspense(self) -> None:
         """Refresh the suspense balance materialized view."""
         await self.session.execute(
-            text("REFRESH MATERIALIZED VIEW CONCURRENTLY private.business_suspense_balance")
+            text("SELECT public.refresh_business_suspense_balance()")
         )
 
     async def _validate_references(self, business_id: str, fields: dict[str, object]) -> None:
