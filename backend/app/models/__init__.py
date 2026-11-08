@@ -35,7 +35,10 @@ from app.models.ledger import (
     OpeningBalance,
 )
 from app.models.mfa_recovery_code import MfaRecoveryCode
-from app.models.receipt import Receipt
+from app.models.attachment import Attachment, AttachmentContent
+from app.models.bank_account import BankAccount
+from app.models.banking import CashTransaction, CashTransactionLine, InterAccountTransfer
+from app.models.party import CapitalAccount
 from app.models.supplier import Supplier
 from app.models.permission import Permission
 from app.models.role import Role
@@ -75,7 +78,13 @@ __all__ = [
     "OpeningBalance",
     "CoaGroup",
     "Customer",
-    "Receipt",
+    "Attachment",
+    "AttachmentContent",
+    "BankAccount",
+    "CapitalAccount",
+    "CashTransaction",
+    "CashTransactionLine",
+    "InterAccountTransfer",
     "Supplier",
     "Permission",
     "Role",

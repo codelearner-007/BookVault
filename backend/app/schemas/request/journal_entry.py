@@ -32,6 +32,8 @@ class AmountsIn(RequestModel):
 class JournalLineIn(AmountsIn):
     account_id: IdStr
     description: OptionalText = None
+    bank_account_id: IdStr | None = None  # Cash & cash equivalents lines (T08)
+    party_id: IdStr | None = None  # control-account lines (capital accounts, ...)
 
 
 class JournalEntryFields(RequestModel):

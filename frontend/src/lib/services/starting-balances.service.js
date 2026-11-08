@@ -13,3 +13,14 @@ export async function listStartingBalances(businessId) {
 export async function setStartingBalance(businessId, accountId, { side, amount }) {
   return apiClient.put(`${base(businessId)}/${accountId}`, { side, amount });
 }
+
+const bankBase = (businessId) => `/v1/businesses/${businessId}/starting-balances/bank-accounts`;
+
+// Every bank or cash account with its opening balance (same envelope extras as above).
+export async function listBankStartingBalances(businessId) {
+  return listAllPages(bankBase(businessId));
+}
+
+export async function setBankStartingBalance(businessId, bankAccountId, { side, amount }) {
+  return apiClient.put(`${bankBase(businessId)}/${bankAccountId}`, { side, amount });
+}

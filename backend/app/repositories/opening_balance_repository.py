@@ -17,8 +17,20 @@ _LIVE_ACCOUNT_OPENINGS = text("""
                                 AND l.account_id = o.account_id
     WHERE o.business_id = :business_id AND o.kind_key = 'account'
 """)
+# Live bank-account opening balances with the amount on the bank account's own line (B3).
+_LIVE_BANK_OPENINGS = text("""
+    SELECT CAST(o.bank_account_id AS text) AS bank_account_id, CAST(o.document_id AS text) AS document_id,
+           l.debit, l.credit
+    FROM public.opening_balances o
+    JOIN public.documents d ON d.business_id = o.business_id AND d.id = o.document_id
+    JOIN public.document_statuses s ON s.id = d.status_id AND s.key <> 'void'
+    JOIN public.document_lines l ON l.business_id = o.business_id AND l.document_id = o.document_id
+                                AND l.bank_account_id = o.bank_account_id
+    WHERE o.business_id = :business_id AND o.kind_key = 'bank_account'
+""")
 _LIVE_DOCUMENT_IDS = text("""
-    SELECT CAST(o.document_id AS text) AS document_id, o.kind_key, CAST(o.account_id AS text) AS account_id
+    SELECT CAST(o.document_id AS text) AS document_id, o.kind_key, CAST(o.account_id AS text) AS account_id,
+           CAST(o.bank_account_id AS text) AS bank_account_id
     FROM public.opening_balances o
     JOIN public.documents d ON d.business_id = o.business_id AND d.id = o.document_id
     JOIN public.document_statuses s ON s.id = d.status_id AND s.key <> 'void'
@@ -48,6 +60,10 @@ class OpeningBalanceRepository:
     async def live_account_openings(self, business_id: str) -> dict[str, Row]:
         rows = (await self.session.execute(_LIVE_ACCOUNT_OPENINGS, {"business_id": business_id})).all()
         return {r.account_id: r for r in rows}
+
+    async def live_bank_openings(self, business_id: str) -> dict[str, Row]:
+        rows = (await self.session.execute(_LIVE_BANK_OPENINGS, {"business_id": business_id})).all()
+        return {r.bank_account_id: r for r in rows}
 
     async def live_documents(self, business_id: str) -> list[Row]:
         return list((await self.session.execute(_LIVE_DOCUMENT_IDS, {"business_id": business_id})).all())

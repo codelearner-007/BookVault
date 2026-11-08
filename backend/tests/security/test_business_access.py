@@ -19,9 +19,10 @@ from tests.support.factories import (
     add_member,
     create_bank_account,
     create_business,
-    first_coa_account_id,
     put_access,
+    receipt_body,
 )
+from tests.support.ledger import create_account
 from tests.support.tenancy import business_routes, guard_kind, request_as, route_access_pairs
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -49,7 +50,6 @@ ROUTE_MAP = {
     **{f"PUT /chart-of-accounts/{p}": [(COA, E)] for p in
        ("groups/order", "groups/{group_id}", "accounts/order", "accounts/{account_id}")},
     **{f"DELETE /chart-of-accounts/{p}": [(COA, D)] for p in ("groups/{group_id}", "accounts/{account_id}")},
-    "GET /receipts/upload-authorization": [("receipts", C)],
     "GET /suspense/balance": [("suspense", V)], "GET /suspense/entries": [("suspense", V)],
     "GET /customers/{contact_id}/receipts": [("customers", V), ("receipts", V)],
     "GET /suppliers/{contact_id}/receipts": [("suppliers", V), ("receipts", V)],
@@ -68,11 +68,27 @@ ROUTE_MAP = {
     "GET /reports/summary": [("summary", V)],
     "GET /starting-balances/accounts": [("settings.starting_balances", V)],
     "PUT /starting-balances/accounts/{account_id}": [("settings.starting_balances", E)],
+    # B3: bank and cash, receipts, payments, transfers, capital accounts, parties, attachments
+    "GET /starting-balances/bank-accounts": [("settings.starting_balances", V)],
+    "PUT /starting-balances/bank-accounts/{bank_account_id}": [("settings.starting_balances", E)],
+    "GET /bank-accounts/{bank_account_id}/transactions": [("bank_cash_accounts", V)],
+    "GET /parties": "member",
+    "GET /attachments": "member", "POST /attachments": "member",
+    "GET /attachments/{attachment_id}/url": "member", "DELETE /attachments/{attachment_id}": "member",
 }
+for _path, _area in (("receipts", "receipts"), ("payments", "payments"),
+                     ("inter-account-transfers", "inter_account_transfers")):
+    ROUTE_MAP.update({
+        f"GET /{_path}": [(_area, V)], f"POST /{_path}": [(_area, C)],
+        f"GET /{_path}/{{document_id}}": [(_area, V)], f"PUT /{_path}/{{document_id}}": [(_area, E)],
+        f"POST /{_path}/{{document_id}}/post": [(_area, E)], f"POST /{_path}/{{document_id}}/void": [(_area, D)],
+    })
+for _path in ("receipts", "payments"):
+    ROUTE_MAP.update({f"POST /{_path}/totals": [(_path, V)], f"GET /{_path}/lines": [(_path, V)]})
 for _path, _area, _id in (("bank-accounts", "bank_cash_accounts", "bank_account_id"),
                           ("customers", "customers", "contact_id"),
                           ("suppliers", "suppliers", "contact_id"),
-                          ("receipts", "receipts", "receipt_id")):
+                          ("capital-accounts", "capital_accounts", "party_id")):
     ROUTE_MAP.update({
         f"GET /{_path}": [(_area, V)], f"POST /{_path}": [(_area, C)],
         f"GET /{_path}/{{{_id}}}": [(_area, V)], f"PUT /{_path}/{{{_id}}}": [(_area, E)],
@@ -174,9 +190,8 @@ COMBOS = [tuple(c) for n in range(4) for c in itertools.combinations(WRITE_RIGHT
 
 async def _receipt_fixture(client, owner, business_id):
     account = await create_bank_account(client, owner, business_id)
-    coa_id = await first_coa_account_id(client, owner, business_id)
-    body = {"date": "2026-11-08", "received_in_account_id": account["id"],
-            "lines": [{"account_id": coa_id, "amount": 10, "total": 10}]}
+    income = await create_account(client, owner, business_id, "Service income", "income")
+    body = receipt_body(account["id"], [(income, "10")], post=False)
     created = await client.post(f"/api/v1/businesses/{business_id}/receipts", json=body, headers=owner.headers)
     assert created.status_code == 201, created.text
     return body, created.json()["id"]
@@ -192,10 +207,10 @@ async def _receipt_calls(client, owner, member, business_id, body, receipt_id) -
         V: (await client.get(base, headers=member.headers)).status_code,
         C: (await client.post(base, json=body, headers=member.headers)).status_code,
     }
-    edit = {"reference": "X", "version": await version()}
+    edit = {**{k: v for k, v in body.items() if k != "post"}, "reference": "X", "version": await version()}
     codes[E] = (await client.put(f"{base}/{receipt_id}", json=edit, headers=member.headers)).status_code
-    codes[D] = (await client.delete(
-        f"{base}/{receipt_id}", params={"version": await version()}, headers=member.headers
+    codes[D] = (await client.post(
+        f"{base}/{receipt_id}/void", json={"version": await version()}, headers=member.headers
     )).status_code
     return codes
 
@@ -211,7 +226,7 @@ async def _receipts_member(client, users, rights):
     return await _receipt_calls(client, owner, member, business_id, body, receipt_id)
 
 
-SUCCESS = {V: 200, C: 201, E: 200, D: 204}
+SUCCESS = {V: 200, C: 201, E: 200, D: 200}
 
 
 @pytest.mark.parametrize("combo", COMBOS, ids=["view+" + "+".join(c) if c else "view" for c in COMBOS])
@@ -224,7 +239,7 @@ async def test_independent_rights_combinations(client, users, combo):
 
 async def test_delete_without_edit_can_void_but_not_update(client, users):
     codes = await _receipts_member(client, users, (D,))
-    assert (codes[E], codes[D]) == (403, 204)
+    assert (codes[E], codes[D]) == (403, 200)
 
 
 async def test_create_without_edit_cannot_update(client, users):

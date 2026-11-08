@@ -1,4 +1,4 @@
-"""Bank and cash accounts endpoints."""
+"""Bank and cash accounts endpoints (balances from the ledger, B3)."""
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,7 +7,11 @@ from app.core.access_rights import AreaRight
 from app.core.dependencies import get_db, require_business_access, require_idempotency_key
 from app.core.pagination import PageParams, page_params
 from app.schemas.request.bank_account import BankAccountCreate, BankAccountUpdate
-from app.schemas.response.bank_account import BankAccountListResponse, BankAccountResponse
+from app.schemas.response.bank_account import (
+    BankAccountListResponse,
+    BankAccountResponse,
+    BankTransactionListResponse,
+)
 from app.services.access_service import BusinessContext
 from app.services.bank_account_service import BankAccountService
 from app.services.idempotency_service import IdempotencyService, business_scope
@@ -19,11 +23,12 @@ router = APIRouter(prefix="/businesses/{business_id}/bank-accounts", tags=["Bank
 
 @router.get("", response_model=BankAccountListResponse)
 async def list_bank_accounts(
+    include_inactive: bool = Query(True),
     params: PageParams = Depends(page_params),
     ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.VIEW)),
     db: AsyncSession = Depends(get_db, scope="function"),
 ) -> BankAccountListResponse:
-    return await BankAccountService(db).list_page(ctx.business_id, params)
+    return await BankAccountService(db).list_page(ctx.business_id, params, include_inactive)
 
 
 @router.post("", response_model=BankAccountResponse, status_code=status.HTTP_201_CREATED)
@@ -47,6 +52,17 @@ async def get_bank_account(
     db: AsyncSession = Depends(get_db, scope="function"),
 ) -> BankAccountResponse:
     return await BankAccountService(db).get(ctx.business_id, bank_account_id)
+
+
+@router.get("/{bank_account_id}/transactions", response_model=BankTransactionListResponse)
+async def list_bank_account_transactions(
+    bank_account_id: str,
+    params: PageParams = Depends(page_params),
+    ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.VIEW)),
+    db: AsyncSession = Depends(get_db, scope="function"),
+) -> BankTransactionListResponse:
+    """Every document that moved the account (net of reversals), newest first."""
+    return await BankAccountService(db).transactions(ctx.business_id, bank_account_id, params)
 
 
 @router.put("/{bank_account_id}", response_model=BankAccountResponse)

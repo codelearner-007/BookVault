@@ -15,6 +15,11 @@ CREATE_SUFFIXES = (
     "/businesses", "/customers", "/suppliers", "/bank-accounts", "/receipts",
     "/chart-of-accounts/groups", "/chart-of-accounts/accounts", "/members",
     "/journal-entries", "/journal-entries/{document_id}/post", "/journal-entries/{document_id}/void",
+    # B3
+    "/payments", "/inter-account-transfers", "/capital-accounts", "/attachments",
+    "/receipts/{document_id}/post", "/receipts/{document_id}/void",
+    "/payments/{document_id}/post", "/payments/{document_id}/void",
+    "/inter-account-transfers/{document_id}/post", "/inter-account-transfers/{document_id}/void",
 )
 
 

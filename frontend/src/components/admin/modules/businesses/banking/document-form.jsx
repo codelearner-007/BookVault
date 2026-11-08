@@ -1,0 +1,63 @@
+'use client';
+
+import { useState } from 'react';
+import { Loader2, Lock } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { EmptyState, ListCard, PageHeader } from '@/components/common/page';
+import { BackButton, JE_STATUS } from '../ledger/ledger-parts';
+import { useIdempotencyKey } from './banking-parts';
+
+/*
+  Save flow shared by the receipt / payment and transfer forms (same as the journal entry form):
+  new -> POST with post: true|false; draft -> PUT then POST /post; posted -> PUT (the server reverses and reposts).
+  The Idempotency-Key is reused while the same submit is retried and changes once the body or version does.
+*/
+export function useDocumentSave({ docId, create, update, post }) {
+  const keyFor = useIdempotencyKey();
+  const [version, setVersion] = useState(null);
+
+  async function save(action, body) {
+    const key = keyFor(JSON.stringify([action, body, version]));
+    if (!docId) return create({ ...body, post: action === 'post' }, key);
+    const updated = await update({ version, ...body });
+    setVersion(updated.version);
+    if (action !== 'post') return updated;
+    return post(updated.version, keyFor(`post:${updated.version}`));
+  }
+
+  return { save, setVersion };
+}
+
+export function DocumentFormActions({ isPosted, saving, onSubmit, onCancel }) {
+  const busy = saving ? <Loader2 className="animate-spin" aria-label="Saving" /> : null;
+  return (
+    <div className="flex flex-wrap items-center gap-3 border-t border-border pt-6">
+      {isPosted ? (
+        <Button className="min-w-24" onClick={() => onSubmit('update')} disabled={saving}>{busy ?? 'Update'}</Button>
+      ) : (
+        <>
+          <Button className="min-w-24" onClick={() => onSubmit('post')} disabled={saving}>{busy ?? 'Post'}</Button>
+          <Button variant="secondary" onClick={() => onSubmit('draft')} disabled={saving}>Save draft</Button>
+        </>
+      )}
+      <Button variant="ghost" onClick={onCancel} disabled={saving}>Cancel</Button>
+    </div>
+  );
+}
+
+// Why a form cannot open: no right, a void document or a locked period. Null when it can.
+export function blockedReason({ allowed, doc, noun }) {
+  if (!allowed) return "You don't have access to this action.";
+  if (doc?.is_locked) return `This ${noun} is in a locked period.`;
+  if (doc?.status === JE_STATUS.void) return `A void ${noun} cannot be edited.`;
+  return null;
+}
+
+export function BlockedForm({ title, reason, onBack }) {
+  return (
+    <>
+      <PageHeader title={title} back={<BackButton onClick={onBack} />} />
+      <ListCard><EmptyState icon={Lock} title={reason} /></ListCard>
+    </>
+  );
+}

@@ -69,7 +69,9 @@ async def test_hidden_system_account_shown_once_its_tab_is_enabled(client, users
              for a in n["accounts"]}
 
     assert "retained_earnings" in codes
-    assert not codes & {"suspense", "accounts_receivable", "cash_control"}
+    # Banking tabs are on by default since B3, so Cash & cash equivalents shows; Capital accounts does not.
+    assert "cash_control" in codes
+    assert not codes & {"suspense", "accounts_receivable", "capital_control"}
 
 
 async def test_group_cycle_rejected(client, users):

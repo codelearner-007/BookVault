@@ -22,10 +22,10 @@ def expected_lines(fixture: dict) -> list[dict]:
     return bv.get("journal_lines", [])
 
 
-def actual_lines(entries: list[dict], key_of, entry_date_of) -> list[dict]:
-    """Flatten Transaction Journal entries into comparable lines (no dimensions in B1)."""
+def actual_lines(entries: list[dict], key_of, entry_date_of, dimensions_of=lambda line: {}) -> list[dict]:
+    """Flatten Transaction Journal entries into comparable lines (dimensions as fixture keys, B3)."""
     return [
-        {"account_key": key_of(line["account_id"]), "dimensions": {},
+        {"account_key": key_of(line["account_id"]), "dimensions": dimensions_of(line),
          "debit": _amount(line["debit"]), "credit": _amount(line["credit"]),
          "line_date": entry_date_of(entry), "entry_id": entry["id"]}
         for entry in entries for line in entry["lines"]

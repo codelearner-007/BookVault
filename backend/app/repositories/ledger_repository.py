@@ -22,6 +22,20 @@ from app.models.ledger import (
 )
 
 _NEXT_REFERENCE = text("SELECT public.next_document_reference(:business_id, :type_key, :area_key)")
+_ACCOUNT_SUBLEDGERS = text("""
+    SELECT CAST(a.id AS text) AS id, s.code AS system_code, COALESCE(s.subledger_kind, 'none') AS subledger_kind
+    FROM public.coa_accounts a
+    LEFT JOIN public.system_account_types s ON s.id = a.system_account_type_id
+    WHERE a.business_id = :business_id AND a.id = ANY(CAST(:ids AS uuid[]))
+""")
+_LIVE_BANK_ACCOUNTS = text("""
+    SELECT CAST(id AS text) FROM public.bank_accounts
+    WHERE business_id = :business_id AND id = ANY(CAST(:ids AS uuid[])) AND deleted_at IS NULL
+""")
+_PARTY_KINDS = text("""
+    SELECT CAST(id AS text) AS id, kind_key FROM public.parties
+    WHERE business_id = :business_id AND id = ANY(CAST(:ids AS uuid[]))
+""")
 _BASE_DECIMALS = text(
     "SELECT c.decimal_places FROM public.business_currencies bc"
     " JOIN public.currencies c ON c.id = bc.currency_id"
@@ -87,6 +101,19 @@ class LedgerRepository:
             )
         )
         return set(result.scalars().all())
+
+    async def account_subledgers(self, business_id: str, account_ids: set[str]) -> dict[str, tuple]:
+        """account id -> (system account code or None, sub-ledger kind)."""
+        rows = await self.session.execute(_ACCOUNT_SUBLEDGERS, {"business_id": business_id, "ids": list(account_ids)})
+        return {r.id: (r.system_code, r.subledger_kind) for r in rows}
+
+    async def live_bank_account_ids(self, business_id: str, ids: set[str]) -> set[str]:
+        rows = await self.session.execute(_LIVE_BANK_ACCOUNTS, {"business_id": business_id, "ids": list(ids)})
+        return set(rows.scalars().all())
+
+    async def party_kinds(self, business_id: str, ids: set[str]) -> dict[str, str]:
+        rows = await self.session.execute(_PARTY_KINDS, {"business_id": business_id, "ids": list(ids)})
+        return {r.id: r.kind_key for r in rows}
 
     # ---------------------------------------------------------------- documents
     async def get_document(

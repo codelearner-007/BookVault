@@ -1,4 +1,4 @@
-"""Suspense response schemas (money as decimal strings)."""
+"""Suspense responses (credit balance positive; money as decimal strings)."""
 
 from datetime import date
 
@@ -13,11 +13,9 @@ class SuspenseBalanceResponse(BaseModel):
 
 
 class SuspenseEntryResponse(BaseModel):
-    receipt_id: str
-    receipt_date: date
-    receipt_reference: str | None
-    paid_by_other: str | None
-    paid_by_contact_id: str | None
-    paid_by_contact_type: str | None
+    document_id: str
+    document_type: str
+    date: date
+    reference: str | None
+    description: str | None
     amount: MoneyOut
-    line_index: int

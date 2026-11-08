@@ -7,6 +7,12 @@ import { accountLabel } from './ledger-parts';
 
 const SOURCE_LABEL = { document: 'Original', reversal: 'Reversal' };
 
+// "Account — sub-ledger" like Manager: the bank account or party a control-account line belongs to.
+function lineLabel(line) {
+  const subLedger = line.bank_account_name || line.party_name;
+  return subLedger ? `${accountLabel(line)} — ${subLedger}` : accountLabel(line);
+}
+
 function amount(value) {
   return Number(value) === 0 ? '' : formatMoney(value);
 }
@@ -31,7 +37,7 @@ function JournalEntryBlock({ entry }) {
         <TableBody>
           {entry.lines.map((line) => (
             <TableRow key={line.line_no}>
-              <TableCell className="ps-8">{accountLabel(line)}</TableCell>
+              <TableCell className="ps-8">{lineLabel(line)}</TableCell>
               <TableCell className="num w-32">{amount(line.debit)}</TableCell>
               <TableCell className="num w-32">{amount(line.credit)}</TableCell>
             </TableRow>

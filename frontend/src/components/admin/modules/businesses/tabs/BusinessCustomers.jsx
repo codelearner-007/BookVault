@@ -402,7 +402,7 @@ function ReceiptsList({ receipts, loading }) {
           <TableRow key={r.id}>
             <TableCell data-card="title">{formatDate(r.date)}</TableCell>
             <TableCell className="text-muted-foreground">{r.reference || '—'}</TableCell>
-            <TableCell className="num" data-card="end">{formatMoney(r.total)}</TableCell>
+            <TableCell className="num" data-card="end">{formatMoney(r.amount)}</TableCell>
           </TableRow>
         ))}
       </TableBody>

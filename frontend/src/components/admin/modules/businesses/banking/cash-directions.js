@@ -1,0 +1,71 @@
+import { PARTY_KINDS } from '@/lib/services/parties.service';
+import { paymentsService } from '@/lib/services/payments.service';
+import { receiptsService } from '@/lib/services/receipts.service';
+import { BANKING_TABS } from './banking-parts';
+
+// Receipts and payments are one set of components; a direction names the words and the service.
+export const CASH_DIRECTIONS = {
+  receipt: {
+    tab: BANKING_TABS.receipts,
+    service: receiptsService,
+    title: 'Receipt',
+    plural: 'Receipts',
+    noun: 'receipt',
+    bankLabel: 'Received in',
+    counterpartyLabel: 'Paid by',
+  },
+  payment: {
+    tab: BANKING_TABS.payments,
+    service: paymentsService,
+    title: 'Payment',
+    plural: 'Payments',
+    noun: 'payment',
+    bankLabel: 'Paid from',
+    counterpartyLabel: 'Payee',
+  },
+};
+
+// Counterparty kinds of the form; `party` kinds pick a record from GET /parties, Other is free text.
+export const COUNTERPARTY = { none: 'none', other: 'other' };
+export const COUNTERPARTY_OPTIONS = [
+  { value: COUNTERPARTY.none, label: 'None' },
+  { value: PARTY_KINDS.customer, label: 'Customer', party: true },
+  { value: PARTY_KINDS.supplier, label: 'Supplier', party: true },
+  { value: PARTY_KINDS.capitalAccount, label: 'Capital account', party: true },
+  { value: COUNTERPARTY.other, label: 'Other' },
+];
+
+// Control accounts whose lines need a sub-ledger party (system_account_code -> party kind).
+export const PARTY_CONTROL_ACCOUNTS = { capital_control: PARTY_KINDS.capitalAccount };
+// Lines never post to the bank control account directly: the bank account is the document's other side.
+export const BANK_CONTROL_ACCOUNT = 'cash_control';
+
+// Accounts a line may use, from the COA tree: active, not the bank control; plus any a saved line already uses.
+export function lineAccountsFromTree(tree, savedLines = []) {
+  const accounts = [];
+  const walk = (group) => {
+    group.accounts.forEach((account) => {
+      if (account.is_active && account.system_account_code !== BANK_CONTROL_ACCOUNT) accounts.push(account);
+    });
+    group.groups.forEach(walk);
+  };
+  tree.roots.forEach(walk);
+  const known = new Set(accounts.map((account) => account.id));
+  for (const line of savedLines) {
+    if (known.has(line.account_id)) continue;
+    known.add(line.account_id);
+    accounts.push({ id: line.account_id, code: line.account_code, name: line.account_name, system_account_code: null });
+  }
+  return accounts;
+}
+
+// Friendly text for the 422 codes of a cash transaction; other errors show the API message.
+export const CASH_ERRORS = {
+  account_required: 'Choose an account on every line.',
+  bank_account_required: 'Choose the bank or cash account.',
+  party_required: 'Choose a capital account on every line that uses Capital accounts.',
+  party_not_allowed: 'Only lines on Capital accounts take a capital account.',
+  account_not_supported: 'One of the line accounts cannot be used here.',
+  cleared_not_allowed: 'This bank account cannot have pending transactions.',
+  total_not_positive: 'The total must be more than zero.',
+};

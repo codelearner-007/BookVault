@@ -17,11 +17,25 @@ INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
 VALUES ('{OWNER}', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
     'drill@bookvault-test.dev', '', '{{}}', '{{}}', now(), now());
 INSERT INTO public.businesses (id, name, owner_id) VALUES ('{BUSINESS}', 'Drill', '{OWNER}');
-INSERT INTO public.bank_accounts (id, business_id, name, opening_balance)
-VALUES ('{BANK}', '{BUSINESS}', 'Bank', 100);
+INSERT INTO public.bank_accounts (id, business_id, name) VALUES ('{BANK}', '{BUSINESS}', 'Bank');
 INSERT INTO public.customers (business_id, name) VALUES ('{BUSINESS}', 'Customer');
-INSERT INTO public.receipts (business_id, date, received_in_account_id, lines)
-VALUES ('{BUSINESS}', current_date, '{BANK}', '[{{"account_id": "suspense", "amount": 30, "total": 30}}]');
+WITH doc AS (
+    INSERT INTO public.documents (business_id, document_type_id, status_id, area_key, document_date,
+                                  created_by, updated_by)
+    SELECT '{BUSINESS}', t.id, s.id, 'receipts', current_date, '{OWNER}', '{OWNER}'
+    FROM public.document_types t, public.document_statuses s WHERE t.key = 'receipt' AND s.key = 'posted'
+    RETURNING id
+), entry AS (
+    INSERT INTO public.journal_entries (business_id, document_id, source_id, entry_date, posted_by)
+    SELECT '{BUSINESS}', doc.id, src.id, current_date, '{OWNER}' FROM doc, public.journal_entry_sources src
+    WHERE src.key = 'document'
+    RETURNING id
+)
+INSERT INTO public.journal_lines (business_id, journal_entry_id, line_no, account_id, debit, credit, bank_account_id)
+SELECT '{BUSINESS}', entry.id, v.no, a.id, v.debit, v.credit, CASE WHEN v.code = 'cash_control' THEN '{BANK}'::uuid END
+FROM entry, (VALUES (1, 'cash_control', 130, 0), (2, 'suspense', 0, 130)) AS v(no, code, debit, credit)
+JOIN public.system_account_types st ON st.code = v.code
+JOIN public.coa_accounts a ON a.business_id = '{BUSINESS}' AND a.system_account_type_id = st.id;
 INSERT INTO public.audit_logs (scope, business_id, user_id, action, entity_type)
 VALUES ('business', '{BUSINESS}', '{OWNER}', 'create', 'Business');
 """
@@ -35,8 +49,8 @@ WHERE table_schema IN ('public', 'auth') AND table_type = 'BASE TABLE'
 ORDER BY 1
 """
 BALANCES = """
-SELECT b.id, b.name, ba.current_balance,
-       (SELECT count(*) FROM public.receipts r WHERE r.business_id = b.id)
+SELECT b.id, b.name, (SELECT sum(l.debit - l.credit) FROM public.journal_lines l WHERE l.bank_account_id = ba.id),
+       (SELECT count(*) FROM public.documents d WHERE d.business_id = b.id)
 FROM public.businesses b LEFT JOIN public.bank_accounts ba ON ba.business_id = b.id
 ORDER BY b.id, ba.id
 """
@@ -50,7 +64,6 @@ def _query(database: str, sql: str) -> list[str]:
 def test_restore_drill_matches_source(tmp_path):
     build_test_database()
     run_sql(SEED)
-    run_sql(f"SELECT public.recalculate_bank_account_balance('{BANK}');")
     backup = dump(TEST_DB, "restore_drill", tmp_path)
     verify(backup)
 

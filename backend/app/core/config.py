@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     AUTH_AUDIT_INGEST_INTERVAL_SECONDS: int = 30
     AUTH_AUDIT_INGEST_BATCH: int = 500
 
+    # Attachments (B3, AC-26): per-file and per-business limits, signed download links
+    ATTACHMENT_MAX_BYTES: int = 20 * 1024 * 1024
+    ATTACHMENT_QUOTA_BYTES: int = 500 * 1024 * 1024
+    ATTACHMENT_URL_TTL_SECONDS: int = 300
+
     # CSRF (AC-28): mutating requests need an allowed Origin or this header
     CSRF_HEADER: str = "X-BookVault-Client"
 

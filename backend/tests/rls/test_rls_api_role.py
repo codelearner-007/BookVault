@@ -104,11 +104,16 @@ async def test_rls_helpers_are_security_definer_with_empty_search_path(db_conn):
 
 # Documents are voided, never deleted; posted ledger rows are immutable (B1): no DELETE policy.
 # An opening balance link stays with its (possibly void) document (B2).
-APPEND_ONLY = {"audit_logs", "documents", "journal_entries", "journal_lines", "opening_balances"}
+# B3: typed document extensions, allocations and attachments are voided / soft-deleted the same way.
+APPEND_ONLY = {"audit_logs", "documents", "journal_entries", "journal_lines", "opening_balances",
+               "cash_transactions", "inter_account_transfers", "payment_allocations", "attachments",
+               "attachment_contents"}
 # One row per business, inserted by a trigger and removed by the FK cascade (B0.7).
 # business_currencies (creation trigger) and document_sequences (next_document_reference())
 # are written by SECURITY DEFINER functions only (B1).
 SINGLETONS = {"business_settings", "business_currencies", "document_sequences"}
+# The pre-B3 receipts table is read-only until B4 drops it (migration 20261108000032).
+READ_ONLY = {"receipts"}
 
 
 async def test_business_tables_have_policies_for_every_command(db_conn):
@@ -125,7 +130,7 @@ async def test_business_tables_have_policies_for_every_command(db_conn):
             continue
         # audit_logs is append-only (B0.5): read and insert, never update or delete.
         expected = {"SELECT", "INSERT"} if table in APPEND_ONLY else {"SELECT", "INSERT", "DELETE"}
-        if table in SINGLETONS:
+        if table in SINGLETONS | READ_ONLY:
             expected = {"SELECT"}
         assert expected <= commands, table
 

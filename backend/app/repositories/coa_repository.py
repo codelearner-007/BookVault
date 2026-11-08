@@ -24,12 +24,11 @@ _REORDER_ACCOUNTS = text("""
 """)
 _ROOTS = text("SELECT key, name, statement_type, account_type, normal_balance, sort_order "
               "FROM public.coa_root_groups ORDER BY sort_order")
-# A used account: journal or draft lines, or a receipt line (receipts keep lines in JSON until B3).
+# A used account: journal lines, draft / editable lines, or a receipt / payment line (B3).
 _USED = """
     EXISTS (SELECT 1 FROM public.journal_lines l WHERE l.business_id = a.business_id AND l.account_id = a.id)
     OR EXISTS (SELECT 1 FROM public.document_lines l WHERE l.business_id = a.business_id AND l.account_id = a.id)
-    OR EXISTS (SELECT 1 FROM public.receipts r, jsonb_array_elements(r.lines) x
-               WHERE r.business_id = a.business_id AND x->>'account_id' = CAST(a.id AS text))
+    OR EXISTS (SELECT 1 FROM public.cash_transaction_lines l WHERE l.business_id = a.business_id AND l.account_id = a.id)
 """
 _IS_USED = text(f"SELECT {_USED} FROM public.coa_accounts a WHERE a.business_id = :business_id AND a.id = :id")
 # Every account with its balance as at :as_at, the system type and whether it is shown:

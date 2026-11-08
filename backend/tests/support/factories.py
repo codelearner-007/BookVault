@@ -158,15 +158,26 @@ async def create_business(client: httpx.AsyncClient, user: TestUser, name: str =
 
 
 async def create_bank_account(
-    client: httpx.AsyncClient, user: TestUser, business_id: str, opening: str = "100.00"
+    client: httpx.AsyncClient, user: TestUser, business_id: str, opening: str | None = None,
+    name: str = "Main bank", **fields,
 ) -> dict:
-    response = await client.post(
-        f"/api/v1/businesses/{business_id}/bank-accounts",
-        json={"name": "Main bank", "opening_balance": opening},
-        headers=user.headers,
-    )
+    """A bank or cash account; `opening` = its starting balance (debit), posted as its opening entry."""
+    base = f"/api/v1/businesses/{business_id}"
+    response = await client.post(f"{base}/bank-accounts", json={"name": name, **fields}, headers=user.headers)
     assert response.status_code == 201, response.text
+    if opening is not None:
+        sb = await client.put(f"{base}/starting-balances/bank-accounts/{response.json()['id']}",
+                              json={"side": "debit", "amount": opening}, headers=user.headers)
+        assert sb.status_code == 200, sb.text
+        return (await client.get(f"{base}/bank-accounts/{response.json()['id']}", headers=user.headers)).json()
     return response.json()
+
+
+def receipt_body(bank_account_id: str, lines: list[tuple[str, str]], post: bool = True,
+                 date: str = "2026-11-08", **fields) -> dict:
+    """lines: (account_id, unit_price)."""
+    return {"date": date, "bank_account_id": bank_account_id, "post": post, **fields,
+            "lines": [{"account_id": a, "unit_price": p} for a, p in lines]}
 
 
 async def create_contact(

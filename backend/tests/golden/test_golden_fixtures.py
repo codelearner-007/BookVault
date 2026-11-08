@@ -51,8 +51,8 @@ def test_manager_only_setup_records_are_skipped():
     assert bookvault_setup_records(records) == [{"kind": "price"}]
 
 
-def test_b1_b2_schedule_is_runnable():
-    assert {f["id"] for f in RUNNABLE} == B1_FIXTURES | B2_FIXTURES
+def test_b1_to_b3_schedule_is_runnable():
+    assert {f["id"] for f in RUNNABLE} == B1_FIXTURES | B2_FIXTURES | B3_FIXTURES
 
 
 def test_golden_support_report(capsys):
@@ -137,14 +137,46 @@ async def _setup_accounts(run: GoldenRun, fixture: dict) -> None:
         )
 
 
+async def _setup_banks(run: GoldenRun, fixture: dict) -> None:
+    specs = load_golden_file()["master_data"]["bank_accounts"]
+    for key in fixture.get("setup", {}).get("bank_accounts", []):
+        if key in run.banks:
+            continue
+        pending = specs[key].get("can_have_pending_transactions", False)
+        response = await run.client.post(biz(run.business_id, "/bank-accounts"), headers=run.owner.headers,
+                                         json={"name": specs[key]["name"], "can_have_pending": pending})
+        assert response.status_code == 201, response.text
+        run.banks[key] = response.json()["id"]
+        if pending:
+            run.pending_banks.add(key)
+
+
+async def _setup_parties(run: GoldenRun, fixture: dict) -> None:
+    """Capital accounts only in B3 (runner_supports keeps other kinds for their phase)."""
+    specs = load_golden_file()["master_data"]["parties"]
+    for key in fixture.get("setup", {}).get("parties", []):
+        if key in run.parties:
+            continue
+        response = await run.client.post(biz(run.business_id, "/capital-accounts"), headers=run.owner.headers,
+                                         json={"name": specs[key]["name"]})
+        assert response.status_code == 201, response.text
+        run.parties[key] = response.json()["id"]
+
+
 def _lock_setting(fixture: dict) -> dict | None:
     settings = bookvault_setup_records(fixture.get("setup", {}).get("settings", []))
     return next((s for s in settings if s["key"] == "lock_date"), None)
 
 
+DOCUMENT_LISTS = ("/journal-entries", "/receipts", "/payments", "/inter-account-transfers")
+
+
 async def _document_count(run: GoldenRun) -> int:
-    response = await run.client.get(biz(run.business_id, "/journal-entries"), headers=run.owner.headers)
-    return response.json()["total"]
+    total = 0
+    for path in DOCUMENT_LISTS:
+        response = await run.client.get(biz(run.business_id, path), headers=run.owner.headers)
+        total += response.json()["total"]
+    return total
 
 
 def _assert_one_opening_entry(fixture: dict, entries: list[dict]) -> None:
@@ -167,18 +199,21 @@ def _assert_actions(fixture: dict, actions: list[dict]) -> None:
 async def _run_fixture(run: GoldenRun, fixture: dict) -> None:
     await _setup_groups(run, fixture)
     await _setup_accounts(run, fixture)
+    await _setup_banks(run, fixture)
+    await _setup_parties(run, fixture)
     lock = _lock_setting(fixture)
     if lock and lock["value"]["enabled"]:
         await set_lock_date(run.client, run.owner, run.business_id, lock["value"]["date"])
     try:
         before = await _document_count(run)
         outcome = await adapter_for(fixture["document"]["type"])(run, fixture)
-        if fixture["bookvault_expected"]["outcome"] == "rejected":
+        expected = fixture["bookvault_expected"].get("outcome") or fixture["manager_observed"]["outcome"]
+        if expected == "rejected":
             assert_rejection(fixture, outcome.status_code, outcome.body)
             assert await _document_count(run) == before, "a rejected fixture stored a document"
             return
         assert outcome.status_code == 201, outcome.body
-        actual = actual_lines(outcome.entries, run.account_key, lambda e: e["entry_date"])
+        actual = actual_lines(outcome.entries, run.account_key, lambda e: e["entry_date"], run.dimensions)
         missing, extra = unmatched(expected_lines(fixture), actual)
         assert (missing, extra) == ([], []), f"{fixture['id']}: missing {missing}, unexpected {extra}"
         assert_entry_groups_balanced(outcome.entries)
@@ -196,6 +231,7 @@ def _runnable(fixture: dict) -> bool:
 RUNNABLE = [f for f in DOCUMENTS if _runnable(f)]
 B1_FIXTURES = {"T30", "T96a", "T96"}
 B2_FIXTURES = {"T36", "T95"}
+B3_FIXTURES = {"T01", "T02", "T03", "T08", "T31", "T41", "T64", "T65", "T67", "T74", "T83", "T84", "T85"}
 STATEMENT_ROOT = {"pl": "expenses", "balance_sheet": "assets"}
 NOT_YET = [f for f in DOCUMENTS if not _runnable(f)]
 

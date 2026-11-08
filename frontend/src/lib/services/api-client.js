@@ -57,7 +57,8 @@ class APIClient {
       credentials: 'include',
       ...options,
       headers: {
-        'Content-Type': 'application/json',
+        // A file body is sent as raw bytes; everything else is JSON.
+        'Content-Type': options?.body instanceof Blob ? 'application/octet-stream' : 'application/json',
         ...CLIENT_HEADER,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options?.headers,
@@ -86,6 +87,11 @@ class APIClient {
       body: data ? JSON.stringify(data) : undefined,
       headers: { 'Idempotency-Key': idempotencyKey },
     });
+  }
+
+  // File upload (a create): the File/Blob as the raw body plus an Idempotency-Key, like post().
+  async upload(path, file, { idempotencyKey = crypto.randomUUID() } = {}) {
+    return this.request(path, { method: 'POST', body: file, headers: { 'Idempotency-Key': idempotencyKey } });
   }
 
   async put(path, data) {

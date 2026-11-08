@@ -16,8 +16,15 @@ from app.core.money import round_money
 from app.core.pagination import PageParams
 from app.repositories.coa_repository import CoaRepository
 from app.repositories.opening_balance_repository import OpeningBalanceRepository
+from app.repositories.bank_account_repository import BankAccountRepository
 from app.schemas.request.starting_balance import SetAccountStartingBalanceRequest
-from app.schemas.response.coa import RetainedEarningsEffect, StartingBalanceItem, StartingBalancesResponse
+from app.schemas.response.coa import (
+    BankStartingBalanceItem,
+    BankStartingBalancesResponse,
+    RetainedEarningsEffect,
+    StartingBalanceItem,
+    StartingBalancesResponse,
+)
 from app.services.access_service import BusinessContext
 from app.services.audit_service import AuditService
 from app.services.coa_tree import root_key_of
@@ -26,6 +33,8 @@ from app.services.posting import OPENING_BALANCE, POSTED, SOURCE_OPENING, Docume
 
 AREA = "settings.starting_balances"
 KIND_ACCOUNT = "account"
+KIND_BANK_ACCOUNT = "bank_account"
+CASH_CONTROL = "cash_control"
 ENTITY = "StartingBalance"
 RETAINED_EARNINGS = "retained_earnings"
 ZERO = Decimal(0)
@@ -40,6 +49,7 @@ class OpeningBalanceService:
         self.posting = PostingService(session)
         self.openings = OpeningBalanceRepository(session)
         self.coa = CoaRepository(session)
+        self.banks = BankAccountRepository(session)
         self.audit = AuditService(session)
 
     # ---------------------------------------------------------------- reads
@@ -65,17 +75,39 @@ class OpeningBalanceService:
     async def list_accounts(self, business_id: str, params: PageParams) -> StartingBalancesResponse:
         eligible = await self._eligible_accounts(business_id)
         live = await self.openings.live_account_openings(business_id)
-        net = sum((x.debit - x.credit for x in live.values()), ZERO)
         page = eligible[params.offset:params.offset + params.page_size]
-        start = await self.posting.books_start_date(business_id)
         dp = await self.posting.decimals(business_id)
         return StartingBalancesResponse.build(
             [self._item(row, root, group, live.get(row.id), dp) for row, root, group in page],
-            len(eligible), params.page, params.page_size,
-            books_start_date=start, opening_date=opening_date(start),
+            len(eligible), params.page, params.page_size, **await self._period(business_id, dp),
+        )
+
+    async def _period(self, business_id: str, dp: int) -> dict:
+        """Books start, opening date and the Retained earnings side of every live opening line."""
+        live = [*(await self.openings.live_account_openings(business_id)).values(),
+                *(await self.openings.live_bank_openings(business_id)).values()]
+        net = sum((x.debit - x.credit for x in live), ZERO)
+        start = await self.posting.books_start_date(business_id)
+        return {
+            "books_start_date": start, "opening_date": opening_date(start),
             # Retained earnings takes the other side of every opening line.
-            retained_earnings_effect=RetainedEarningsEffect(
+            "retained_earnings_effect": RetainedEarningsEffect(
                 side=None if net == 0 else ("credit" if net > 0 else "debit"), amount=round_money(abs(net), dp)),
+        }
+
+    @staticmethod
+    def _bank_item(bank, live, dp: int) -> BankStartingBalanceItem:
+        side = opening_side(live.debit, live.credit, dp) if live else {"side": None, "amount": round_money(ZERO, dp)}
+        return BankStartingBalanceItem(bank_account_id=bank.id, bank_account_name=bank.name,
+                                       document_id=live.document_id if live else None, **side)
+
+    async def list_bank_accounts(self, business_id: str, params: PageParams) -> BankStartingBalancesResponse:
+        banks, total = await self.banks.list_page(business_id, params.offset, params.page_size)
+        live = await self.openings.live_bank_openings(business_id)
+        dp = await self.posting.decimals(business_id)
+        return BankStartingBalancesResponse.build(
+            [self._bank_item(b, live.get(b.id), dp) for b in banks], total, params.page, params.page_size,
+            **await self._period(business_id, dp),
         )
 
     # ---------------------------------------------------------------- writes
@@ -91,20 +123,47 @@ class OpeningBalanceService:
                 "opening_balance_not_allowed",
             )
         dp = await self.posting.decimals(ctx.business_id)
+
+        async def item() -> StartingBalanceItem:
+            return self._item(*match, (await self.openings.live_account_openings(ctx.business_id)).get(account_id), dp)
+
+        return await self._set(ctx, KIND_ACCOUNT, account_id, body, item,
+                               lambda d, c: LineInput(account_id, d, c), account_id=account_id)
+
+    async def set_bank_account(
+        self, ctx: BusinessContext, bank_account_id: str, body: SetAccountStartingBalanceRequest
+    ) -> BankStartingBalanceItem:
+        """T67: the bank or cash account's own two-line opening entry (D-35)."""
+        bank = await self.banks.get(ctx.business_id, bank_account_id)
+        if bank is None:
+            raise ResourceNotFoundError("BankAccount", bank_account_id)
+        cash = await self.coa.system_account_id(ctx.business_id, CASH_CONTROL)
+        dp = await self.posting.decimals(ctx.business_id)
+
+        async def item() -> BankStartingBalanceItem:
+            return self._bank_item(bank, (await self.openings.live_bank_openings(ctx.business_id)).get(bank.id), dp)
+
+        return await self._set(ctx, KIND_BANK_ACCOUNT, bank_account_id, body, item,
+                               lambda d, c: LineInput(cash, d, c, bank_account_id=bank.id),
+                               bank_account_id=bank.id)
+
+    async def _set(self, ctx: BusinessContext, kind_key: str, record_id: str,
+                   body: SetAccountStartingBalanceRequest, item, record_line, **source: str):
+        """Set-to-value: void the record's live opening (if any) and post the new one; 0 removes it."""
+        dp = await self.posting.decimals(ctx.business_id)
         amount = round_money(body.amount, dp)
         debit, credit = (amount, ZERO) if body.side == "debit" else (ZERO, amount)
-        live = (await self.openings.live_account_openings(ctx.business_id)).get(account_id)
-        if (live and (live.debit, live.credit) == (debit, credit)) or (live is None and amount == 0):
-            return self._item(*match, live, dp)
-        before = self._item(*match, live, dp)
+        before = await item()
+        live = before.document_id is not None
+        if (live and before.amount == amount and before.side == body.side) or (not live and amount == 0):
+            return before
         if live:
-            await self._void(ctx, live.document_id)
+            await self._void(ctx, before.document_id)
         if amount > 0:
             start = await self.posting.books_start_date(ctx.business_id)
-            await self._post(ctx, KIND_ACCOUNT, account_id, opening_date(start),
-                             [LineInput(account_id, debit, credit)])
-        after = self._item(*match, (await self.openings.live_account_openings(ctx.business_id)).get(account_id), dp)
-        await self.audit.record(ctx.user_id, "set", ENTITY, account_id, ctx.business_id, before=before, after=after)
+            await self._post(ctx, kind_key, opening_date(start), [record_line(debit, credit)], **source)
+        after = await item()
+        await self.audit.record(ctx.user_id, "set", ENTITY, record_id, ctx.business_id, before=before, after=after)
         return after
 
     async def redate_all(self, ctx: BusinessContext, new_start: date) -> int:
@@ -114,11 +173,14 @@ class OpeningBalanceService:
                 "Documents are dated before the new books start date", "documents_before_books_start"
             )
         live = await self.openings.live_documents(ctx.business_id)
+        plug = await self.coa.system_account_id(ctx.business_id, RETAINED_EARNINGS)
         for row in live:
             document = await self._void(ctx, row.document_id)
-            lines = [x for x in await self.posting.document_lines(document) if x.account_id == row.account_id]
-            await self._post(ctx, row.kind_key, row.account_id, opening_date(new_start),
-                             [LineInput(x.account_id, x.debit, x.credit, x.description) for x in lines])
+            lines = [x for x in await self.posting.document_lines(document) if x.account_id != plug]
+            await self._post(ctx, row.kind_key, opening_date(new_start),
+                             [LineInput(x.account_id, x.debit, x.credit, x.description, x.bank_account_id)
+                              for x in lines],
+                             account_id=row.account_id, bank_account_id=row.bank_account_id)
         return len(live)
 
     async def _void(self, ctx: BusinessContext, document_id: str):
@@ -126,8 +188,8 @@ class OpeningBalanceService:
         await self.posting.void(ctx, document)
         return document
 
-    async def _post(self, ctx: BusinessContext, kind_key: str, account_id: str, on: date,
-                    record_lines: list[LineInput]) -> None:
+    async def _post(self, ctx: BusinessContext, kind_key: str, on: date, record_lines: list[LineInput],
+                    account_id: str | None = None, bank_account_id: str | None = None) -> None:
         """The record's lines plus one Retained earnings line for the difference (PR-59)."""
         plug = await self.coa.system_account_id(ctx.business_id, RETAINED_EARNINGS)
         debit = sum((x.debit for x in record_lines), ZERO)
@@ -137,4 +199,4 @@ class OpeningBalanceService:
             ctx, OPENING_BALANCE, AREA, DocumentHeader(on, None, None), [*record_lines, offset], POSTED,
         )
         await self.posting.post(ctx, document, SOURCE_OPENING)
-        await self.posting.link_opening_balance(ctx, document, kind_key, account_id)
+        await self.posting.link_opening_balance(ctx, document, kind_key, account_id, bank_account_id)

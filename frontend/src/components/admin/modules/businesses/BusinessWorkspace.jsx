@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Hourglass } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,6 +20,9 @@ import BusinessCustomers from './tabs/BusinessCustomers';
 import BusinessSuppliers from './tabs/BusinessSuppliers';
 import BusinessHistory from './tabs/BusinessHistory';
 import BusinessReceipts from './tabs/BusinessReceipts';
+import BusinessPayments from './tabs/BusinessPayments';
+import BusinessInterAccountTransfers from './tabs/BusinessInterAccountTransfers';
+import BusinessCapitalAccounts from './tabs/BusinessCapitalAccounts';
 import BusinessJournalEntries from './tabs/BusinessJournalEntries';
 import BusinessReports from './tabs/BusinessReports';
 
@@ -31,6 +34,9 @@ const TAB_COMPONENTS = {
   customers: BusinessCustomers,
   suppliers: BusinessSuppliers,
   receipts: BusinessReceipts,
+  payments: BusinessPayments,
+  'inter-account-transfers': BusinessInterAccountTransfers,
+  'capital-accounts': BusinessCapitalAccounts,
   'journal-entries': BusinessJournalEntries,
   reports: BusinessReports,
 };
@@ -107,8 +113,6 @@ export default function BusinessWorkspace() {
   const { rawTab, tab, page } = businessRoute(searchParams);
   const enabledKeys = workspace.tabs.filter((t) => t.enabled).map((t) => t.key).join(',');
   const [mountedTabs, setMountedTabs] = useState(() => new Set([tab].filter(Boolean)));
-  const [bankRefreshKey, setBankRefreshKey] = useState(0);
-  const onBankRefresh = useCallback(() => setBankRefreshKey((key) => key + 1), []);
   const { refreshTabs, failed } = workspace;
 
   useTabGuard({ loading: workspace.loading, enabledKeys, rawTab, tab });
@@ -147,8 +151,6 @@ export default function BusinessWorkspace() {
           business={business}
           onBusinessUpdated={updateBusiness}
           onTabsChanged={refreshTabs}
-          bankRefreshKey={bankRefreshKey}
-          onBankRefresh={onBankRefresh}
         />
       </div>
     ) : null

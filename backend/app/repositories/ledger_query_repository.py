@@ -10,6 +10,18 @@ from sqlalchemy import text
 from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Sub-ledger columns of a line (alias l): bank or cash account and party, with display names.
+_DIMENSIONS = """
+           CAST(l.bank_account_id AS text) AS bank_account_id, ba.name AS bank_account_name,
+           CAST(l.party_id AS text) AS party_id, COALESCE(cu.name, su.name, ca.name) AS party_name
+"""
+_DIMENSION_JOINS = """
+    LEFT JOIN public.bank_accounts ba ON ba.business_id = l.business_id AND ba.id = l.bank_account_id
+    LEFT JOIN public.customers cu ON cu.business_id = l.business_id AND cu.id = l.party_id
+    LEFT JOIN public.suppliers su ON su.business_id = l.business_id AND su.id = l.party_id
+    LEFT JOIN public.capital_accounts ca ON ca.business_id = l.business_id AND ca.party_id = l.party_id
+"""
+
 _JE_LIST = text("""
     SELECT CAST(d.id AS text) AS id, d.reference, d.document_date AS date, d.description, s.key AS status, d.version,
            COALESCE((SELECT sum(l.debit) FROM public.document_lines l
@@ -25,11 +37,12 @@ _JE_COUNT = text("""
     SELECT count(*) FROM public.documents d JOIN public.document_types t ON t.id = d.document_type_id
     WHERE d.business_id = :business_id AND t.key = :type_key
 """)
-_DOCUMENT_LINES = text("""
+_DOCUMENT_LINES = text(f"""
     SELECT CAST(l.id AS text) AS id, l.line_no, CAST(l.account_id AS text) AS account_id, a.code AS account_code, a.name AS account_name,
-           l.description, l.debit, l.credit
+           l.description, l.debit, l.credit, {_DIMENSIONS}
     FROM public.document_lines l
     JOIN public.coa_accounts a ON a.business_id = l.business_id AND a.id = l.account_id
+    {_DIMENSION_JOINS}
     WHERE l.business_id = :business_id AND l.document_id = :document_id
     ORDER BY l.line_no
 """)
@@ -44,12 +57,13 @@ _DOCUMENT_ENTRIES = text("""
     WHERE e.business_id = :business_id AND e.document_id = :document_id
     ORDER BY e.posted_at, e.id
 """)
-_ENTRY_LINES = text("""
+_ENTRY_LINES = text(f"""
     SELECT CAST(l.journal_entry_id AS text) AS journal_entry_id, l.line_no,
            CAST(l.account_id AS text) AS account_id, a.code AS account_code,
-           a.name AS account_name, l.description, l.debit, l.credit
+           a.name AS account_name, l.description, l.debit, l.credit, {_DIMENSIONS}
     FROM public.journal_lines l
     JOIN public.coa_accounts a ON a.business_id = l.business_id AND a.id = l.account_id
+    {_DIMENSION_JOINS}
     WHERE l.business_id = :business_id AND l.journal_entry_id = ANY(CAST(:entry_ids AS uuid[]))
     ORDER BY l.journal_entry_id, l.line_no
 """)

@@ -4,10 +4,11 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ResourceNotFoundError
+from app.core.exceptions import ConflictError, ResourceNotFoundError
 from app.core.pagination import PageParams
 from app.models.customer import Customer
 from app.models.supplier import Supplier
+from app.repositories.party_repository import PartyRepository
 from app.repositories.contact_repository import ContactModel, ContactRepository
 from app.schemas.common import PaginatedResponse
 from app.schemas.request.contact import ContactCreate, ContactUpdate
@@ -19,7 +20,7 @@ from app.services.versioning import apply_versioned_update, check_version
 
 @dataclass(frozen=True)
 class ContactKind:
-    key: str  # receipts.paid_by_contact_type value
+    key: str  # party kind
     area_key: str  # also the URL segment
     label: str
     model: ContactModel
@@ -34,6 +35,7 @@ class ContactService:
     def __init__(self, session: AsyncSession, kind: ContactKind) -> None:
         self.kind = kind
         self.repo = ContactRepository(session, kind.model)
+        self.parties = PartyRepository(session)
         self.audit = AuditService(session)
 
     async def _get_or_404(self, business_id: str, contact_id: str):
@@ -73,6 +75,8 @@ class ContactService:
     async def delete(self, ctx: BusinessContext, contact_id: str, version: int) -> None:
         contact = await self._get_or_404(ctx.business_id, contact_id)
         check_version(contact, version)
+        if await self.parties.in_use(ctx.business_id, contact.id):
+            raise ConflictError("This contact has transactions and cannot be deleted", "contact_in_use")
         before = ContactResponse.model_validate(contact)
         await self.repo.delete(contact)
         await self.audit.record(ctx.user_id, "delete", self.kind.label, contact_id,

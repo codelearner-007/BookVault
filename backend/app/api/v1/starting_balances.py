@@ -1,4 +1,4 @@
-"""Starting balances: balance-sheet accounts (B2; bank, invoices, items... in later phases)."""
+"""Starting balances: balance-sheet accounts (B2), bank and cash accounts (B3); invoices, items later."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,7 +8,12 @@ from app.core.dependencies import get_db, require_business_access
 from app.core.pagination import PageParams, page_params
 from app.schemas.common import IdStr
 from app.schemas.request.starting_balance import SetAccountStartingBalanceRequest
-from app.schemas.response.coa import StartingBalanceItem, StartingBalancesResponse
+from app.schemas.response.coa import (
+    BankStartingBalanceItem,
+    BankStartingBalancesResponse,
+    StartingBalanceItem,
+    StartingBalancesResponse,
+)
 from app.services.access_service import BusinessContext
 from app.services.opening_balance_service import AREA, OpeningBalanceService
 
@@ -33,3 +38,23 @@ async def set_account_starting_balance(
 ) -> StartingBalanceItem:
     """Set-to-value: void the account's opening entry (if any) and post the new one; 0 removes it."""
     return await OpeningBalanceService(db).set_account(ctx, account_id, body)
+
+
+@router.get("/bank-accounts", response_model=BankStartingBalancesResponse)
+async def list_bank_starting_balances(
+    params: PageParams = Depends(page_params),
+    ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.VIEW)),
+    db: AsyncSession = Depends(get_db, scope="function"),
+) -> BankStartingBalancesResponse:
+    return await OpeningBalanceService(db).list_bank_accounts(ctx.business_id, params)
+
+
+@router.put("/bank-accounts/{bank_account_id}", response_model=BankStartingBalanceItem)
+async def set_bank_starting_balance(
+    bank_account_id: IdStr,
+    body: SetAccountStartingBalanceRequest,
+    ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.EDIT)),
+    db: AsyncSession = Depends(get_db, scope="function"),
+) -> BankStartingBalanceItem:
+    """T67: one two-line opening entry per bank or cash account (void + re-post on change)."""
+    return await OpeningBalanceService(db).set_bank_account(ctx, bank_account_id, body)

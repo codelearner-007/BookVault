@@ -36,7 +36,7 @@ AREA = "journal_entries"
 
 
 def _line_inputs(lines: list[JournalLineIn]) -> list[LineInput]:
-    return [LineInput(x.account_id, x.debit, x.credit, x.description) for x in lines]
+    return [LineInput(x.account_id, x.debit, x.credit, x.description, x.bank_account_id, x.party_id) for x in lines]
 
 
 def _header(body: CreateJournalEntryRequest | UpdateJournalEntryRequest) -> DocumentHeader:
@@ -44,7 +44,7 @@ def _header(body: CreateJournalEntryRequest | UpdateJournalEntryRequest) -> Docu
 
 
 def _same_amounts(current: list, wanted: list[LineInput]) -> bool:
-    key = lambda x: (x.account_id, x.debit, x.credit)  # noqa: E731
+    key = lambda x: (x.account_id, x.debit, x.credit, x.bank_account_id, x.party_id)  # noqa: E731
     return len(current) == len(wanted) and all(key(a) == key(b) for a, b in zip(current, wanted))
 
 

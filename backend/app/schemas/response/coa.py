@@ -98,12 +98,26 @@ class StartingBalanceItem(BaseModel):
     document_id: str | None
 
 
+class BankStartingBalanceItem(BaseModel):
+    bank_account_id: str
+    bank_account_name: str
+    side: str | None
+    amount: MoneyOut
+    document_id: str | None
+
+
 class RetainedEarningsEffect(BaseModel):
     side: str | None
     amount: MoneyOut
 
 
 class StartingBalancesResponse(PaginatedResponse[StartingBalanceItem]):
+    books_start_date: date
+    opening_date: date
+    retained_earnings_effect: RetainedEarningsEffect
+
+
+class BankStartingBalancesResponse(PaginatedResponse[BankStartingBalanceItem]):
     books_start_date: date
     opening_date: date
     retained_earnings_effect: RetainedEarningsEffect

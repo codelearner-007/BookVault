@@ -3,9 +3,14 @@
 Everything runs in the caller's transaction (the document change and its ledger effect
 commit together). The database backs every rule up (migration 20261108000027): balance at
 COMMIT, immutable posted lines, inclusive lock date, unique numbering.
+
+Two kinds of documents: types without a typed line table (journal entries, opening balances)
+keep their editable lines in document_lines and post them with `post`; typed documents
+(receipts, payments, transfers, B3) keep their own lines and post computed lines with
+`post_lines`. Every line passes the same sub-ledger rules (`_assert_dimensions`).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
@@ -22,6 +27,11 @@ SOURCE_DOCUMENT, SOURCE_REVERSAL, SOURCE_OPENING = "document", "reversal", "open
 OPENING_BALANCE = "opening_balance"
 MIN_POSTED_LINES = 2
 
+# Sub-ledger kinds (system_account_types.subledger_kind) and the party kind each control account
+# takes; control accounts of later phases (AR/AP: B4/B5, assets: B9, ...) are not postable yet.
+SUBLEDGER_NONE, SUBLEDGER_BANK, SUBLEDGER_PARTY = "none", "bank_account", "party"
+PARTY_KIND_OF_CONTROL = {"capital_control": "capital_account"}
+
 
 @dataclass(frozen=True)
 class LineInput:
@@ -29,6 +39,11 @@ class LineInput:
     debit: Decimal
     credit: Decimal
     description: str | None = None
+    bank_account_id: str | None = None
+    party_id: str | None = None
+
+    def ledger_key(self) -> tuple:
+        return (self.account_id, self.debit, self.credit, self.bank_account_id, self.party_id)
 
 
 @dataclass(frozen=True)
@@ -49,6 +64,10 @@ def totals(lines: list) -> tuple[Decimal, Decimal]:
     return sum((x.debit for x in lines), Decimal(0)), sum((x.credit for x in lines), Decimal(0))
 
 
+def _invalid(message: str, code: str) -> LedgerValidationError:
+    return LedgerValidationError(message, code)
+
+
 class PostingService:
     def __init__(self, session: AsyncSession) -> None:
         self.repo = LedgerRepository(session)
@@ -62,6 +81,10 @@ class PostingService:
         lock = await self.repo.lock_date(business_id)
         if lock is not None and any(d <= lock for d in dates):
             raise PeriodLockedError(lock.isoformat())
+
+    async def is_locked(self, document: Document) -> bool:
+        lock = await self.repo.lock_date(document.business_id)
+        return lock is not None and document.document_date <= lock
 
     async def books_start_date(self, business_id: str) -> date:
         return await self.repo.books_start_date(business_id)
@@ -82,15 +105,49 @@ class PostingService:
 
     async def round_lines(self, business_id: str, lines: list[LineInput]) -> list[LineInput]:
         dp = await self.decimals(business_id)
-        return [
-            LineInput(x.account_id, round_money(x.debit, dp), round_money(x.credit, dp), x.description)
-            for x in lines
-        ]
+        return [replace(x, debit=round_money(x.debit, dp), credit=round_money(x.credit, dp)) for x in lines]
 
     async def _assert_accounts_postable(self, business_id: str, lines: list) -> None:
         wanted = {x.account_id for x in lines}
         if await self.repo.postable_account_ids(business_id, wanted) != wanted:
             raise LedgerValidationError("Every line needs an active account of this business", "invalid_account")
+
+    async def _assert_dimensions(self, business_id: str, lines: list) -> None:
+        """Each line carries exactly the sub-ledger its account needs (PR-01, PR-10, T08, T01)."""
+        kinds = await self.repo.account_subledgers(business_id, {x.account_id for x in lines})
+        banks = {x.bank_account_id for x in lines if x.bank_account_id}
+        if banks and await self.repo.live_bank_account_ids(business_id, banks) != banks:
+            raise _invalid("Bank or cash account not found in this business", "bank_account_required")
+        parties = await self.repo.party_kinds(business_id, {x.party_id for x in lines if x.party_id})
+        for line in lines:
+            self._check_line_dimensions(line, *kinds[line.account_id], parties)
+
+    @staticmethod
+    def _check_line_dimensions(line, system_code: str | None, subledger: str, parties: dict[str, str]) -> None:
+        if subledger == SUBLEDGER_BANK:
+            if not line.bank_account_id:
+                raise _invalid("A Cash & cash equivalents line needs its bank or cash account", "bank_account_required")
+            if line.party_id:
+                raise _invalid("This account takes no party", "party_not_allowed")
+            return
+        if line.bank_account_id:
+            raise _invalid("Only Cash & cash equivalents lines take a bank or cash account", "bank_account_not_allowed")
+        if subledger == SUBLEDGER_NONE:
+            if line.party_id:
+                raise _invalid("This account takes no party", "party_not_allowed")
+            return
+        wanted_kind = PARTY_KIND_OF_CONTROL.get(system_code) if subledger == SUBLEDGER_PARTY else None
+        if wanted_kind is None:
+            raise _invalid("This control account cannot be used here yet", "account_not_supported")
+        if not line.party_id:
+            raise _invalid("This control account needs a party on the line", "party_required")
+        if parties.get(line.party_id) != wanted_kind:
+            raise _invalid("The party does not belong to this control account", "party_required")
+
+    async def assert_lines(self, business_id: str, lines: list) -> None:
+        if lines:
+            await self._assert_accounts_postable(business_id, lines)
+            await self._assert_dimensions(business_id, lines)
 
     # ---------------------------------------------------------------- documents
     async def get_document(self, business_id: str, document_id: str, type_key: str,
@@ -104,14 +161,12 @@ class PostingService:
     async def document_lines(self, document: Document) -> list[DocumentLine]:
         return await self.repo.lines(document.business_id, document.id)
 
-    async def create_document(
-        self, ctx: BusinessContext, type_key: str, area_key: str, header: DocumentHeader,
-        lines: list[LineInput], status: str,
+    async def create_header(
+        self, ctx: BusinessContext, type_key: str, area_key: str, header: DocumentHeader, status: str,
     ) -> Document:
-        """Insert the document (numbered when no reference is given) and its lines."""
+        """Insert the document row only (numbered when no reference is given)."""
         await self.assert_open(ctx.business_id, header.document_date)
         await self.assert_on_or_after_books_start(ctx.business_id, type_key, header.document_date)
-        await self._assert_accounts_postable(ctx.business_id, lines)
         reference = header.reference or await self.repo.next_reference(ctx.business_id, type_key, area_key)
         document = Document(
             business_id=ctx.business_id,
@@ -125,33 +180,53 @@ class PostingService:
             updated_by=ctx.user_id,
         )
         await self.repo.add(document)
+        return document
+
+    async def create_document(
+        self, ctx: BusinessContext, type_key: str, area_key: str, header: DocumentHeader,
+        lines: list[LineInput], status: str,
+    ) -> Document:
+        """Insert the document and its document_lines (types without a typed line table)."""
+        await self.assert_open(ctx.business_id, header.document_date)
+        await self.assert_lines(ctx.business_id, lines)
+        document = await self.create_header(ctx, type_key, area_key, header, status)
         await self._write_lines(document, lines)
         return document
+
+    async def update_header(self, ctx: BusinessContext, document: Document, header: DocumentHeader) -> None:
+        await self.assert_open(ctx.business_id, document.document_date, header.document_date)
+        type_key = await self.repo.document_type_key(document.document_type_id)
+        await self.assert_on_or_after_books_start(ctx.business_id, type_key, header.document_date)
+        document.document_date = header.document_date
+        document.reference = header.reference or document.reference
+        document.description = header.description
+        _touch(document, ctx)
+        await self.repo.save(document)
 
     async def update_document(
         self, ctx: BusinessContext, document: Document, header: DocumentHeader, lines: list[LineInput]
     ) -> None:
         """Replace header and lines (draft, or a posted document about to be reposted)."""
         await self.assert_open(ctx.business_id, document.document_date, header.document_date)
-        type_key = await self.repo.document_type_key(document.document_type_id)
-        await self.assert_on_or_after_books_start(ctx.business_id, type_key, header.document_date)
-        await self._assert_accounts_postable(ctx.business_id, lines)
-        document.document_date = header.document_date
-        document.reference = header.reference or document.reference
-        document.description = header.description
-        _touch(document, ctx)
-        await self.repo.save(document)
+        await self.assert_lines(ctx.business_id, lines)
+        await self.update_header(ctx, document, header)
         await self._write_lines(document, lines)
 
     async def update_descriptions(
         self, ctx: BusinessContext, document: Document, description: str | None,
-        line_descriptions: list[str | None],
+        line_descriptions: list[str | None] | None = None,
     ) -> None:
         """The one change a locked document accepts (PR-75): document and line descriptions."""
         document.description = description
         _touch(document, ctx)
         await self.repo.save(document)
-        await self.repo.update_line_descriptions(await self.document_lines(document), line_descriptions)
+        if line_descriptions is not None:
+            await self.repo.update_line_descriptions(await self.document_lines(document), line_descriptions)
+
+    async def touch(self, ctx: BusinessContext, document: Document) -> None:
+        """Bump the version after a change to the document's typed extension only."""
+        _touch(document, ctx)
+        await self.repo.save(document)
 
     async def set_status(self, ctx: BusinessContext, document: Document, status: str) -> None:
         document.status_id = await self.repo.status_id(status)
@@ -163,14 +238,14 @@ class PostingService:
             DocumentLine(
                 business_id=document.business_id, document_id=document.id, line_no=no,
                 account_id=x.account_id, debit=x.debit, credit=x.credit, description=x.description,
+                bank_account_id=x.bank_account_id, party_id=x.party_id,
             )
             for no, x in enumerate(lines, start=1)
         ])
 
     # ---------------------------------------------------------------- journal
-    async def post(self, ctx: BusinessContext, document: Document, source: str = SOURCE_DOCUMENT) -> JournalEntry:
-        """Copy the document's lines into one balanced journal entry dated the document date."""
-        lines = await self.document_lines(document)
+    @staticmethod
+    def _assert_balanced(lines: list) -> None:
         debit, credit = totals(lines)
         if debit != credit:
             raise JournalUnbalancedError()
@@ -178,20 +253,54 @@ class PostingService:
             raise LedgerValidationError(
                 "A posted entry needs at least two lines, each with a debit or a credit", "journal_lines_invalid"
             )
+
+    async def _add_entry(self, ctx: BusinessContext, document: Document, source: str,
+                         lines: list[JournalLine]) -> JournalEntry:
         await self.assert_open(ctx.business_id, document.document_date)
         entry = JournalEntry(
             business_id=ctx.business_id, document_id=document.id,
             source_id=await self.repo.source_id(source),
             entry_date=document.document_date, memo=document.description, posted_by=ctx.user_id,
         )
-        await self.repo.add_entry(entry, [
+        await self.repo.add_entry(entry, lines)
+        return entry
+
+    async def post(self, ctx: BusinessContext, document: Document, source: str = SOURCE_DOCUMENT) -> JournalEntry:
+        """Copy the document's lines into one balanced journal entry dated the document date."""
+        lines = await self.document_lines(document)
+        self._assert_balanced(lines)
+        await self._assert_dimensions(ctx.business_id, lines)
+        return await self._add_entry(ctx, document, source, [
             JournalLine(
                 business_id=ctx.business_id, line_no=x.line_no, account_id=x.account_id,
                 debit=x.debit, credit=x.credit, document_line_id=x.id, description=x.description,
+                bank_account_id=x.bank_account_id, party_id=x.party_id,
             )
             for x in lines
         ])
-        return entry
+
+    async def post_lines(self, ctx: BusinessContext, document: Document, lines: list[LineInput]) -> JournalEntry:
+        """Post computed lines of a typed document (receipt, payment, transfer) as one entry."""
+        self._assert_balanced(lines)
+        await self.assert_lines(ctx.business_id, lines)
+        return await self._add_entry(ctx, document, SOURCE_DOCUMENT, [
+            JournalLine(
+                business_id=ctx.business_id, line_no=no, account_id=x.account_id, debit=x.debit,
+                credit=x.credit, description=x.description, bank_account_id=x.bank_account_id,
+                party_id=x.party_id,
+            )
+            for no, x in enumerate(lines, start=1)
+        ])
+
+    async def live_lines(self, document: Document) -> list[LineInput]:
+        """The lines of the document's current posting (empty for drafts and void documents)."""
+        entry = await self.repo.live_entry(document.business_id, document.id)
+        if entry is None:
+            return []
+        return [
+            LineInput(x.account_id, x.debit, x.credit, x.description, x.bank_account_id, x.party_id)
+            for x in await self.repo.entry_lines(document.business_id, entry.id)
+        ]
 
     async def reverse(self, ctx: BusinessContext, entry: JournalEntry) -> JournalEntry:
         """PR-74 / INV-6: a reversal dated like the original whose lines exactly negate it."""
@@ -207,6 +316,7 @@ class PostingService:
                 business_id=ctx.business_id, line_no=x.line_no, account_id=x.account_id,
                 debit=x.credit, credit=x.debit, document_line_id=x.document_line_id,
                 line_date=x.line_date, description=x.description,
+                bank_account_id=x.bank_account_id, party_id=x.party_id,
             )
             for x in originals
         ])
@@ -217,16 +327,21 @@ class PostingService:
         return await self.reverse(ctx, entry) if entry else None
 
     async def link_opening_balance(self, ctx: BusinessContext, document: Document, kind_key: str,
-                                   account_id: str) -> None:
+                                   account_id: str | None = None, bank_account_id: str | None = None) -> None:
         """Name the opening document's source record (one live row per record, DB trigger)."""
         await self.repo.add_opening_balance(OpeningBalance(
-            document_id=document.id, business_id=ctx.business_id, kind_key=kind_key, account_id=account_id,
+            document_id=document.id, business_id=ctx.business_id, kind_key=kind_key,
+            account_id=account_id, bank_account_id=bank_account_id,
         ))
 
     async def repost(self, ctx: BusinessContext, document: Document) -> JournalEntry:
         """PR-73: edit of a posted document = reversal of its current entry + a new entry."""
         await self.reverse_live_entry(ctx, document)
         return await self.post(ctx, document)
+
+    async def repost_lines(self, ctx: BusinessContext, document: Document, lines: list[LineInput]) -> JournalEntry:
+        await self.reverse_live_entry(ctx, document)
+        return await self.post_lines(ctx, document, lines)
 
     async def void(self, ctx: BusinessContext, document: Document) -> None:
         """Posted: reversal + status void. Draft: status void, no ledger effect."""

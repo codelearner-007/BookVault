@@ -11,11 +11,11 @@ from app.core.pagination import SEARCH_MAX, PageParams, page_params
 from app.schemas.common import PaginatedResponse
 from app.schemas.request.contact import ContactCreate, ContactUpdate
 from app.schemas.response.contact import ContactResponse
-from app.schemas.response.receipt import ReceiptResponse
+from app.schemas.response.cash_transaction import CashTransactionListResponse
 from app.services.access_service import BusinessContext
 from app.services.contact_service import CUSTOMERS, SUPPLIERS, ContactKind, ContactService
 from app.services.idempotency_service import IdempotencyService, business_scope
-from app.services.receipt_service import ReceiptService
+from app.services.cash_transaction_service import RECEIPT, CashTransactionService
 
 
 def build_contact_router(kind: ContactKind) -> APIRouter:
@@ -55,16 +55,17 @@ def build_contact_router(kind: ContactKind) -> APIRouter:
     ) -> ContactResponse:
         return await ContactService(db, kind).get(ctx.business_id, contact_id)
 
-    @router.get("/{contact_id}/receipts", response_model=PaginatedResponse[ReceiptResponse])
+    @router.get("/{contact_id}/receipts", response_model=CashTransactionListResponse)
     async def list_contact_receipts(
         contact_id: str,
         params: PageParams = Depends(page_params),
         ctx: BusinessContext = Depends(view),
         _receipts: BusinessContext = Depends(receipts_view),
         db: AsyncSession = Depends(get_db, scope="function"),
-    ) -> PaginatedResponse[ReceiptResponse]:
-        await ContactService(db, kind).get(ctx.business_id, contact_id)
-        return await ReceiptService(db).list_page(ctx.business_id, params, (kind.key, contact_id))
+    ) -> CashTransactionListResponse:
+        """Alias kept until /transactions (B4/B5): the receipts the contact paid."""
+        contact = await ContactService(db, kind).get(ctx.business_id, contact_id)
+        return await CashTransactionService(db, RECEIPT).list_page(ctx.business_id, params, party_id=contact.id)
 
     @router.put("/{contact_id}", response_model=ContactResponse)
     async def update_contact(

@@ -17,7 +17,7 @@ import { getSuspenseBalance } from '@/lib/services/suspense.service';
 import { cn } from '@/lib/utils';
 import { formatMoney } from '@/lib/utils/money';
 import { isZeroAmount } from '../coa/coa-tree';
-import { ErrorAlert, REPORTS_TAB, todayIso, useTabNavigate } from '../ledger/ledger-parts';
+import { ErrorAlert, REPORTS_TAB, todayIso, usePageParam, useTabNavigate } from '../ledger/ledger-parts';
 import { REPORTS } from '../ledger/ReportsIndex';
 import { SectionRows, StatementTable, TotalRow } from '../summary/SummaryStatement';
 import BusinessSuspense from './BusinessSuspense';
@@ -27,6 +27,8 @@ const BALANCE_SHEET = 'Balance Sheet';
 const PROFIT_AND_LOSS = 'Profit and Loss Statement';
 const EXPENSES_LABEL = 'Less: Expenses';
 const SKELETON_ROWS = 7;
+// ?tab=summary&suspense=1 opens the Suspense drill-down (paged with &p).
+const SUSPENSE_PARAM = 'suspense';
 // Boolean options held in the URL as "1".
 const FLAGS = { showCodes: 'codes', excludeZero: 'nonzero', collapse: 'collapse' };
 const FLAG_LABELS = { showCodes: 'Show account codes', excludeZero: 'Exclude zero balances', collapse: 'Collapse groups' };
@@ -39,7 +41,8 @@ function startOfYear(isoDate) {
 function useSummaryOptions() {
   const params = useSearchParams();
   const to = params.get('to') || todayIso();
-  const options = { active: params.get('tab') === SUMMARY_TAB, from: params.get('from') || startOfYear(to), to };
+  const active = params.get('tab') === SUMMARY_TAB;
+  const options = { active, from: params.get('from') || startOfYear(to), to, suspense: active && params.get(SUSPENSE_PARAM) === '1' };
   for (const [key, param] of Object.entries(FLAGS)) options[key] = params.get(param) === '1';
   return options;
 }
@@ -157,17 +160,16 @@ function ProfitAndLoss({ statement, options }) {
 }
 
 // The Summary tab: Balance Sheet as at `to` and Profit and Loss for the period, from GET /reports/summary.
-export default function BusinessFinancialSummary({ business, bankRefreshKey = 0 }) {
+export default function BusinessFinancialSummary({ business }) {
   const options = useSummaryOptions();
   const navigate = useTabNavigate(SUMMARY_TAB);
   const [result, setResult] = useState({ key: null, summary: null, suspense: '0', error: null });
-  const [showSuspense, setShowSuspense] = useState(false);
-  // bankRefreshKey changes when a bank account changes elsewhere: reload then too.
-  const requestKey = JSON.stringify([business.id, options.from, options.to, bankRefreshKey]);
+  const page = usePageParam();
+  const requestKey = JSON.stringify([business.id, options.from, options.to]);
 
-  // Tabs stay mounted while hidden: only the visible Summary follows the URL.
+  // Tabs stay mounted while hidden: only the visible Summary follows the URL (and reloads when shown again).
   useEffect(() => {
-    if (!options.active) return undefined;
+    if (!options.active || options.suspense) return undefined;
     let current = true;
     const [businessId, from, to] = JSON.parse(requestKey);
     Promise.all([
@@ -181,7 +183,7 @@ export default function BusinessFinancialSummary({ business, bankRefreshKey = 0 
         if (current) setResult({ key: requestKey, summary: null, suspense: '0', error: err?.message ?? 'Failed to load the summary.' });
       });
     return () => { current = false; };
-  }, [options.active, requestKey]);
+  }, [options.active, options.suspense, requestKey]);
 
   function update(change) {
     const next = { ...options, ...change };
@@ -190,7 +192,14 @@ export default function BusinessFinancialSummary({ business, bankRefreshKey = 0 
     navigate(params, { replace: true });
   }
 
-  if (showSuspense) return <BusinessSuspense business={business} onBack={() => setShowSuspense(false)} />;
+  // Open (page n) or close (null) the Suspense drill-down, keeping the period and options.
+  const suspenseRoute = (n) => {
+    const flags = Object.fromEntries(Object.entries(FLAGS).map(([key, param]) => [param, options[key] ? '1' : '']));
+    navigate({ from: options.from, to: options.to, ...flags, [SUSPENSE_PARAM]: n ? 1 : null, p: n > 1 ? n : null });
+  };
+  if (options.suspense) {
+    return <BusinessSuspense business={business} page={page} onPage={suspenseRoute} onBack={() => suspenseRoute(null)} />;
+  }
   // The full skeleton only before the first answer; later reloads keep the options bar (and its focus).
   const loading = result.key !== requestKey;
   const { summary, suspense, error } = result;
@@ -212,7 +221,7 @@ export default function BusinessFinancialSummary({ business, bankRefreshKey = 0 
             <BalanceSheet
               sheet={summary.balance_sheet}
               options={statementOptions}
-              suspense={!isZeroAmount(suspense) && <SuspenseRow balance={suspense} onOpen={() => setShowSuspense(true)} />}
+              suspense={!isZeroAmount(suspense) && <SuspenseRow balance={suspense} onOpen={() => suspenseRoute(1)} />}
             />
             <ProfitAndLoss statement={summary.profit_and_loss} options={statementOptions} />
           </CardContent>

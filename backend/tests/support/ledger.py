@@ -58,3 +58,24 @@ async def trial_balance(client, user, business_id, as_at: str = "2100-12-31") ->
     response = await client.get(biz(business_id, f"/reports/trial-balance?as_at={as_at}"), headers=user.headers)
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def _tree_nodes(nodes: list[dict]):
+    for node in nodes:
+        yield node
+        yield from _tree_nodes(node["groups"])
+
+
+async def system_account_id(client, user, business_id, code: str) -> str:
+    """The id of a seeded system account (cash_control, suspense, capital_control, ...)."""
+    response = await client.get(biz(business_id, "/chart-of-accounts/tree?as_at=2100-12-31&include_hidden=true"),
+                                headers=user.headers)
+    assert response.status_code == 200, response.text
+    return next(a["id"] for n in _tree_nodes(response.json()["roots"]) for a in n["accounts"]
+                if a["system_account_code"] == code)
+
+
+async def bank_account(client, user, business_id, bank_account_id) -> dict:
+    response = await client.get(biz(business_id, f"/bank-accounts/{bank_account_id}"), headers=user.headers)
+    assert response.status_code == 200, response.text
+    return response.json()

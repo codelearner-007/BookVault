@@ -1,8 +1,11 @@
-"""BankAccount model — bank and cash accounts linked to the Chart of Accounts."""
+"""BankAccount model: a bank or cash account, the sub-ledger of Cash & cash equivalents (B3).
 
-from decimal import Decimal
+Balances are never stored: they come from the ledger (journal_lines.bank_account_id).
+"""
 
-from sqlalchemy import ForeignKey, Numeric, Text, text
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -10,32 +13,16 @@ from app.models.base import Base, TimestampMixin, VersionedMixin
 
 
 class BankAccount(Base, TimestampMixin, VersionedMixin):
-    """A bank or cash account linked to a COA account for a business."""
-
     __tablename__ = "bank_accounts"
 
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
-        primary_key=True,
-        server_default=text("uuid_generate_v7()"),
-    )
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, server_default=text("uuid_generate_v7()"))
     business_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
-        ForeignKey("businesses.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
+        UUID(as_uuid=False), ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
-    opening_balance: Mapped[Decimal] = mapped_column(
-        Numeric(19, 4), nullable=False, default=0
-    )
-    current_balance: Mapped[Decimal] = mapped_column(
-        Numeric(19, 4), nullable=False, default=0
-    )
+    code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    currency_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    def __repr__(self) -> str:
-        return (
-            f"<BankAccount(id={self.id}, name={self.name}, "
-            f"business_id={self.business_id})>"
-        )
+    can_have_pending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_inactive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

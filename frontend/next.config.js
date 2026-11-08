@@ -1,4 +1,6 @@
 const nextConfig = {
+  // Agent/test servers set NEXT_DIST_DIR (e.g. .next-agent) so they never lock the dev server's .next folder.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   reactStrictMode: true,
   output: "standalone",
 

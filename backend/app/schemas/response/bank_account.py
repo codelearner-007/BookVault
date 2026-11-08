@@ -1,27 +1,46 @@
-"""Bank account response schemas (money as decimal strings)."""
+"""Bank and cash account responses: balances from the ledger (PR-12 columns)."""
 
-from datetime import datetime
+from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from app.schemas.common import MoneyOut, PaginatedResponse
 
 
-class BankAccountResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class BankBalances(BaseModel):
+    """cleared + pending deposits + pending withdrawals (negative) = actual."""
 
+    cleared_balance: MoneyOut
+    pending_deposits: MoneyOut
+    pending_withdrawals: MoneyOut
+    actual_balance: MoneyOut
+
+
+class BankAccountResponse(BankBalances):
     id: str
-    business_id: str
     name: str
-    opening_balance: MoneyOut
-    current_balance: MoneyOut
+    code: str | None
     description: str | None
+    can_have_pending: bool
+    is_inactive: bool
     version: int
     created_at: datetime
     updated_at: datetime
 
 
 class BankAccountListResponse(PaginatedResponse[BankAccountResponse]):
-    """Page of accounts plus the balance of all accounts of the business."""
+    totals: BankBalances
 
-    coa_total: MoneyOut
+
+class BankTransactionItem(BaseModel):
+    document_id: str
+    document_type: str
+    date: date
+    reference: str | None
+    description: str | None
+    amount: MoneyOut
+    is_pending: bool
+
+
+class BankTransactionListResponse(PaginatedResponse[BankTransactionItem]):
+    pass

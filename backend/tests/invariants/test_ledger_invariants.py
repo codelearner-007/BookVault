@@ -14,8 +14,16 @@ from sqlalchemy.exc import DBAPIError, ProgrammingError
 from app.db import session as db_session
 from app.main import app
 from tests.conftest import CSRF_HEADER, _add_idempotency_key
-from tests.support.factories import TEST_BOOKS_START, create_business
-from tests.support.ledger import biz, create_account, journal, post_je, set_lock_date, trial_balance
+from tests.support.factories import TEST_BOOKS_START, create_bank_account, create_business, receipt_body
+from tests.support.ledger import (
+    biz,
+    create_account,
+    journal,
+    post_je,
+    set_lock_date,
+    system_account_id,
+    trial_balance,
+)
 
 API_ROLE = "bookvault_api"
 DAY = "2026-05-01"
@@ -248,3 +256,55 @@ async def test_summary_balances_and_retained_earnings_is_computed(client, users)
     assert bs["is_balanced"] and bs["total_assets"] == bs["total_liabilities_and_equity"] == "490.00"
     assert (re_["ledger_balance"], re_["cumulative_profit"], re_["total"]) == ("250.00", "55.00", "305.00")
     assert body["profit_and_loss"]["net_profit"] == "-35.00"
+
+
+# ---------------------------------------------------------------- B3 banking (INV-1, INV-2, INV-6)
+
+
+async def _random_banking(client, owner, bid, accounts, banks, rng) -> None:
+    """Receipts, payments and transfers between random accounts; some edited, some voided."""
+    created = []
+    for _ in range(10):
+        kind = rng.choice(["receipts", "payments", "inter-account-transfers"])
+        amount = str(Decimal(rng.randint(1, 50_000)) / 100)
+        if kind == "inter-account-transfers":
+            src, dst = rng.sample(banks, 2)
+            body = {"date": DAY, "from_bank_account_id": src, "to_bank_account_id": dst, "amount": amount, "post": True}
+        else:
+            body = receipt_body(rng.choice(banks), [(rng.choice(accounts), amount)], date=DAY)
+        response = await client.post(biz(bid, f"/{kind}"), json=body, headers=owner.headers)
+        assert response.status_code == 201, response.text
+        created.append((kind, response.json()))
+    for kind, doc in rng.sample(created, 3):
+        await client.post(biz(bid, f"/{kind}/{doc['id']}/void"), json={"version": doc["version"]},
+                          headers=owner.headers)
+
+
+@pytest.mark.parametrize("seed", [3, 17])
+async def test_cash_equals_sum_of_bank_accounts(client, books, db_conn, seed):
+    """INV-2: Cash & cash equivalents = Σ bank and cash accounts; INV-1 every entry balances."""
+    owner, bid, accounts = books
+    banks = [(await create_bank_account(client, owner, bid, name=f"Bank {i}"))["id"] for i in range(3)]
+    await _random_banking(client, owner, bid, accounts, banks, random.Random(seed))
+    cash = await system_account_id(client, owner, bid, "cash_control")
+    control = await _scalar(db_conn, "SELECT COALESCE(sum(debit - credit), 0) FROM public.journal_lines"
+                            " WHERE business_id = CAST(:b AS uuid) AND account_id = CAST(:a AS uuid)", b=bid, a=cash)
+    listed = (await client.get(biz(bid, "/bank-accounts"), headers=owner.headers)).json()
+    each = sum((Decimal(x["actual_balance"]) for x in listed["items"]), Decimal(0))
+    without_bank = await _scalar(db_conn, "SELECT count(*) FROM public.journal_lines WHERE business_id = CAST(:b AS uuid)"
+                                 " AND account_id = CAST(:a AS uuid) AND bank_account_id IS NULL", b=bid, a=cash)
+    business_net = await _scalar(db_conn, "SELECT COALESCE(sum(debit - credit), 0) FROM public.journal_lines"
+                                 " WHERE business_id = CAST(:b AS uuid)", b=bid)
+    assert control == each == Decimal(listed["totals"]["actual_balance"])
+    assert without_bank == 0 and business_net == 0
+
+
+async def test_void_receipt_exactly_negates(client, books):
+    """INV-6 for a typed document: a voided receipt leaves every balance as before."""
+    owner, bid, (a, *_) = books
+    bank = (await create_bank_account(client, owner, bid))["id"]
+    before = await trial_balance(client, owner, bid)
+    doc = (await client.post(biz(bid, "/receipts"), json=receipt_body(bank, [(a, "12.34")], date=DAY),
+                             headers=owner.headers)).json()
+    await client.post(biz(bid, f"/receipts/{doc['id']}/void"), json={"version": doc["version"]}, headers=owner.headers)
+    assert await trial_balance(client, owner, bid) == before

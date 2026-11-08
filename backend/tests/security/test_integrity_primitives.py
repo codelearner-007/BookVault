@@ -15,7 +15,8 @@ from sqlalchemy.exc import DBAPIError
 from app.core.config import settings
 from app.main import app
 from tests.conftest import TEST_JWT_SECRET
-from tests.support.factories import create_bank_account, create_business, create_contact
+from tests.support.factories import create_bank_account, create_business, create_contact, receipt_body
+from tests.support.ledger import create_account
 
 KEY = "Idempotency-Key"
 
@@ -27,6 +28,12 @@ def _biz(business_id: str, part: str) -> str:
 async def _owner_business(client, users):
     owner = await users.create()
     return owner, (await create_business(client, owner))["id"]
+
+
+async def _receipt_setup(client, owner, business_id) -> tuple[str, str]:
+    """A bank account and an income account (B3 receipts need both)."""
+    bank = await create_bank_account(client, owner, business_id)
+    return bank["id"], await create_account(client, owner, business_id, "Service income", "income")
 
 
 async def _audit_rows(db_conn, business_id: str, entity_type: str) -> list:
@@ -43,13 +50,13 @@ async def _audit_rows(db_conn, business_id: str, entity_type: str) -> list:
 async def test_same_idempotency_key_returns_same_receipt(client, users, db_conn):
     owner, business_id = await _owner_business(client, users)
     headers = {**owner.headers, KEY: str(uuid.uuid4())}
-    body = {"date": "2026-11-08", "paid_by_type": "Other",
-            "lines": [{"account_id": "suspense", "amount": "5"}]}
+    bank, income = await _receipt_setup(client, owner, business_id)
+    body = receipt_body(bank, [(income, "5")])
 
     first = await client.post(_biz(business_id, "receipts"), json=body, headers=headers)
     replay = await client.post(_biz(business_id, "receipts"), json=body, headers=headers)
     count = await db_conn.execute(text(
-        "SELECT count(*) FROM receipts WHERE business_id = CAST(:b AS uuid)"), {"b": business_id})
+        "SELECT count(*) FROM cash_transactions WHERE business_id = CAST(:b AS uuid)"), {"b": business_id})
 
     assert (first.status_code, replay.status_code) == (201, 201)
     assert replay.json() == first.json()
@@ -140,24 +147,23 @@ async def test_business_update_requires_current_version(client, users):
 
 
 async def test_client_total_ignored(client, users):
+    """No client total is accepted (strict schema); line amounts and the total come from the server."""
     owner, business_id = await _owner_business(client, users)
-    lines = [
-        {"account_id": "suspense", "amount": "10.005", "qty": "3", "discount": "1", "total": "999"},
-        {"account_id": "suspense", "amount": "-0.125", "total": "0"},
-    ]
+    bank, income = await _receipt_setup(client, owner, business_id)
+    body = receipt_body(bank, [(income, "10.005"), (income, "-0.125")])
+    body["lines"][0].update(qty="3", discount="1")
 
-    created = await client.post(
-        _biz(business_id, "receipts"),
-        json={"date": "2026-11-08", "paid_by_type": "Other", "lines": lines},
-        headers=owner.headers,
-    )
+    with_total = await client.post(_biz(business_id, "receipts"), headers=owner.headers,
+                                   json={**body, "lines": [{**body["lines"][0], "total": "999"}]})
+    created = await client.post(_biz(business_id, "receipts"), json=body, headers=owner.headers)
 
-    body = created.json()
+    receipt = created.json()
+    assert with_total.status_code == 422
     assert created.status_code == 201, created.text
     # 10.005 * 3 - 1 = 29.015 -> 29.02 ; -0.125 -> -0.13 (half away from zero)
-    assert [Decimal(line["total"]) for line in body["lines"]] == [Decimal("29.02"), Decimal("-0.13")]
-    assert Decimal(body["total"]) == Decimal("28.89")
-    assert isinstance(body["lines"][0]["amount"], str)
+    assert [Decimal(line["amount"]) for line in receipt["lines"]] == [Decimal("29.02"), Decimal("-0.13")]
+    assert Decimal(receipt["total"]) == Decimal("28.89")
+    assert isinstance(receipt["lines"][0]["amount"], str)
 
 
 async def test_bank_balance_is_a_decimal_string(client, users):
@@ -166,17 +172,16 @@ async def test_bank_balance_is_a_decimal_string(client, users):
 
     listed = (await client.get(_biz(business_id, "bank-accounts"), headers=owner.headers)).json()
 
-    assert account["opening_balance"] == "0.1000"
-    assert Decimal(listed["coa_total"]) == Decimal("0.1")
+    assert account["actual_balance"] == "0.10"
+    assert listed["totals"]["actual_balance"] == "0.10"
 
 
 async def test_money_over_precision_rejected_422(client, users):
     owner, business_id = await _owner_business(client, users)
 
+    bank, income = await _receipt_setup(client, owner, business_id)
     response = await client.post(
-        _biz(business_id, "bank-accounts"),
-        json={"name": "Bank", "opening_balance": "1.00001"},
-        headers=owner.headers,
+        _biz(business_id, "receipts"), json=receipt_body(bank, [(income, "1.00001")]), headers=owner.headers,
     )
 
     assert response.status_code == 422
@@ -199,7 +204,9 @@ async def test_audit_row_written_for_every_mutation(client, users, db_conn, enti
         await create_bank_account(client, owner, business_id)
         expected = ["create"]
     elif entity == "Receipt":
-        await client.post(_biz(business_id, "receipts"), json={"date": "2026-11-08"}, headers=owner.headers)
+        bank, income = await _receipt_setup(client, owner, business_id)
+        await client.post(_biz(business_id, "receipts"), json=receipt_body(bank, [(income, "1")]),
+                          headers=owner.headers)
         expected = ["create"]
     elif entity == "CoaGroup":
         groups = await client.get(_biz(business_id, "chart-of-accounts/groups"), headers=owner.headers)
@@ -295,10 +302,10 @@ async def test_list_pages_are_disjoint(client, users):
 
 async def test_oversized_list_rejected_422(client, users):
     owner, business_id = await _owner_business(client, users)
-    lines = [{"account_id": "suspense", "amount": "1"}] * 501
+    bank, income = await _receipt_setup(client, owner, business_id)
 
-    response = await client.post(_biz(business_id, "receipts"),
-                                 json={"date": "2026-11-08", "lines": lines}, headers=owner.headers)
+    response = await client.post(_biz(business_id, "receipts"), headers=owner.headers,
+                                 json=receipt_body(bank, [(income, "1")] * 501))
 
     assert response.status_code == 422
 

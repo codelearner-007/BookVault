@@ -8,7 +8,9 @@ from tests.support.factories import (
     create_contact,
     first_coa_account_id,
     first_coa_group_id,
+    receipt_body,
 )
+from tests.support.ledger import create_account
 from tests.support.tenancy import business_routes, has_business_access_dependency, request_as
 
 BUSINESS_ROUTES = business_routes()
@@ -79,37 +81,34 @@ async def _two_tenants(client, users):
     return owner_a, business_a["id"], business_b, owner_b
 
 
+async def _receipt_books(client, owner, business_id) -> tuple[str, str]:
+    bank = await create_bank_account(client, owner, business_id)
+    return bank["id"], await create_account(client, owner, business_id, "Service income", "income")
+
+
 async def test_receipt_with_foreign_bank_account_rejected(client, users):
     owner_a, business_a, business_b, owner_b = await _two_tenants(client, users)
     foreign_account = await create_bank_account(client, owner_b, business_b["id"])
+    _, income = await _receipt_books(client, owner_a, business_a)
 
-    response = await client.post(
-        f"/api/v1/businesses/{business_a}/receipts",
-        json={"date": "2026-11-08", "received_in_account_id": foreign_account["id"]},
-        headers=owner_a.headers,
-    )
+    response = await client.post(f"/api/v1/businesses/{business_a}/receipts", headers=owner_a.headers,
+                                 json=receipt_body(foreign_account["id"], [(income, "10")]))
 
     assert response.status_code == 422, response.text
     balance = await client.get(
         f"/api/v1/businesses/{business_b['id']}/bank-accounts/{foreign_account['id']}",
         headers=owner_b.headers,
     )
-    assert balance.json()["current_balance"] == foreign_account["current_balance"]
+    assert balance.json()["actual_balance"] == foreign_account["actual_balance"]
 
 
 async def test_receipt_with_foreign_contact_rejected(client, users):
     owner_a, business_a, business_b, owner_b = await _two_tenants(client, users)
     foreign_customer = await create_contact(client, owner_b, business_b["id"])
+    bank, income = await _receipt_books(client, owner_a, business_a)
 
-    response = await client.post(
-        f"/api/v1/businesses/{business_a}/receipts",
-        json={
-            "date": "2026-11-08",
-            "paid_by_contact_id": foreign_customer["id"],
-            "paid_by_contact_type": "customer",
-        },
-        headers=owner_a.headers,
-    )
+    response = await client.post(f"/api/v1/businesses/{business_a}/receipts", headers=owner_a.headers,
+                                 json=receipt_body(bank, [(income, "1")], counterparty_party_id=foreign_customer["id"]))
 
     assert response.status_code == 422, response.text
 
@@ -117,13 +116,10 @@ async def test_receipt_with_foreign_contact_rejected(client, users):
 async def test_receipt_line_with_foreign_coa_account_rejected(client, users):
     owner_a, business_a, business_b, owner_b = await _two_tenants(client, users)
     foreign_coa = await first_coa_account_id(client, owner_b, business_b["id"])
-    line = {"account_id": foreign_coa, "amount": 10, "total": 10}
+    bank, _ = await _receipt_books(client, owner_a, business_a)
 
-    response = await client.post(
-        f"/api/v1/businesses/{business_a}/receipts",
-        json={"date": "2026-11-08", "lines": [line]},
-        headers=owner_a.headers,
-    )
+    response = await client.post(f"/api/v1/businesses/{business_a}/receipts", headers=owner_a.headers,
+                                 json=receipt_body(bank, [(foreign_coa, "10")]))
 
     assert response.status_code == 422, response.text
 
@@ -131,16 +127,15 @@ async def test_receipt_line_with_foreign_coa_account_rejected(client, users):
 async def test_receipt_update_cannot_point_at_foreign_bank_account(client, users):
     owner_a, business_a, business_b, owner_b = await _two_tenants(client, users)
     foreign_account = await create_bank_account(client, owner_b, business_b["id"])
-    created = await client.post(
-        f"/api/v1/businesses/{business_a}/receipts",
-        json={"date": "2026-11-08"},
-        headers=owner_a.headers,
-    )
+    bank, income = await _receipt_books(client, owner_a, business_a)
+    body = receipt_body(bank, [(income, "4")], post=False)
+    created = (await client.post(f"/api/v1/businesses/{business_a}/receipts", json=body,
+                                 headers=owner_a.headers)).json()
 
     response = await client.put(
-        f"/api/v1/businesses/{business_a}/receipts/{created.json()['id']}",
-        json={"received_in_account_id": foreign_account["id"]},
-        headers=owner_a.headers,
+        f"/api/v1/businesses/{business_a}/receipts/{created['id']}", headers=owner_a.headers,
+        json={**{k: v for k, v in body.items() if k != "post"}, "version": created["version"],
+              "bank_account_id": foreign_account["id"]},
     )
 
     assert response.status_code == 422, response.text

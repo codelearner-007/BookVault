@@ -87,7 +87,7 @@ export const TAB_GROUPS = [
     key: 'accounting',
     label: 'Accounting',
     tabs: [
-      { key: 'capital-accounts', icon: PiggyBank },
+      { key: 'capital-accounts', icon: PiggyBank, area: 'capital_accounts' },
       { key: 'special-accounts', icon: Asterisk },
       { key: 'journal-entries', icon: BookOpen },
       { key: 'folders', icon: Folder, area: 'folders_attachments' },
@@ -125,7 +125,9 @@ export function groupTabs(tabs) {
 
 // "New ..." actions that have a URL today; the New menu and the palette show those the user may create.
 export const NEW_ACTIONS = [
-  { tab: 'receipts', label: 'Receipt', href: '?tab=receipts&page=create', icon: ArrowDownLeft },
+  { tab: 'receipts', label: 'Receipt', href: '?tab=receipts&new=1', icon: ArrowDownLeft },
+  { tab: 'payments', label: 'Payment', href: '?tab=payments&new=1', icon: ArrowUpRight },
+  { tab: 'inter-account-transfers', label: 'Inter Account Transfer', href: '?tab=inter-account-transfers&new=1', icon: ArrowLeftRight },
   { tab: 'customers', label: 'Customer', href: '?tab=customers&page=create', icon: Users },
   { tab: 'suppliers', label: 'Supplier', href: '?tab=suppliers&page=create', icon: Truck },
   { tab: 'journal-entries', label: 'Journal Entry', href: '?tab=journal-entries&new=1', icon: BookOpen },

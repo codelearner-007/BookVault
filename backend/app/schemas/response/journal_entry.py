@@ -17,6 +17,10 @@ class LedgerLineResponse(BaseModel):
     description: str | None
     debit: MoneyOut
     credit: MoneyOut
+    bank_account_id: str | None = None
+    bank_account_name: str | None = None
+    party_id: str | None = None
+    party_name: str | None = None
 
 
 class JournalEntryLineResponse(LedgerLineResponse):

@@ -79,6 +79,8 @@ class DocumentLine(Base):
     account_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
     debit: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal(0))
     credit: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal(0))
+    bank_account_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    party_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
@@ -111,6 +113,8 @@ class JournalLine(Base):
     account_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
     debit: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     credit: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    bank_account_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    party_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     document_line_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     line_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -125,4 +129,5 @@ class OpeningBalance(Base):
     business_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
     kind_key: Mapped[str] = mapped_column(Text, nullable=False)
     account_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    bank_account_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
