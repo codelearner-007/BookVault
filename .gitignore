@@ -34,3 +34,5 @@ Thumbs.db
 
 # Reference notes (local only)
 backend-ref/
+# Agent worktrees (local only)
+.claude/worktrees/
