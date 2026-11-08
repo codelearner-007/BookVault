@@ -10,7 +10,6 @@ import { EmptyState, ListCard, PageHeader } from '@/components/common/page';
 import { ListPagination } from '@/components/super-admin/platform-parts';
 import { getSuspenseBalance, listSuspenseEntries } from '@/lib/services/suspense.service';
 import { SUSPENSE_COPY as COPY } from '@/lib/copy/money';
-import { isNegativeAmount } from '@/lib/utils/money';
 import {
   DOCUMENT_TYPE_LABELS, documentEditHref, documentHref, useDocumentEditRight, useLoad,
 } from '../banking/banking-parts';
@@ -57,15 +56,11 @@ const COLUMNS = [
   },
 ];
 
-function balanceLabel(balance) {
-  if (isZeroAmount(balance)) return COPY.nothing;
-  return isNegativeAmount(balance) ? COPY.received : COPY.paid;
-}
 
 function BalanceCard({ balance }) {
   return (
     <Card className="mb-6 max-w-md p-card">
-      <p className="text-sm text-muted-foreground">{balanceLabel(balance)}</p>
+      <p className="text-sm text-muted-foreground">{isZeroAmount(balance) ? COPY.nothing : COPY.balance}</p>
       <p className="mt-1 text-title font-bold tracking-title" data-testid="suspense-to-allocate">
         <Money value={balance} absolute /> <span className="text-lg font-semibold text-muted-foreground">{COPY.toAllocateSuffix}</span>
       </p>

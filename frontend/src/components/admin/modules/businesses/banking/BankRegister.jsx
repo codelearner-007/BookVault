@@ -63,16 +63,16 @@ const COLUMNS = [
     muted: true,
     truncate: true,
     render: (row) => (
-      <span className="inline-flex max-w-full items-center gap-2 align-bottom">
-        <span className="truncate">{row.description || EMPTY}</span>
-        {row.is_pending && <PendingBadge />}
-      </span>
+      <>
+        {row.description || EMPTY}
+        {row.is_pending && <PendingBadge className="ms-2" />}
+      </>
     ),
   },
-  { key: 'counterparty', label: 'Counterparty', muted: true, truncate: true },
-  { key: 'received', label: 'Received', kind: COLUMN_KIND.money, tone: 'in', zero: 'blank' },
-  { key: 'paid', label: 'Paid', kind: COLUMN_KIND.money, tone: 'out', zero: 'blank' },
-  { key: 'balance', label: 'Balance', kind: COLUMN_KIND.money, tone: 'balance', card: 'end' },
+  { key: 'counterparty', label: 'Counterparty', muted: true },
+  { key: 'received', label: 'Received', kind: COLUMN_KIND.money, tone: 'in', zero: 'blank', card: 'end' },
+  { key: 'paid', label: 'Paid', kind: COLUMN_KIND.money, tone: 'out', zero: 'blank', card: 'end' },
+  { key: 'balance', label: 'Balance', kind: COLUMN_KIND.money, tone: 'balance' },
 ];
 
 // The account's register from the ledger: every posted document that moved it, newest first, with the
@@ -89,7 +89,12 @@ export default function BankRegister({ businessId, accountId, page, range, onCha
     <section aria-labelledby="bank-register">
       <ListToolbar>
         <h2 id="bank-register" className="me-auto text-md font-semibold">Register</h2>
-        <DateRangePicker id="bank-register-range" value={range} onChange={(next) => onChange({ range: next, page: 1 })} />
+        <DateRangePicker
+          id="bank-register-range"
+          value={range}
+          onChange={(next) => onChange({ range: next, page: 1 })}
+          className="md:w-72"
+        />
       </ListToolbar>
       {error && <ErrorAlert>{error}</ErrorAlert>}
       <ListCard

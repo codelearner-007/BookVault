@@ -137,8 +137,8 @@ export function isEditableDocument(row) {
   return row.status !== JE_STATUS.void && !row.is_locked;
 }
 
-export function PendingBadge() {
-  return <Badge variant="info">Pending</Badge>;
+export function PendingBadge({ className }) {
+  return <Badge variant="info" className={className}>Pending</Badge>;
 }
 
 export function InactiveBadge() {

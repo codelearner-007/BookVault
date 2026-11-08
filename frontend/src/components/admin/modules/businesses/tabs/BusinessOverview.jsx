@@ -90,11 +90,11 @@ function OptionsBar({ options, onChange }) {
   return (
     <ListToolbar className="justify-start gap-x-5">
       <div className="flex items-center gap-2">
-        <Label htmlFor="summary-from" className="text-muted-foreground">From</Label>
+        <Label htmlFor="summary-from" className="w-10 text-muted-foreground md:w-auto">From</Label>
         <DatePicker id="summary-from" value={options.from} onChange={(value) => value && onChange({ from: value })} className="w-44" />
       </div>
       <div className="flex items-center gap-2">
-        <Label htmlFor="summary-to" className="text-muted-foreground">To</Label>
+        <Label htmlFor="summary-to" className="w-10 text-muted-foreground md:w-auto">To</Label>
         <DatePicker id="summary-to" value={options.to} onChange={(value) => value && onChange({ to: value })} className="w-44" />
       </div>
       {Object.keys(FLAGS).map((key) => (

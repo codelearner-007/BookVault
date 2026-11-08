@@ -63,7 +63,6 @@ test('receipt without a bank goes to Suspense, then picking a bank moves it to t
 
   // Suspense shows the amount to allocate, never a signed (credit-positive) balance.
   await expectSuspense(page, business.id, AMOUNT);
-  await expect(page.getByText('Received without a bank or cash account')).toBeVisible();
 
   // Edit: pick the bank account; the note goes away and Update reposts.
   await page.goto(receiptUrl);

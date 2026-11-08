@@ -44,7 +44,7 @@ function CashDocument({ doc, direction, businessName }) {
         {doc.clears_later && <Field label="Cleared">{doc.cleared_on ? <FormattedDate value={doc.cleared_on} /> : 'Not cleared yet'}</Field>}
       </dl>
       {doc.description && <p className="mt-6 font-semibold whitespace-pre-wrap">{doc.description}</p>}
-      <Table className="mt-4" cards={false}>
+      <Table className="mt-4">
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead>Account</TableHead>
@@ -57,17 +57,17 @@ function CashDocument({ doc, direction, businessName }) {
         <TableBody>
           {doc.lines.map((line) => (
             <TableRow key={line.id}>
-              <TableCell>{lineAccount(line)}</TableCell>
-              <TableCell className="text-muted-foreground">{line.description}</TableCell>
-              <TableCell className="num w-20"><Quantity value={line.qty} /></TableCell>
-              <TableCell className="num w-32"><Money value={line.unit_price} /></TableCell>
-              <TableCell className="num w-32"><Money value={line.amount} /></TableCell>
+              <TableCell data-card="title">{lineAccount(line)}</TableCell>
+              <TableCell className="text-muted-foreground" data-label="Description">{line.description}</TableCell>
+              <TableCell className="num w-20" data-label="Qty"><Quantity value={line.qty} /></TableCell>
+              <TableCell className="num w-32" data-label="Amount"><Money value={line.unit_price} /></TableCell>
+              <TableCell className="num w-32" data-card="end"><Money value={line.amount} /></TableCell>
             </TableRow>
           ))}
         </TableBody>
         <TableFooter>
           <TableRow className="hover:bg-transparent">
-            <TableCell colSpan={4} className="text-end">Total</TableCell>
+            <TableCell colSpan={4} className="text-end max-md:text-start">Total</TableCell>
             <TableCell className="num" data-testid="document-total"><Money value={doc.total} /></TableCell>
           </TableRow>
         </TableFooter>

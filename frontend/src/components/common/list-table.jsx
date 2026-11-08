@@ -24,7 +24,7 @@ import { Money } from './money';
 export const COLUMN_KIND = { text: 'text', date: 'date', money: 'money', qty: 'qty' };
 const END_KINDS = new Set([COLUMN_KIND.money, COLUMN_KIND.qty]);
 const KIND_CELL = {
-  [COLUMN_KIND.text]: '',
+  [COLUMN_KIND.text]: 'md:whitespace-nowrap',
   [COLUMN_KIND.date]: 'whitespace-nowrap tabular-nums',
   [COLUMN_KIND.money]: 'num',
   [COLUMN_KIND.qty]: 'num',
@@ -101,7 +101,7 @@ function TotalsRow({ columns, totals, withActions }) {
           if (amount !== undefined) {
             return (
               <TableCell key={column.key} className={KIND_CELL[COLUMN_KIND.money]} data-label={several ? column.label : undefined}>
-                <Money value={amount} tone={typeof column.tone === 'function' ? undefined : column.tone} />
+                <Money value={amount} tone={typeof column.tone === 'function' ? undefined : column.tone} zero={column.zero === 'blank' ? 'show' : column.zero} />
               </TableCell>
             );
           }

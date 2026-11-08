@@ -46,8 +46,7 @@ export const JOURNAL_COPY = {
 export const SUSPENSE_COPY = {
   toAllocate: (amount) => `${amount} to allocate`,
   toAllocateSuffix: 'to allocate',
-  received: 'Received without a bank or cash account',
-  paid: 'Paid without a bank or cash account',
+  balance: 'Suspense balance',
   nothing: 'Nothing waits in Suspense',
   explanation: 'Receipts and payments saved without a bank or cash account wait here. Edit each one and choose its account to clear it.',
   column: 'To allocate',
