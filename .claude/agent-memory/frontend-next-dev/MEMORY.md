@@ -13,6 +13,7 @@
 - [B3 banking UI](project_b3_banking_ui.md) — banking/ folder, receipts+payments one component set, useLoad/useDocumentRoute, attachments upload
 - [B4 sales UI](project_b4_sales_ui.md) — sales/ folder, TRADE_DOCUMENTS config, copy-to URL, credit-limit confirm, tax codes/items pages
 - [B5 purchases UI](project_b5_purchases_ui.md) — TRADE_SIDES + role config, Parties* components, payment AP allocation, e2e trackAccounts teardown
+- [UI polish shared layer](project_ui_polish.md) — ListTable, Money tones + hide balances, business format, account/date pickers, journal disclosure, logo B
 
 ## Pre-existing Build Issues
 - Turbopack build error when running `npx next build` outside project dir; always `cd frontend` first.

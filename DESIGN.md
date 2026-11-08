@@ -16,6 +16,12 @@ colors:
   ice-dark: "oklch(0.8 0.11 255)"
   pill-ink: "oklch(0.24 0.03 255)"
   pill-light: "oklch(0.95 0.015 255)"
+  accent-contrast-light: "oklch(0.5 0.2 288)"
+  accent-contrast-dark: "oklch(0.76 0.13 288)"
+  accent-contrast-ink-light: "oklch(0.985 0.01 288)"
+  accent-contrast-ink-dark: "oklch(0.18 0.04 288)"
+  logo-tile: "oklch(0.22 0.022 255)"
+  logo-dial: "oklch(0.8 0.11 255)"
   ok-light: "oklch(0.46 0.12 152)"
   ok-dark: "oklch(0.82 0.14 152)"
   warn-light: "oklch(0.5 0.11 70)"
@@ -75,14 +81,14 @@ spacing:
   sidebar-icons: "4.25rem"
 components:
   button-primary:
-    backgroundColor: "{colors.pill-ink}"
-    textColor: "{colors.frost}"
+    backgroundColor: "{colors.accent-contrast-light}"
+    textColor: "{colors.accent-contrast-ink-light}"
     rounded: "{rounded.pill}"
     height: "{spacing.control}"
     padding: "0 1.125rem"
   button-primary-dark:
-    backgroundColor: "{colors.pill-light}"
-    textColor: "{colors.ink}"
+    backgroundColor: "{colors.accent-contrast-dark}"
+    textColor: "{colors.accent-contrast-ink-dark}"
     rounded: "{rounded.pill}"
     height: "{spacing.control}"
   button-secondary:
@@ -125,7 +131,7 @@ The shell floats: a glass sidebar and a pill top bar sit 12px inside the window 
 The tokens live in one place, `frontend/src/app/globals.css` (`:root` for light, `.dark` for dark, mapped to Tailwind v4 through `@theme inline`). Components read only semantic utilities (`bg-card`, `text-muted-foreground`, `h-control`, `rounded-card`, `text-ok`); no component carries a literal colour, radius or size.
 
 **Key Characteristics:**
-- One brand hue (ice, 255), used as light, never as fill.
+- One brand hue (ice, 255), used as light, never as fill; one contrast accent (electric violet, 288) for the primary action and the current place.
 - Glass on two shell surfaces (sidebar, top bar) and list cards; popovers and dialogs are solid.
 - Pill buttons, 20px cards, 12px controls.
 - Tabular figures, end-aligned, with a totals row on its own rule.
@@ -137,8 +143,9 @@ The tokens live in one place, `frontend/src/app/globals.css` (`:root` for light,
 A near-monochrome graphite/paper world tinted 255, with four verdict hues that keep their hue across themes.
 
 ### Primary
-- **Ice** (light `ice-light`, dark `ice-dark`): focus rings, the active tab's icon, the switch's on state, selected checks, links. Never a button fill, never a page background.
-- **Ink Pill / Light Pill** (`pill-ink` in light, `pill-light` in dark): the one filled primary button per view. Ink on paper by day, a near-white pill on graphite by night, the owner's reference.
+- **Ice** (light `ice-light`, dark `ice-dark`): links, the caret and selection, the switch's on state, selected checks, the dial of the logo. Never a button fill, never a page background.
+- **Contrast accent, electric violet 288** (`--accent-contrast`: `accent-contrast-light` / `accent-contrast-dark`, text `accent-contrast-ink-*`, hover a step darker in light and lighter in dark; candidate A, chosen by the owner on 2026-11-08): the fill of the one primary button per view, the selected tab, the active sidebar marker and the focus ring. Nothing else. Its hue sits clear of every status hue, so it never reads as a verdict; both pairs pass WCAG AA. In development only, `?accent=b|c` previews the other candidates (teal 200, magenta 340) through `data-accent` on `<html>`; the switch stays until the owner retires it.
+- **Ink Pill / Light Pill** (`pill-ink` / `pill-light`, the `--primary` tokens): dark-on-light surfaces such as the toast; no longer a button fill.
 
 ### Neutral
 - **Canvas** (`canvas-light` / `canvas-dark`) under a radial gradient of the same hue: the page ground.
@@ -154,7 +161,11 @@ A near-monochrome graphite/paper world tinted 255, with four verdict hues that k
 - **Info 255** (`info-light` / `info-dark`): Unpaid, updated, informational.
 - Each has a soft background at 12–15% (dark) or a pale tint (light); pills use the pair.
 
-**The Verdict-Only Rule.** Colour other than ink and ice appears only on a status pill, a destructive action or an error. If a screen has colour and no verdict, remove the colour.
+### Money direction (an allowed status use)
+- Amounts render through one `<Money>` component with a `tone`: money **in** (receipts, Received, Inflows) keeps the normal foreground; money **out** (payments, Paid, Outflows, pending withdrawals) uses the `bad` token on the amount text only, never the row; a **balance** (a running balance, an account's current balance) is semibold and a step larger, red only when negative. A zero carries no tone. Transfers and journals stay neutral.
+- **Hidden balances** show `••••` in the muted colour, whatever the tone.
+
+**The Verdict-Only Rule.** Colour other than ink, ice and the contrast accent appears only on a status pill, a money direction, a destructive action or an error. If a screen has colour and no verdict, remove the colour.
 
 **The One Hue Rule.** Brand and neutrals share hue 255 in both themes; a new surface picks lightness and chroma, never a new hue.
 
@@ -205,10 +216,11 @@ Rounded and soft, never boxed: cards 20px, the shell 24px, dialogs 24px (a botto
 
 ### Buttons
 - **Shape:** full pill (999px), 40px high (34px small, 44px on touch).
-- **Primary:** the ink pill (light) or light pill (dark), semibold; exactly one per view.
-- **Secondary (tonal):** glass with a hairline and highlight; for New in the top bar and second actions.
-- **Ghost:** muted text, accent tint on hover; icon buttons, More menus, Cancel.
-- **Focus:** a 2px ice outline offset 2px. **Press:** 1px down.
+- **Primary (`default`):** the contrast-accent pill (violet fill, `accent-contrast-ink` text, a soft violet drop), semibold; exactly one per view (Post on a form, New on a list, Edit on a view).
+- **Secondary (tonal):** glass with a hairline and highlight; New in the top bar, Save draft, a view's Edit when Post is the primary, the cookie notice's Accept.
+- **Ghost:** muted text, a neutral tint on hover; icon buttons, More menus, Cancel, the eye toggles and the quiet View / Edit row actions.
+- **Destructive:** only inside a confirmation; the menu entry that opens it is red text, not a fill.
+- **Focus:** a 2px contrast-accent outline offset 2px. **Press:** 1px down.
 
 ### Status pills
 - One 6px dot plus one word on the soft status background, 24px high. Draft has a hollow dot; Void is struck through on a hairline with no dot; roles (Owner, Member) are neutral with no dot.
@@ -224,13 +236,31 @@ Rounded and soft, never boxed: cards 20px, the shell 24px, dialogs 24px (a botto
 - Top bar: sidebar toggle, breadcrumbs, search / Ctrl+K palette (Create, Go to, Businesses), New menu (actions the user may create), theme toggle, account menu (Account, Security and 2FA, Platform admin for the super admin, Log out).
 - Business switcher: monogram, business name and role; a searchable list of businesses with roles, All businesses, Create business.
 
-### Tables
-- 52px rows, 40px head, 16px cell padding, faint row dividers, hover tint; amounts end-aligned with tabular figures; a totals row on its own rule; pagination or count under the table inside the list card.
+### Tables and lists
+- 52px rows, 40px head, 16px cell padding, faint row dividers, hover tint; a totals row on its own rule; pagination or count under the table inside the list card.
+- **Every record list is one `ListTable`** (`components/common/list-table.jsx`): a column definition drives the head, the cells and the totals, so a value never sits under the wrong header. Kinds: text and **dates start-aligned** (business date format, tabular figures), **money and quantities end-aligned** (`<Money>`, `<Quantity>`). A truncating column (Description) takes the width left over, so wide lists fit instead of scrolling.
+- **Row actions:** quiet ghost `View` and `Edit` at the start of every row (Manager's row buttons); Edit only with the edit right and never on Void or locked records; settings catalogs (tax codes, items) and capital accounts edit in their dialog and keep Delete in a More menu. A row click still opens the view.
+- **Phones:** rows become cards (title, the amount at the end, labelled meta lines, View / Edit at the end).
+
+### Documents
+- A document view is the paper card, then **Transaction journal** behind a disclosure (collapsed by default, `?journal=1` keeps it open, loaded only when opened), then Attachments.
+- Views and journals name accounts without codes; codes show only in Settings > Chart of Accounts and on the Summary with "Show account codes".
+
+### Form fields
+- **Account picker** (`components/common/account-picker.jsx`): a searchable combobox in every form; each option is the account name with its head group (the chart root: Assets, Liabilities, Equity, Income, Expenses) muted on the right; no codes. Bank and cash pickers use it too.
+- **Date picker** (`components/common/date-picker.jsx`): typed in the business date format (any of . / - or space between the parts; ISO always works) or picked from the Nightglass calendar; the single-date sibling of the date-range picker. No native browser date inputs.
+
+### Hide balances
+- A global eye in the top bar (in the account menu on phones) masks every amount as `••••`. It is kept per user in a cookie the server reads, so the first paint is already masked. Dashboard business cards, Bank and Cash (list, view, register) and the Summary have their own eye, which reveals or hides just that section until the global switch changes.
+
+### Logo
+- Concept B, the dial o: the second o of "Book" is a combination dial. `LogoWordmark` (letters in `currentColor`, the dial in ice) in the sidebar header, the auth card and the site nav; `LogoMark` (the dial on its tile: `logo-tile`, `logo-dial`, `logo-hub`, the same in both themes) in the icons-only sidebar and as the app icons (`app/icon.svg`, `app/apple-icon.png`, `app/favicon.ico`).
 
 ## Do's and Don'ts
 
 ### Do:
 - **Do** keep one filled primary per view and at most three button styles (primary, tonal, ghost); put secondary actions in the More menu.
+- **Do** render every amount through `<Money>` and every list through `ListTable`, every date through the business date format.
 - **Do** read every colour, size and radius from the semantic utilities (`bg-card`, `h-control`, `rounded-card`, `text-ok`).
 - **Do** give every page a skeleton that mirrors its real layout.
 - **Do** check both themes; contrast must pass AA on glass over the gradient.
