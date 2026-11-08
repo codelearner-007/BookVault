@@ -7,8 +7,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { format } from 'date-fns';
-import { ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Filter } from 'lucide-react';
+import { endOfDay, format, parseISO } from 'date-fns';
+import { ChevronLeft, ChevronRight, X, Filter } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -16,10 +16,8 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
+import { DateRangePicker } from '@/components/common/date-range-picker';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import { listMyAuditLogs } from '@/lib/services/audit.service';
 import { getModules } from '@/lib/services/modules.service';
 
@@ -129,17 +127,14 @@ export default function AdminAuditPage() {
       page: 1, // Reset to first page
     };
 
-    if (range?.from) {
-      newFilters.start_date = range.from.toISOString();
+    if (range.from) {
+      newFilters.start_date = parseISO(range.from).toISOString();
     } else {
       delete newFilters.start_date;
     }
 
-    if (range?.to) {
-      // Set to end of day
-      const endOfDay = new Date(range.to);
-      endOfDay.setHours(23, 59, 59, 999);
-      newFilters.end_date = endOfDay.toISOString();
+    if (range.to) {
+      newFilters.end_date = endOfDay(parseISO(range.to)).toISOString();
     } else {
       delete newFilters.end_date;
     }
@@ -210,42 +205,8 @@ export default function AdminAuditPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Date Range Picker */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Date Range</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        'w-full justify-start text-left font-normal',
-                        !dateRange && 'text-muted-foreground'
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {dateRange?.from ? (
-                        dateRange.to ? (
-                          <>
-                            {format(dateRange.from, 'LLL dd, y')} -{' '}
-                            {format(dateRange.to, 'LLL dd, y')}
-                          </>
-                        ) : (
-                          format(dateRange.from, 'LLL dd, y')
-                        )
-                      ) : (
-                        <span>Pick a date range</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      initialFocus
-                      mode="range"
-                      defaultMonth={dateRange?.from}
-                      selected={dateRange}
-                      onSelect={handleDateRangeChange}
-                      numberOfMonths={2}
-                    />
-                  </PopoverContent>
-                </Popover>
+                <Label htmlFor="date-range" className="text-sm font-medium">Date Range</Label>
+                <DateRangePicker id="date-range" value={dateRange} onChange={handleDateRangeChange} />
               </div>
 
               {/* Module Filter */}
@@ -294,7 +255,7 @@ export default function AdminAuditPage() {
 
                     // Format display names
                     if (key === 'start_date' && dateRange?.from && dateRange?.to) {
-                      displayValue = `${format(dateRange.from, 'MMM d, yyyy')} - ${format(dateRange.to, 'MMM d, yyyy')}`;
+                      displayValue = `${format(parseISO(dateRange.from), 'MMM d, yyyy')} - ${format(parseISO(dateRange.to), 'MMM d, yyyy')}`;
                       displayKey = 'Date Range';
                     } else if (key === 'start_date') {
                       displayValue = format(new Date(value), 'MMM d, yyyy');
