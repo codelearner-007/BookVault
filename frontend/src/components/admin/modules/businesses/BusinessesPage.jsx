@@ -6,7 +6,7 @@ import { Building2, ChevronLeft, ChevronRight, Plus, SearchX } from 'lucide-reac
 import { Button } from '@/components/ui/button';
 import { EmptyState, ListCard, ListToolbar, MoreMenu, PageHeader, SearchInput } from '@/components/common/page';
 import { useShell } from '@/components/shell/ShellContext';
-import { BusinessCard, BusinessCardSkeleton } from '@/components/admin/workspace/BusinessCard';
+import { BusinessList, BusinessListSkeleton } from '@/components/admin/workspace/BusinessList';
 import { useWorkspaceDashboard } from '@/components/admin/workspace/use-workspace-dashboard';
 import { WORKSPACE_COPY as COPY } from '@/lib/copy/workspace';
 import CreateBusinessDialog from './CreateBusinessDialog';
@@ -18,8 +18,6 @@ const PAGE_PARAM = 'p';
 const PAGE_SIZE = 24;
 const SEARCH_FROM = 6; // search shows once there are more businesses than this
 const SEARCH_DEBOUNCE_MS = 250;
-const SKELETON_CARDS = 3;
-const CARD_GRID = 'grid gap-4 md:grid-cols-2 xl:grid-cols-3';
 
 // ?q=<search>&p=<page>&create=1 (deep-linkable, restored after reload).
 function useListParams() {
@@ -63,14 +61,8 @@ function Pager({ page, totalPages, onPage }) {
   );
 }
 
-function BusinessGrid({ data, search, canCreate, onCreate }) {
-  if (data.items.length > 0) {
-    return (
-      <ul className={CARD_GRID} aria-label={COPY.businessesTitle}>
-        {data.items.map((b) => <li key={b.id} className="grid"><BusinessCard business={b} showFootnote /></li>)}
-      </ul>
-    );
-  }
+function BusinessRows({ data, search, canCreate, onCreate }) {
+  if (data.items.length > 0) return <BusinessList businesses={data.items} />;
   if (search) {
     return <ListCard><EmptyState icon={SearchX} title={COPY.noSearchResults(search)} /></ListCard>;
   }
@@ -83,14 +75,6 @@ function BusinessGrid({ data, search, canCreate, onCreate }) {
         action={canCreate && <Button onClick={onCreate} className="mt-2"><Plus />{COPY.createBusiness}</Button>}
       />
     </ListCard>
-  );
-}
-
-function GridSkeleton() {
-  return (
-    <div className={CARD_GRID} aria-busy="true">
-      {Array.from({ length: SKELETON_CARDS }, (_, i) => <BusinessCardSkeleton key={i} showFootnote />)}
-    </div>
   );
 }
 
@@ -144,11 +128,11 @@ export default function BusinessesPage() {
 
       {data ? (
         <>
-          <BusinessGrid data={data} search={search} canCreate={canCreateBusiness} onCreate={() => setAddOpen(true)} />
+          <BusinessRows data={data} search={search} canCreate={canCreateBusiness} onCreate={() => setAddOpen(true)} />
           <Pager page={page} totalPages={data.total_pages} onPage={(p) => update({ [PAGE_PARAM]: p > 1 ? p : null })} />
         </>
       ) : (
-        !error && <GridSkeleton />
+        !error && <BusinessListSkeleton />
       )}
 
       <CreateBusinessDialog open={addOpen || creating} onOpenChange={handleAddOpenChange} onCreated={handleCreated} />

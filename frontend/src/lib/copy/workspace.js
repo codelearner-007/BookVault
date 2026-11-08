@@ -32,6 +32,12 @@ export const WORKSPACE_COPY = {
     payables: 'Payables',
     net_profit: 'Net profit this year',
   },
+  columns: {
+    business: 'Business',
+    role: 'Role',
+    members: 'Members',
+    lastActivity: 'Last activity',
+  },
   noFigures: 'Figures show here for the areas you can view in this business.',
   people: (count) => (count === 1 ? '1 person' : `${count} people`),
   lastActivity: (when) => `Active ${when}`,

@@ -3,12 +3,11 @@
 /*
   BookVault design tokens: option A "Nightglass" (see /DESIGN.md).
   The ONLY place with literal colour, radius, size and motion values.
-  One brand hue (255, ice) in both themes; status hues: ok 152, warn 75, bad 25, info 255.
+  One brand hue (255, ice) in both themes; status hues: ok 152, warn 95, bad 25, info 255.
   Light = :root, dark = .dark on <html> (next-themes, attribute="class").
   Colour is reserved for verdicts and focus; the brand appears as light (selection, links, caret).
-  Contrast accent (electric violet, 288): ONLY the filled primary button, the selected tab, the active
-  sidebar marker and the focus ring. Hue kept clear of every status hue. Preview alternatives in
-  development with ?accent=b|c (sets data-accent on <html>).
+  Contrast accent (warm orange, 50): the filled primary button, the selected tab, the active sidebar
+  marker, the focus ring and every on state (switch, checkbox, radio). Hue kept clear of bad 25 and warn 95.
 */
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -45,9 +44,9 @@
   --brand: oklch(0.5 0.17 255);
   --brand-foreground: oklch(0.99 0 0);
   --link: oklch(0.47 0.16 255);
-  --accent-contrast: oklch(0.5 0.2 288);
-  --accent-contrast-hover: oklch(0.45 0.2 288);
-  --accent-contrast-foreground: oklch(0.985 0.01 288);
+  --accent-contrast: oklch(0.56 0.16 50);
+  --accent-contrast-hover: oklch(0.5 0.16 50);
+  --accent-contrast-foreground: oklch(0.985 0.01 50);
   --accent-contrast-shadow: inset 0 1px 0 oklch(1 0 0 / 0.18), 0 6px 16px -6px color-mix(in oklch, var(--accent-contrast) 60%, transparent);
   --ring: var(--accent-contrast);
   --ring-soft: color-mix(in oklch, var(--accent-contrast) 22%, transparent);
@@ -92,8 +91,8 @@
   /* status: soft pills, one hue each across themes */
   --ok: oklch(0.46 0.12 152);
   --ok-soft: oklch(0.93 0.05 152 / 0.8);
-  --warn: oklch(0.5 0.11 70);
-  --warn-soft: oklch(0.94 0.06 80 / 0.8);
+  --warn: oklch(0.5 0.11 95);
+  --warn-soft: oklch(0.94 0.06 95 / 0.8);
   --bad: oklch(0.5 0.19 25);
   --bad-soft: oklch(0.94 0.04 25 / 0.85);
   --info: oklch(0.46 0.15 255);
@@ -151,9 +150,9 @@
   --brand: oklch(0.8 0.11 255);
   --brand-foreground: oklch(0.18 0.02 255);
   --link: oklch(0.82 0.1 255);
-  --accent-contrast: oklch(0.76 0.13 288);
-  --accent-contrast-hover: oklch(0.81 0.11 288);
-  --accent-contrast-foreground: oklch(0.18 0.04 288);
+  --accent-contrast: oklch(0.76 0.15 55);
+  --accent-contrast-hover: oklch(0.81 0.13 55);
+  --accent-contrast-foreground: oklch(0.18 0.04 55);
   --accent-contrast-shadow: inset 0 1px 0 oklch(1 0 0 / 0.25), 0 8px 24px -8px color-mix(in oklch, var(--accent-contrast) 45%, transparent);
   --ring: var(--accent-contrast);
   --ring-soft: color-mix(in oklch, var(--accent-contrast) 25%, transparent);
@@ -195,36 +194,14 @@
 
   --ok: oklch(0.82 0.14 152);
   --ok-soft: oklch(0.82 0.14 152 / 0.12);
-  --warn: oklch(0.85 0.12 80);
-  --warn-soft: oklch(0.85 0.12 80 / 0.12);
+  --warn: oklch(0.85 0.12 95);
+  --warn-soft: oklch(0.85 0.12 95 / 0.12);
   --bad: oklch(0.77 0.15 25);
   --bad-soft: oklch(0.7 0.17 25 / 0.15);
   --info: oklch(0.82 0.1 255);
   --info-soft: oklch(0.8 0.1 255 / 0.12);
   --neutral: oklch(0.8 0.015 255);
   --neutral-soft: oklch(1 0 0 / 0.07);
-}
-
-/* Contrast-accent preview candidates (data-accent is only set in development). A = the defaults above. */
-:root[data-accent="b"] {
-  --accent-contrast: oklch(0.52 0.088 200);
-  --accent-contrast-hover: oklch(0.47 0.082 200);
-  --accent-contrast-foreground: oklch(0.985 0.01 200);
-}
-.dark[data-accent="b"] {
-  --accent-contrast: oklch(0.8 0.12 200);
-  --accent-contrast-hover: oklch(0.85 0.11 200);
-  --accent-contrast-foreground: oklch(0.18 0.035 200);
-}
-:root[data-accent="c"] {
-  --accent-contrast: oklch(0.52 0.2 340);
-  --accent-contrast-hover: oklch(0.47 0.19 340);
-  --accent-contrast-foreground: oklch(0.985 0.01 340);
-}
-.dark[data-accent="c"] {
-  --accent-contrast: oklch(0.77 0.15 340);
-  --accent-contrast-hover: oklch(0.82 0.13 340);
-  --accent-contrast-foreground: oklch(0.18 0.04 340);
 }
 
 /* Touch density below lg (64rem): every control, row, menu item and nav item is 44px, inputs 16px. */
