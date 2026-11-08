@@ -207,8 +207,11 @@ class InventoryRepository:
         self.session.add_all(rows)
         await self.session.flush()
 
-    async def save(self) -> None:
+    async def save(self, *rows) -> None:
+        """Flush; reload `rows` so server-set columns (updated_at, version) are readable without an async lazy load."""
         await self.session.flush()
+        for row in rows:
+            await self.session.refresh(row)
 
     async def delete(self, row) -> None:
         await self.session.delete(row)

@@ -2,11 +2,12 @@
 (posting-rules PR-23, PR-26, PR-29 BV, PR-39, PR-45..PR-47, PR-62, PR-69; BV-01; CD-16, CD-17)."""
 
 import random
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
 
+from app.core.money import round_money
 from app.services.stock_costing import InsufficientStock, OwnedMove, cost
 from tests.support.factories import add_member, create_business
 from tests.support.ledger import biz, journal, set_lock_date, system_account_id, trial_balance
@@ -72,7 +73,7 @@ async def _cogs(client, owner, bid, document_id) -> list[tuple]:
 
 
 async def _assert_inv4(client, owner, bid):
-    """INV-4: Inventory on hand in the GL = Σ item total cost (= Σ qty owned x average)."""
+    """INV-4: Inventory on hand in the GL = Σ item total cost, exactly."""
     items = (await _get(client, owner, biz(bid, "/inventory-items?page_size=100")))
     assert Decimal(items["totals"]["total_cost"]) == await _balance(client, owner, bid, "inventory_on_hand")
     assert all(Decimal(x["qty_owned"]) >= 0 for x in items["items"])
@@ -294,3 +295,79 @@ def test_random_sequences_keep_value_consistent_inv4(seed):
         assert qty >= 0 and value >= 0
         if qty == 0:
             assert value == 0
+
+
+AWKWARD_PRICES = ("0.33", "1.07", "2.99", "3.333", "7.01", "13.37", "0.07", "99.99")
+
+
+def _awkward_moves(seed: int) -> list[OwnedMove]:
+    """Many small purchases and sales of fractional quantities at awkward prices, one per day, in order."""
+    rng = random.Random(seed)
+    moves, qty = [], Decimal(0)
+    for n in range(200):
+        inbound = qty == 0 or rng.random() < 0.45
+        q = Decimal(rng.randint(1, 3000)) / 1000
+        if not inbound:
+            q = -min(q, qty) if rng.random() < 0.9 else -qty  # sometimes sell out exactly
+        amount = round_money(q * Decimal(rng.choice(AWKWARD_PRICES)), 2) if inbound else Decimal(0)
+        moves.append(OwnedMove(f"{n:04}", f"d{n}", "purchase_invoice" if inbound else "sales_invoice",
+                               date(2026, 1, 1) + timedelta(days=n), "loc", q, amount))
+        qty += q
+    return moves
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_awkward_prices_item_value_is_exactly_the_sum_of_postings_bv01(seed):
+    """BV-01: the value is the source of truth; every movement is money at 2dp, the item value is their
+    exact sum, a sale costs round(q x value / qty) (within half a cent of q x unrounded average), and
+    selling the last unit clears the residual so value is exactly 0 whenever qty is 0."""
+    moves = _awkward_moves(seed)
+    amounts = cost(moves, 2)
+    cent = Decimal("0.01")
+    qty = value = Decimal(0)
+    for move in moves:
+        amount = amounts[move.id]
+        assert amount == amount.quantize(cent)
+        if move.qty < 0:
+            if -move.qty == qty:
+                assert amount == -value
+            else:
+                assert abs(amount - move.qty * value / qty) <= cent / 2
+        qty += move.qty
+        value += amount
+        assert value >= 0
+        if qty == 0:
+            assert value == 0
+    assert value == sum(amounts.values(), Decimal(0))
+
+
+async def test_awkward_prices_ledger_equals_item_value_inv4(client, shop):
+    """INV-4 exactly (no tolerance) after many small buys and sales at awkward prices; the average shown
+    is the value / qty rounded for display only."""
+    owner, bid, customer, supplier, widget = shop
+    rng = random.Random(7)
+    for day in range(1, 10):
+        await _buy(client, owner, bid, supplier, widget, "3", rng.choice(AWKWARD_PRICES), day=day)
+        await _sell(client, owner, bid, customer, widget, rng.choice(("1", "1.5", "0.7")), day=day)
+    await _assert_inv4(client, owner, bid)
+    item = await _stock(client, owner, bid, widget)
+    exact = Decimal(item["total_cost"]) / Decimal(item["qty_owned"])
+    assert Decimal(item["average_cost"]) == exact.quantize(Decimal("0.01"))
+    await _sell(client, owner, bid, customer, widget, item["qty_owned"], day=9)
+    assert (await _stock(client, owner, bid, widget))["total_cost"] == "0.00"
+    await _assert_inv4(client, owner, bid)
+
+
+@pytest.mark.committed
+async def test_rename_default_location_after_a_real_commit(committed, live_client):
+    """Regression: PUT /inventory-locations/{id} read the expired updated_at lazily (MissingGreenlet, 500)."""
+    owner = await committed.create("admin")
+    bid = (await create_business(live_client, owner))["id"]
+    default = next(x for x in (await _get(live_client, owner, biz(bid, "/inventory-locations")))["items"]
+                   if x["is_default"])
+    response = await live_client.put(biz(bid, f"/inventory-locations/{default['id']}"), headers=owner.headers,
+                                     json={"name": "Main Store", "version": default["version"]})
+    assert response.status_code == 200, response.text
+    assert response.json()["version"] == default["version"] + 1
+    stored = await _get(live_client, owner, biz(bid, f"/inventory-locations/{default['id']}"))
+    assert (stored["name"], stored["is_default"], stored["version"]) == ("Main Store", True, default["version"] + 1)

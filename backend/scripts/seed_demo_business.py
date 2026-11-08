@@ -39,7 +39,6 @@ API_ROLE = "bookvault_api"
 CLIENT_HEADERS = {"X-BookVault-Client": "web"}
 TB_AS_AT = "2100-12-31"
 PAGE_SIZE = 100
-CENT = Decimal("0.01")
 
 _OWNER = text("""
     SELECT CAST(u.id AS text) AS id, u.email, r.name AS role, r.hierarchy_level
@@ -459,15 +458,14 @@ class Seeder:
 
     # ------------------------------------------------------------------ checks
     async def checks(self) -> list[tuple[str, Decimal, Decimal, bool]]:
-        """(label, left, right, ok): TB balances, AR, AP and inventory agree with their sub-ledgers."""
+        """(label, left, right, ok): TB balances, AR, AP and inventory agree exactly with their sub-ledgers
+        (the item average is value / qty rounded for display, so qty x average is not compared)."""
         tb = await self.api.get("/reports/trial-balance", as_at=TB_AS_AT)
         gl = {r["account_id"]: Decimal(r["debit"]) - Decimal(r["credit"]) for r in tb["rows"]}
         customers = (await self.api.get("/customers", page_size=PAGE_SIZE))["items"]
         suppliers = (await self.api.get("/suppliers", page_size=PAGE_SIZE))["items"]
         items = (await self.api.get("/inventory-items", page_size=PAGE_SIZE))["items"]
-        avg_value = sum((Decimal(x["qty_owned"]) * Decimal(x["average_cost"] or 0) for x in items), Decimal(0))
         item_cost = sum((Decimal(x["total_cost"]) for x in items), Decimal(0))
-        rounding = CENT * max(len(items), 1) + sum((Decimal(x["qty_owned"]) for x in items), Decimal(0)) * CENT / 2
         rows = [
             ("Trial balance debits = credits", Decimal(tb["total_debit"]), Decimal(tb["total_credit"])),
             ("AR control = sum of customers", gl.get(self.ids.system["accounts_receivable"], Decimal(0)),
@@ -477,10 +475,7 @@ class Seeder:
             ("Inventory on hand = sum of item cost", gl.get(self.ids.system["inventory_on_hand"], Decimal(0)),
              item_cost),
         ]
-        result = [(label, left, right, left == right) for label, left, right in rows]
-        result.append(("Item cost = sum of qty x average", item_cost, avg_value.quantize(CENT),
-                       abs(item_cost - avg_value) <= rounding))
-        return result
+        return [(label, left, right, left == right) for label, left, right in rows]
 
 
 def print_checks(results: list[tuple[str, Decimal, Decimal, bool]]) -> None:

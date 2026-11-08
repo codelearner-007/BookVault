@@ -266,7 +266,7 @@ class InventoryService:
             raise ConflictError("This name is already used", "name_taken")
         for key, value in fields.items():
             setattr(location, key, value)
-        await self.repo.save()
+        await self.repo.save(location)
         after = LocationResponse.model_validate(location)
         await self.audit.record(ctx.user_id, "update", "InventoryLocation", location.id, ctx.business_id,
                                 before=before, after=after)
