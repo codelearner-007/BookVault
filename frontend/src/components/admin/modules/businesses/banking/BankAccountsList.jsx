@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { Landmark, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { BalanceSection, SectionBalancesToggle } from '@/components/common/balances';
 import { COLUMN_KIND, ListTable, RecordTitle } from '@/components/common/list-table';
 import { Money } from '@/components/common/money';
 import { EmptyState, ListCard, PageHeader } from '@/components/common/page';
@@ -21,7 +20,6 @@ export const BALANCE_COLUMNS = [
   ['actual_balance', 'Actual balance'],
 ];
 const BALANCE_TONES = { pending_deposits: 'in', pending_withdrawals: 'out', actual_balance: 'balance' };
-const SECTION_NAME = 'Bank and Cash Accounts';
 
 // The actual balance opens the account's register (every posted movement up to today).
 function RegisterLink({ account, onOpenRegister }) {
@@ -81,7 +79,7 @@ export default function BankAccountsList({ businessId, page, active, canCreate, 
 
   const items = data?.items ?? [];
   return (
-    <BalanceSection>
+    <>
       {dialog?.mode === 'new' && (
         <NamedAccountDialog title="New Bank or Cash Account" bank onSubmit={create} onClose={() => setDialog(null)} />
       )}
@@ -90,16 +88,11 @@ export default function BankAccountsList({ businessId, page, active, canCreate, 
       )}
       <PageHeader
         title="Bank and Cash Accounts"
-        actions={(
-          <>
-            <SectionBalancesToggle name={SECTION_NAME} />
-            {canCreate && (
-              <Button onClick={() => setDialog({ mode: 'new' })}>
-                <Plus />
-                New Bank or Cash Account
-              </Button>
-            )}
-          </>
+        actions={canCreate && (
+          <Button onClick={() => setDialog({ mode: 'new' })}>
+            <Plus />
+            New Bank or Cash Account
+          </Button>
         )}
       />
       {error && <ErrorAlert>{error}</ErrorAlert>}
@@ -126,6 +119,6 @@ export default function BankAccountsList({ businessId, page, active, canCreate, 
           />
         )}
       </ListCard>
-    </BalanceSection>
+    </>
   );
 }

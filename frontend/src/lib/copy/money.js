@@ -1,11 +1,9 @@
-// User-facing text of amounts, the hide-balances toggles and the shared list/form/view pieces.
+// User-facing text of amounts, the hide-balances toggle and the shared list/form/view pieces.
 export const MONEY_COPY = {
   mask: '••••',
   hiddenAmount: 'Amount hidden',
   hideBalances: 'Hide balances',
   showBalances: 'Show balances',
-  hideSection: (section) => `Hide balances in ${section}`,
-  showSection: (section) => `Show balances in ${section}`,
 };
 
 export const LIST_COPY = {

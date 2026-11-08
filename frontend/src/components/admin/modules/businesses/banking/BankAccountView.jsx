@@ -10,7 +10,6 @@ import {
   deleteBankAccount, getBankAccount, updateBankAccount,
 } from '@/lib/services/bank-accounts.service';
 import { isVersionConflict } from '@/lib/services/api-client';
-import { BalanceSection, SectionBalancesToggle } from '@/components/common/balances';
 import { Money } from '@/components/common/money';
 import { BackButton, ErrorAlert, useTabNavigate } from '../ledger/ledger-parts';
 import { BANKING_TABS, DocumentSkeleton, InactiveBadge, useLoad } from './banking-parts';
@@ -80,7 +79,6 @@ export default function BankAccountView({ businessId, accountId, page, range, ri
 
   const actions = (
     <>
-      <SectionBalancesToggle name={account.name} />
       {rights.delete && (
         <MoreMenu items={[{ label: 'Delete', icon: Trash2, destructive: true, onSelect: () => setConfirmDelete(true) }]} />
       )}
@@ -89,36 +87,34 @@ export default function BankAccountView({ businessId, accountId, page, range, ri
   );
 
   return (
-    <BalanceSection>
-      <div className="max-w-4xl">
-        {editing && (
-          <NamedAccountDialog title="Edit Bank or Cash Account" bank account={account} onSubmit={update} onClose={() => setEditing(false)} />
-        )}
-        <ConfirmDialog
-          confirm={confirmDelete ? { title: 'Delete this account?', body: account.name, action: 'Delete', destructive: true } : null}
-          busy={deleting}
-          onConfirm={remove}
-          onClose={() => setConfirmDelete(false)}
-          cancelLabel="Cancel"
+    <div className="max-w-4xl">
+      {editing && (
+        <NamedAccountDialog title="Edit Bank or Cash Account" bank account={account} onSubmit={update} onClose={() => setEditing(false)} />
+      )}
+      <ConfirmDialog
+        confirm={confirmDelete ? { title: 'Delete this account?', body: account.name, action: 'Delete', destructive: true } : null}
+        busy={deleting}
+        onConfirm={remove}
+        onClose={() => setConfirmDelete(false)}
+        cancelLabel="Cancel"
+      />
+      <PageHeader
+        title={<span className="flex flex-wrap items-center gap-3">{account.name}{account.is_inactive && <InactiveBadge />}</span>}
+        description="Bank or Cash Account"
+        back={<BackButton onClick={() => navigate({})} />}
+        actions={actions}
+      />
+      {error && <ErrorAlert>{error}</ErrorAlert>}
+      <AccountCard account={account} />
+      <div className="mt-10">
+        <BankRegister
+          businessId={businessId}
+          accountId={account.id}
+          page={page}
+          range={range}
+          onChange={(next) => navigate({ view: account.id, ...registerParams(next) })}
         />
-        <PageHeader
-          title={<span className="flex flex-wrap items-center gap-3">{account.name}{account.is_inactive && <InactiveBadge />}</span>}
-          description="Bank or Cash Account"
-          back={<BackButton onClick={() => navigate({})} />}
-          actions={actions}
-        />
-        {error && <ErrorAlert>{error}</ErrorAlert>}
-        <AccountCard account={account} />
-        <div className="mt-10">
-          <BankRegister
-            businessId={businessId}
-            accountId={account.id}
-            page={page}
-            range={range}
-            onChange={(next) => navigate({ view: account.id, ...registerParams(next) })}
-          />
-        </div>
       </div>
-    </BalanceSection>
+    </div>
   );
 }

@@ -8,7 +8,7 @@ import { useBusinessFormat } from './business-format';
 
 /*
   The one way an amount reaches the screen: the business's number format and decimals, tabular figures, and
-  •••• while balances are hidden (globally or in the enclosing BalanceSection). Alignment belongs to the
+  •••• while balances are hidden. Alignment belongs to the
   container (a `money` column, a `num` cell).
     zero      'show' | 'muted' (dimmed) | 'blank' (nothing)
     absolute  drop the sign when words carry the direction ("150.00 to allocate")

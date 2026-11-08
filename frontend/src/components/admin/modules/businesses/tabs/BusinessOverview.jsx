@@ -10,7 +10,6 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
-import { BalanceSection, SectionBalancesToggle } from '@/components/common/balances';
 import { FormattedDate } from '@/components/common/business-format';
 import { DatePicker } from '@/components/common/date-picker';
 import { Money } from '@/components/common/money';
@@ -214,11 +213,10 @@ export default function BusinessFinancialSummary({ business }) {
   const statementOptions = { ...options, accountHref: (accountId) => transactionsHref(options, accountId) };
 
   return (
-    <BalanceSection>
+    <>
       <PageHeader
         title="Summary"
         description={<><FormattedDate value={options.from} /> to <FormattedDate value={options.to} /></>}
-        actions={<SectionBalancesToggle name="the Summary" />}
       />
       <OptionsBar options={options} onChange={update} />
       {error && <ErrorAlert>{error}</ErrorAlert>}
@@ -242,6 +240,6 @@ export default function BusinessFinancialSummary({ business }) {
           </CardFooter>
         </Card>
       )}
-    </BalanceSection>
+    </>
   );
 }

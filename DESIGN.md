@@ -218,7 +218,7 @@ Rounded and soft, never boxed: cards 20px, the shell 24px, dialogs 24px (a botto
 - **Shape:** full pill (999px), 40px high (34px small, 44px on touch).
 - **Primary (`default`):** the contrast-accent pill (orange fill, `accent-contrast-ink` text, a soft orange drop), semibold; exactly one per view (Post on a form, New on a list, Edit on a view).
 - **Secondary (tonal):** glass with a hairline and highlight; New in the top bar, Save draft, a view's Edit when Post is the primary, the cookie notice's Accept.
-- **Ghost:** muted text, a neutral tint on hover; icon buttons, More menus, Cancel, the eye toggles and the quiet View / Edit row actions.
+- **Ghost:** muted text, a neutral tint on hover; icon buttons, More menus, Cancel, the hide-balances eye and the quiet View / Edit row actions.
 - **Destructive:** only inside a confirmation; the menu entry that opens it is red text, not a fill.
 - **Focus:** a 2px contrast-accent outline offset 2px. **Press:** 1px down.
 
@@ -251,7 +251,7 @@ Rounded and soft, never boxed: cards 20px, the shell 24px, dialogs 24px (a botto
 - **Date picker** (`components/common/date-picker.jsx`): typed in the business date format (any of . / - or space between the parts; ISO always works) or picked from the Nightglass calendar; the single-date sibling of the date-range picker. No native browser date inputs.
 
 ### Hide balances
-- A global eye in the top bar (in the account menu on phones) masks every amount as `••••`. It is kept per user in a cookie the server reads, so the first paint is already masked. Dashboard business cards, Bank and Cash (list, view, register) and the Summary have their own eye, which reveals or hides just that section until the global switch changes.
+- A global eye in the top bar (in the account menu on phones) masks every amount as `••••`. It is kept per user in a cookie the server reads, so the first paint is already masked.
 
 ### Logo
 - Concept B, the dial o: the second o of "Book" is a combination dial. `LogoWordmark` (letters in `currentColor`, the dial in ice) in the sidebar header, the auth card and the site nav; `LogoMark` (the dial on its tile: `logo-tile`, `logo-dial`, `logo-hub`, the same in both themes) in the icons-only sidebar and as the app icons (`app/icon.svg`, `app/apple-icon.png`, `app/favicon.ico`).

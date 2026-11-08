@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BalanceSection, SectionBalancesToggle } from '@/components/common/balances';
 import { FormatProvider } from '@/components/common/business-format';
 import { Money } from '@/components/common/money';
 import { Monogram } from '@/components/shell/BusinessSwitcher';
@@ -51,34 +50,31 @@ function CardFootnote({ business }) {
 }
 
 // One business: identity, role, up to four ledger figures in its own number format; the whole card opens it
-// (a stretched link), and its eye shows or hides just this card's figures.
+// (a stretched link).
 export function BusinessCard({ business, showFootnote = false }) {
   return (
     <FormatProvider format={business}>
-      <BalanceSection>
-        <Card className="group relative @container flex h-full flex-col transition-[background-color,box-shadow] duration-150 ease-out has-[a:hover]:bg-secondary-hover">
-          <div className="flex items-start gap-3 p-card pb-5">
-            <Monogram name={business.name} className="size-mono rounded-mono text-sm" />
-            <div className="min-w-0 flex-1">
-              <Link
-                href={businessHref(business.id)}
-                className="block truncate text-md font-semibold tracking-tight after:absolute after:inset-0 after:rounded-card after:content-[''] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-ring"
-              >
-                {business.name}
-              </Link>
-              <p className="mt-0.5 truncate text-sm text-muted-foreground">{businessMeta(business)}</p>
-            </div>
-            <div className="relative z-1 flex items-center gap-1">
-              <SectionBalancesToggle name={business.name} />
-              <Badge variant="role">{business.is_owner ? COPY.owner : COPY.member}</Badge>
-            </div>
+      <Card className="group relative @container flex h-full flex-col transition-[background-color,box-shadow] duration-150 ease-out has-[a:hover]:bg-secondary-hover">
+        <div className="flex items-start gap-3 p-card pb-5">
+          <Monogram name={business.name} className="size-mono rounded-mono text-sm" />
+          <div className="min-w-0 flex-1">
+            <Link
+              href={businessHref(business.id)}
+              className="block truncate text-md font-semibold tracking-tight after:absolute after:inset-0 after:rounded-card after:content-[''] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-ring"
+            >
+              {business.name}
+            </Link>
+            <p className="mt-0.5 truncate text-sm text-muted-foreground">{businessMeta(business)}</p>
           </div>
-          <div className="px-card pb-card">
-            <Figures business={business} />
+          <div className="relative z-1">
+            <Badge variant="role">{business.is_owner ? COPY.owner : COPY.member}</Badge>
           </div>
-          {showFootnote && <CardFootnote business={business} />}
-        </Card>
-      </BalanceSection>
+        </div>
+        <div className="px-card pb-card">
+          <Figures business={business} />
+        </div>
+        {showFootnote && <CardFootnote business={business} />}
+      </Card>
     </FormatProvider>
   );
 }
