@@ -101,13 +101,13 @@ export function useTabRights(tab) {
   return { create: can(access, area, RIGHT_CREATE), edit: can(access, area, RIGHT_EDIT), delete: can(access, area, RIGHT_DELETE) };
 }
 
-// ?tab=<tab>[&p=N|&new=1|&edit=<id>|&view=<id>]. A hidden tab (another one is open) ignores the URL.
+// ?tab=<tab>[&p=N|&new=1[&clone=<id>]|&edit=<id>|&view=<id>]. A hidden tab (another one is open) ignores the URL.
 export function useDocumentRoute(tab) {
   const searchParams = useSearchParams();
   const page = usePageParam();
   const active = searchParams.get('tab') === tab;
   const param = (key) => (active ? searchParams.get(key) : null);
-  return { active, page: active ? page : 1, isNew: !!param('new'), editId: param('edit'), viewId: param('view') };
+  return { active, page: active ? page : 1, isNew: !!param('new'), cloneId: param('new') ? param('clone') : null, editId: param('edit'), viewId: param('view') };
 }
 
 // Runs `load()` when deps change (and on reload()); keeps the last good data while reloading.

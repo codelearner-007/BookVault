@@ -27,7 +27,8 @@ export default function TradeDocumentsTab({ business, type }) {
     const startingBalance = config.role === ROLES.invoice && !!param('starting_balance');
     return (
       <TradeDocumentForm
-        key={`${fromId}:${startingBalance}`}
+        key={`${fromId}:${startingBalance}:${route.cloneId}`}
+        cloneId={route.cloneId}
         businessId={business.id}
         config={config}
         allowed={rights.create}

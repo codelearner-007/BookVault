@@ -22,6 +22,7 @@ import { isZeroAmount } from '../coa/coa-tree';
 import { ErrorAlert, REPORTS_TAB, todayIso, usePageParam, useTabNavigate } from '../ledger/ledger-parts';
 import { REPORTS } from '../ledger/ReportsIndex';
 import { SectionRows, StatementTable, TotalRow } from '../summary/SummaryStatement';
+import SummaryActions from '../summary/SummaryActions';
 import BusinessSuspense from './BusinessSuspense';
 
 const SUMMARY_TAB = 'summary';
@@ -170,6 +171,7 @@ export default function BusinessFinancialSummary({ business }) {
   const navigate = useTabNavigate(SUMMARY_TAB);
   const [result, setResult] = useState({ key: null, summary: null, suspense: '0', error: null });
   const page = usePageParam();
+  const [actionError, setActionError] = useState(null);
   const requestKey = JSON.stringify([business.id, options.from, options.to]);
 
   // Tabs stay mounted while hidden: only the visible Summary follows the URL (and reloads when shown again).
@@ -217,7 +219,9 @@ export default function BusinessFinancialSummary({ business }) {
       <PageHeader
         title="Summary"
         description={<><FormattedDate value={options.from} /> to <FormattedDate value={options.to} /></>}
+        actions={<SummaryActions business={business} onError={setActionError} />}
       />
+      {actionError && <ErrorAlert>{actionError}</ErrorAlert>}
       <OptionsBar options={options} onChange={update} />
       {error && <ErrorAlert>{error}</ErrorAlert>}
       {summary && (

@@ -1,6 +1,5 @@
 'use client';
 
-import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { FormattedDate, Quantity } from '@/components/common/business-format';
 import { Money } from '@/components/common/money';
@@ -9,7 +8,8 @@ import { ErrorAlert, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from '../banking/AttachmentsPanel';
 import { DocumentSkeleton, useLoad } from '../banking/banking-parts';
 import DocumentViewFrame from '../banking/DocumentViewFrame';
-import { Field, STICKY_CELL, StatusPill } from '../sales/sales-parts';
+import { STICKY_CELL, StatusPill } from '../sales/sales-parts';
+import DocumentHeader, { DocumentDescription, DocumentPaper } from '../documents/DocumentHeader';
 
 const CELLS = {
   code: (line) => line.item_code,
@@ -32,7 +32,7 @@ const LINE_COLUMNS = {
 function LinesTable({ label, lines, columns, total }) {
   const shown = columns.filter(([key]) => key !== 'description' || lines.some((line) => line.description));
   return (
-    <Table className="mt-4" cards={false} aria-label={label}>
+    <Table cards={false} aria-label={label}>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
           {shown.map(([key, title], index) => (
@@ -63,22 +63,16 @@ function LinesTable({ label, lines, columns, total }) {
   );
 }
 
-function HeaderFields({ doc, config }) {
-  return (
-    <dl className="mt-6 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-      <Field label="Date"><FormattedDate value={doc.date} /></Field>
-      <Field label="Reference">{doc.reference}</Field>
-      {config.locations === 'pair' ? (
-        <>
-          <Field label="From">{doc.location_name}</Field>
-          <Field label="To">{doc.to_location_name}</Field>
-        </>
-      ) : (
-        <Field label="Inventory location">{doc.location_name}</Field>
-      )}
-      {config.production && <Field label="Finished item"><Quantity value={doc.qty} /> × {doc.finished_item_name}</Field>}
-    </dl>
-  );
+function metaRows(doc, config) {
+  const locations = config.locations === 'pair'
+    ? [['From', doc.location_name], ['To', doc.to_location_name]]
+    : [['Inventory location', doc.location_name]];
+  return [
+    ['Reference', doc.reference],
+    ['Date', <FormattedDate key="d" value={doc.date} />],
+    ...locations,
+    config.production && ['Finished item', <span key="f"><Quantity value={doc.qty} /> × {doc.finished_item_name}</span>],
+  ].filter(Boolean);
 }
 
 function DocumentLines({ doc, config }) {
@@ -95,20 +89,18 @@ function DocumentLines({ doc, config }) {
   return <LinesTable label="Lines" lines={doc.lines} columns={LINE_COLUMNS.transfer} />;
 }
 
-function StockDocument({ doc, config, businessName }) {
+function StockDocument({ doc, config, business }) {
   return (
-    <Card className="p-card">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-bold">{config.title}</h2>
-          <StatusPill statuses={config.statuses} status={doc.display_status} />
-        </div>
-        <p className="font-semibold">{businessName}</p>
-      </div>
-      <HeaderFields doc={doc} config={config} />
-      {doc.description && <p className="mt-6 font-semibold whitespace-pre-wrap">{doc.description}</p>}
+    <DocumentPaper>
+      <DocumentHeader
+        title={config.title}
+        status={<StatusPill statuses={config.statuses} status={doc.display_status} />}
+        business={business}
+        meta={metaRows(doc, config)}
+      />
+      <DocumentDescription text={doc.description} />
       <DocumentLines doc={doc} config={config} />
-    </Card>
+    </DocumentPaper>
   );
 }
 
@@ -132,12 +124,13 @@ export default function StockDocumentView({ business, config, docId, rights }) {
       noun={config.noun}
       onBack={() => navigate({})}
       onEdit={() => navigate({ edit: doc.id })}
+      onClone={() => navigate({ new: 1, clone: doc.id })}
       postCall={(version, key) => service.post(business.id, doc.id, version, key)}
       voidCall={(version, key) => service.void(business.id, doc.id, version, key)}
       onChanged={reload}
       voidCopy={config.voidCopy}
     >
-      <StockDocument doc={doc} config={config} businessName={business.name} />
+      <StockDocument doc={doc} config={config} business={business} />
       <AttachmentsPanel businessId={business.id} documentId={doc.id} canEdit={rights.edit && !doc.is_locked} />
     </DocumentViewFrame>
   );

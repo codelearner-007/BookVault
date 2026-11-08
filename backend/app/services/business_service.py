@@ -132,12 +132,15 @@ class BusinessService:
         return after
 
     async def export(self, ctx: BusinessContext) -> BusinessExportResponse:
-        """Every row of the business as JSON (owner only; offered before a purge)."""
+        """Every row of the business as JSON (owner only: Summary > Backup, and offered before a purge); audited."""
         self._require_owner(ctx)
+        tables = await self.repo.export(ctx.business_id)
+        await self.audit.record(ctx.user_id, "export", ENTITY, ctx.business_id, ctx.business_id,
+                                details={"row_counts": {name: len(rows) for name, rows in tables.items()}})
         return BusinessExportResponse(
             business_id=ctx.business_id,
             exported_at=datetime.now(timezone.utc),
-            tables=await self.repo.export(ctx.business_id),
+            tables=tables,
         )
 
     async def purge(

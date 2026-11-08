@@ -1,6 +1,5 @@
 'use client';
 
-import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { getTransfer, postTransfer, voidTransfer } from '@/lib/services/inter-account-transfers.service';
 import { FormattedDate } from '@/components/common/business-format';
@@ -9,6 +8,7 @@ import { ErrorAlert, JE_STATUS, StatusBadge, useTabNavigate } from '../ledger/le
 import AttachmentsPanel from './AttachmentsPanel';
 import { BANKING_TABS, DocumentSkeleton, PendingBadge, useLoad } from './banking-parts';
 import DocumentViewFrame from './DocumentViewFrame';
+import DocumentHeader, { DocumentDescription, DocumentPaper } from '../documents/DocumentHeader';
 
 const TITLE = 'Inter Account Transfer';
 
@@ -18,26 +18,21 @@ function isPending(doc, side) {
 }
 
 // Manager's transfer document: Date, Reference, description, then Account / Outflows / Inflows.
-function TransferDocument({ doc, businessName }) {
+function TransferDocument({ doc, business }) {
   const rows = [
     { side: 'from', name: doc.from_bank_account_name, outflow: doc.amount, inflow: null },
     { side: 'to', name: doc.to_bank_account_name, outflow: null, inflow: doc.amount },
   ];
   return (
-    <Card className="p-card">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-bold">{TITLE}</h2>
-          {doc.status !== JE_STATUS.posted && <StatusBadge status={doc.status} />}
-        </div>
-        <p className="font-semibold">{businessName}</p>
-      </div>
-      <dl className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2">
-        <div><dt className="text-sm text-muted-foreground">Date</dt><dd className="mt-1 tabular-nums"><FormattedDate value={doc.date} /></dd></div>
-        <div><dt className="text-sm text-muted-foreground">Reference</dt><dd className="mt-1">{doc.reference || '—'}</dd></div>
-      </dl>
-      {doc.description && <p className="mt-6 font-semibold whitespace-pre-wrap">{doc.description}</p>}
-      <Table className="mt-4" cards={false}>
+    <DocumentPaper>
+      <DocumentHeader
+        title={TITLE}
+        status={doc.status !== JE_STATUS.posted && <StatusBadge status={doc.status} />}
+        business={business}
+        meta={[['Reference', doc.reference], ['Date', <FormattedDate key="d" value={doc.date} />]]}
+      />
+      <DocumentDescription text={doc.description} />
+      <Table cards={false}>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead>Account</TableHead>
@@ -57,7 +52,7 @@ function TransferDocument({ doc, businessName }) {
           ))}
         </TableBody>
       </Table>
-    </Card>
+    </DocumentPaper>
   );
 }
 
@@ -80,11 +75,12 @@ export default function TransferView({ business, docId, rights }) {
       noun="transfer"
       onBack={() => navigate({})}
       onEdit={() => navigate({ edit: doc.id })}
+      onClone={() => navigate({ new: 1, clone: doc.id })}
       postCall={(version, key) => postTransfer(business.id, doc.id, version, key)}
       voidCall={(version, key) => voidTransfer(business.id, doc.id, version, key)}
       onChanged={reload}
     >
-      <TransferDocument doc={doc} businessName={business.name} />
+      <TransferDocument doc={doc} business={business} />
       <AttachmentsPanel businessId={business.id} documentId={doc.id} canEdit={rights.edit && !doc.is_locked} />
     </DocumentViewFrame>
   );

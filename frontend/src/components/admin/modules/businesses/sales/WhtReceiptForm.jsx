@@ -12,7 +12,7 @@ import { toInputAmount } from '../coa/coa-tree';
 import { parseAmount } from '../ledger/JournalLinesEditor';
 import { BackButton, ErrorAlert, JE_STATUS, todayIso, useTabNavigate } from '../ledger/ledger-parts';
 import { FormSkeleton, useLoad } from '../banking/banking-parts';
-import { BlockedForm, DocumentFormActions, blockedReason, useDocumentSave } from '../banking/document-form';
+import { BlockedForm, DocumentFormActions, asClone, blockedReason, useDocumentSave } from '../banking/document-form';
 import { SALES_TABS } from './sales-documents';
 import { TradePartyPicker } from './sales-parts';
 
@@ -46,11 +46,11 @@ function buildBody(form) {
 }
 
 // ?tab=withholding-tax-receipts&new=1 or &edit=<id>: Date, Reference, Customer, Description, Amount.
-export default function WhtReceiptForm({ businessId, receiptId, allowed }) {
+export default function WhtReceiptForm({ businessId, receiptId, cloneId = null, allowed }) {
   const navigate = useTabNavigate(SALES_TABS.whtReceipts);
   const data = useLoad(
-    () => (receiptId ? withholdingTaxReceiptsService.get(businessId, receiptId) : Promise.resolve(null)),
-    [businessId, receiptId],
+    () => (receiptId || cloneId ? withholdingTaxReceiptsService.get(businessId, receiptId ?? cloneId) : Promise.resolve(null)),
+    [businessId, receiptId, cloneId],
   );
   const [form, setForm] = useState(null);
   const [filledFrom, setFilledFrom] = useState(undefined);
@@ -65,11 +65,11 @@ export default function WhtReceiptForm({ businessId, receiptId, allowed }) {
 
   if (!data.loading && filledFrom !== data.data) {
     setFilledFrom(data.data);
-    setForm(formFrom(data.data));
-    setVersion(data.data?.version ?? null);
+    setForm(cloneId && !receiptId ? asClone(formFrom(data.data)) : formFrom(data.data));
+    setVersion(receiptId ? data.data?.version ?? null : null);
   }
 
-  const receipt = data.data;
+  const receipt = receiptId ? data.data : null;
   const title = receiptId ? 'Edit Withholding Tax Receipt' : 'New Withholding Tax Receipt';
   const back = () => navigate(receiptId ? { view: receiptId } : {});
   const reason = blockedReason({ allowed, doc: receipt, noun: NOUN });

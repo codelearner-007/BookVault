@@ -29,8 +29,8 @@ export default function BusinessJournalEntries({ business }) {
 
   const editId = param('edit');
   const viewId = param('view');
-  if (param('new')) return <JournalEntryForm businessId={business.id} allowed={rights.create} />;
+  if (param('new')) return <JournalEntryForm key={param('clone') ?? 'new'} cloneId={param('clone')} businessId={business.id} allowed={rights.create} />;
   if (editId) return <JournalEntryForm key={editId} businessId={business.id} entryId={editId} allowed={rights.edit} />;
-  if (viewId) return <JournalEntryView key={viewId} businessId={business.id} entryId={viewId} rights={rights} />;
+  if (viewId) return <JournalEntryView key={viewId} business={business} entryId={viewId} rights={rights} />;
   return <JournalEntriesList businessId={business.id} page={active ? page : 1} active={active} canCreate={rights.create} canEdit={rights.edit} />;
 }

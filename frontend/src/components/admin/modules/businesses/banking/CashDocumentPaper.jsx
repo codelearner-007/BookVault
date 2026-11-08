@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { FormattedDate, Quantity } from '@/components/common/business-format';
 import { Money } from '@/components/common/money';
@@ -10,21 +9,12 @@ import { cn } from '@/lib/utils';
 import { isZeroAmount } from '../coa/coa-tree';
 import { JE_STATUS, StatusBadge, accountLabel } from '../ledger/ledger-parts';
 import { NO_BANK_LABEL, PendingBadge, documentHref } from './banking-parts';
+import DocumentHeader, { DocumentDescription, DocumentPaper } from '../documents/DocumentHeader';
 
 // Counterparty kinds that have their own record view (capital accounts have none).
 const PARTY_TABS = { [PARTY_KINDS.customer]: 'customers', [PARTY_KINDS.supplier]: 'suppliers' };
 const LINK_CLASS = 'text-link underline-offset-4 hover:underline';
 const NUMERIC = new Set(['qty', 'unit_price', 'discount', 'amount']);
-
-function Field({ label, children, className }) {
-  if (!children) return null;
-  return (
-    <div className={className}>
-      <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="mt-1">{children}</dd>
-    </div>
-  );
-}
 
 function Counterparty({ doc }) {
   const tab = PARTY_TABS[doc.counterparty_kind];
@@ -104,36 +94,39 @@ function LinesTable({ lines, invoiceType }) {
   );
 }
 
-// Status badges only (draft / void / pending); the page title already names the document.
 function DocumentStatus({ doc }) {
-  if (doc.status === JE_STATUS.posted && !doc.is_pending) return null;
   return (
-    <div className="flex items-center gap-2 pb-2">
+    <>
       {doc.status !== JE_STATUS.posted && <StatusBadge status={doc.status} />}
       {doc.is_pending && <PendingBadge />}
-    </div>
+    </>
   );
 }
 
-// A receipt / payment laid out like the printed slip: header, meta grid, lines, total.
-export default function CashDocumentPaper({ doc, direction }) {
+// A receipt / payment like the printed slip: business, payer / payee, meta, description, lines, total.
+// partyRecord: the customer / supplier record (email, address) when the counterparty is one.
+export default function CashDocumentPaper({ doc, direction, business, partyRecord = null }) {
+  const date = (value) => <FormattedDate value={value} />;
   return (
-    <Card className="p-card">
-      <DocumentStatus doc={doc} />
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-5 pb-6 lg:grid-cols-4 lg:gap-x-8">
-        <Field label="Date"><FormattedDate value={doc.date} className="tabular-nums" /></Field>
-        <Field label={direction.bankLabel}>{doc.bank_account_name ?? NO_BANK_LABEL}</Field>
-        <Field label={direction.counterpartyLabel}>{doc.counterparty && <Counterparty doc={doc} />}</Field>
-        {doc.clears_later && <Field label="Cleared"><ClearedValue doc={doc} /></Field>}
-        <Field label="Description" className="col-span-2 lg:col-span-4">
-          {doc.description && <p className="max-w-prose whitespace-pre-wrap">{doc.description}</p>}
-        </Field>
-      </dl>
+    <DocumentPaper>
+      <DocumentHeader
+        title={direction.title}
+        status={(doc.status !== JE_STATUS.posted || doc.is_pending) && <DocumentStatus doc={doc} />}
+        business={business}
+        party={doc.counterparty ? { label: direction.counterpartyLabel, name: <Counterparty doc={doc} />, record: partyRecord } : null}
+        meta={[
+          ['Reference', doc.reference],
+          ['Date', date(doc.date)],
+          [direction.bankLabel, doc.bank_account_name ?? NO_BANK_LABEL],
+          doc.clears_later && ['Cleared', <ClearedValue key="c" doc={doc} />],
+        ].filter(Boolean)}
+      />
+      <DocumentDescription text={doc.description} />
       <LinesTable lines={doc.lines} invoiceType={direction.side.invoiceType} />
-      <dl className="ms-auto mt-4 flex w-full items-baseline justify-between gap-6 border-t border-border pt-4 sm:w-72">
+      <dl className="ms-auto flex w-full items-baseline justify-between gap-6 border-t border-border pt-4 sm:w-72">
         <dt className="font-semibold">Total</dt>
         <dd className="num text-lg font-semibold" data-testid="document-total"><Money value={doc.total} /></dd>
       </dl>
-    </Card>
+    </DocumentPaper>
   );
 }

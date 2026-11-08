@@ -49,7 +49,7 @@ function AccountRow({ account, depth, options }) {
           href={options.accountHref(account.id)}
           title={`${account.name}: transactions`}
           className={cn(
-            'rounded-sm text-link underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+            'amount-link',
             isZeroAmount(account.amount) && 'text-muted-foreground',
           )}
         >

@@ -1,5 +1,6 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
 import { useDocumentRoute, useTabRights } from './banking-parts';
 import { CASH_DIRECTIONS } from './cash-directions';
 import CashTransactionForm from './CashTransactionForm';
@@ -7,7 +8,7 @@ import CashTransactionsList from './CashTransactionsList';
 import CashTransactionView from './CashTransactionView';
 
 // ?tab=receipts|payments           list (&p=N)
-//                       &new=1     new document
+//                       &new=1     new document [&clone=<id>] [&invoice=<id>: settle that invoice]
 //                       &edit=<id> edit a document
 //                       &view=<id> view it and attachments
 // The server enforces every right; these only hide what the user cannot do.
@@ -15,8 +16,10 @@ export default function CashTransactionsTab({ business, kind }) {
   const direction = CASH_DIRECTIONS[kind];
   const route = useDocumentRoute(direction.tab);
   const rights = useTabRights(direction.tab);
+  const searchParams = useSearchParams();
+  const invoiceId = route.isNew ? searchParams.get('invoice') : null;
 
-  if (route.isNew) return <CashTransactionForm businessId={business.id} direction={direction} allowed={rights.create} />;
+  if (route.isNew) return <CashTransactionForm key={`${route.cloneId}:${invoiceId}`} cloneId={route.cloneId} invoiceId={invoiceId} businessId={business.id} direction={direction} allowed={rights.create} />;
   if (route.editId) {
     return <CashTransactionForm key={route.editId} businessId={business.id} direction={direction} docId={route.editId} allowed={rights.edit} />;
   }

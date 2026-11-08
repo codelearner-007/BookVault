@@ -9,7 +9,8 @@ import { PageHeader } from '@/components/common/page';
 import { isVersionConflict } from '@/lib/services/api-client';
 import { listActiveBankAccounts } from '@/lib/services/bank-accounts.service';
 import { getCoaTree } from '@/lib/services/coa.service';
-import { headGroupOf, toInputAmount } from '../coa/coa-tree';
+import { accountsFromTree, headGroupOf, toInputAmount } from '../coa/coa-tree';
+import { TRADE_DOCUMENTS } from '../sales/sales-documents';
 import { parseAmount } from '../ledger/JournalLinesEditor';
 import { BackButton, ErrorAlert, JE_STATUS, todayIso, useTabNavigate } from '../ledger/ledger-parts';
 import {
@@ -20,7 +21,7 @@ import {
 } from './cash-directions';
 import CashLinesEditor, { emptyCashLine, isInvalidLine, optionalNumber } from './CashLinesEditor';
 import CounterpartyField from './CounterpartyField';
-import { BlockedForm, DocumentFormActions, blockedReason, useDocumentSave } from './document-form';
+import { BlockedForm, DocumentFormActions, asClone, blockedReason, useDocumentSave } from './document-form';
 
 const NEW_FORM = () => ({
   date: todayIso(),
@@ -70,6 +71,25 @@ function formFromDoc(doc) {
   };
 }
 
+// Copy to from an invoice: the customer / supplier pays the balance due on one receivable / payable line.
+function formFromInvoice(invoice, direction, tree) {
+  const { side, partyAccounts } = direction;
+  const controlCode = Object.keys(partyAccounts).find((code) => partyAccounts[code] === side.partyKind);
+  const control = accountsFromTree(tree, (account) => account.system_account_code === controlCode)[0];
+  const party = { id: invoice[side.partyField], name: invoice[side.partyNameField] };
+  return {
+    ...NEW_FORM(),
+    counterparty: { kind: side.partyKind, party, name: '' },
+    lines: [{
+      ...emptyCashLine(),
+      account_id: control?.id ?? '',
+      party,
+      invoice: { id: invoice.id, reference: invoice.reference },
+      unit_price: toInputAmount(invoice.balance_due ?? invoice.total),
+    }],
+  };
+}
+
 function isBlankLine(line) {
   return !line.account_id && !line.description.trim() && !line.qty.trim() && !line.unit_price.trim() && !line.discount.trim();
 }
@@ -113,15 +133,25 @@ function buildBody(form, canHavePending) {
   };
 }
 
-function useFormData(businessId, service, docId) {
+// A saved document, a clone, an invoice to settle, or a blank form.
+function initialForm({ doc, clone, invoice, tree }, direction) {
+  if (doc) return formFromDoc(doc);
+  if (clone) return asClone(formFromDoc(clone));
+  if (invoice) return formFromInvoice(invoice, direction, tree);
+  return NEW_FORM();
+}
+
+function useFormData(businessId, direction, docId, cloneId, invoiceId) {
   return useLoad(async () => {
-    const [banks, tree, doc] = await Promise.all([
+    const sourceId = docId ?? cloneId;
+    const [banks, tree, source, invoice] = await Promise.all([
       listActiveBankAccounts(businessId),
       getCoaTree(businessId, todayIso()),
-      docId ? service.get(businessId, docId) : null,
+      sourceId ? direction.service.get(businessId, sourceId) : null,
+      invoiceId ? TRADE_DOCUMENTS[direction.side.invoiceType].service.get(businessId, invoiceId) : null,
     ]);
-    return { banks: banks.items, tree, doc };
-  }, [businessId, docId]);
+    return { banks: banks.items, tree, invoice, doc: docId ? source : null, clone: docId ? null : source };
+  }, [businessId, direction.tab, docId, cloneId, invoiceId]);
 }
 
 function HeaderFields({ businessId, direction, form, setField, banks, bankHeadGroup, disabled }) {
@@ -179,10 +209,10 @@ function HeaderFields({ businessId, direction, form, setField, banks, bankHeadGr
 }
 
 // ?tab=receipts|payments&new=1 or &edit=<id>. Save draft / Post; a posted document has one Update.
-export default function CashTransactionForm({ businessId, direction, docId, allowed }) {
+export default function CashTransactionForm({ businessId, direction, docId, cloneId = null, invoiceId = null, allowed }) {
   const navigate = useTabNavigate(direction.tab);
   const { service } = direction;
-  const data = useFormData(businessId, service, docId);
+  const data = useFormData(businessId, direction, docId, cloneId, invoiceId);
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -197,7 +227,7 @@ export default function CashTransactionForm({ businessId, direction, docId, allo
   const [filledFrom, setFilledFrom] = useState(undefined);
   if (data.data && filledFrom !== data.data) {
     setFilledFrom(data.data);
-    setForm(data.data.doc ? formFromDoc(data.data.doc) : NEW_FORM());
+    setForm(initialForm(data.data, direction));
     setVersion(data.data.doc?.version ?? null);
   }
 

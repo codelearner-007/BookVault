@@ -14,7 +14,7 @@ export default function LateFeesTab({ business }) {
   const rights = useTabRights(SALES_TABS.lateFees);
   const searchParams = useSearchParams();
 
-  if (route.isNew) return <LateFeeForm businessId={business.id} allowed={rights.create} />;
+  if (route.isNew) return <LateFeeForm key={route.cloneId ?? 'new'} cloneId={route.cloneId} businessId={business.id} allowed={rights.create} />;
   if (route.editId) return <LateFeeForm key={route.editId} businessId={business.id} feeId={route.editId} allowed={rights.edit} />;
   if (route.viewId) return <LateFeeView key={route.viewId} business={business} feeId={route.viewId} rights={rights} />;
   if (route.active && searchParams.get('proposals') && rights.create) return <LateFeeProposals businessId={business.id} />;

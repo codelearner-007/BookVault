@@ -19,7 +19,7 @@ import {
   BANKING_TABS, BankAccountSelect, ClearedField, FormSkeleton, useLoad, withCurrentAccount,
 } from './banking-parts';
 import { BANK_CONTROL_ACCOUNT } from './cash-directions';
-import { BlockedForm, DocumentFormActions, blockedReason, useDocumentSave } from './document-form';
+import { BlockedForm, DocumentFormActions, asClone, blockedReason, useDocumentSave } from './document-form';
 
 const NOUN = 'transfer';
 const ERRORS = {
@@ -108,14 +108,14 @@ function SideFields({ side, label, value, banks, headGroup, onChange, disabled, 
 }
 
 // ?tab=inter-account-transfers&new=1 or &edit=<id>.
-export default function TransferForm({ businessId, docId, allowed }) {
+export default function TransferForm({ businessId, docId, cloneId = null, allowed }) {
   const navigate = useTabNavigate(BANKING_TABS.transfers);
   const data = useLoad(async () => {
-    const [banks, tree, doc] = await Promise.all([
-      listActiveBankAccounts(businessId), getCoaTree(businessId, todayIso()), docId ? getTransfer(businessId, docId) : null,
+    const [banks, tree, source] = await Promise.all([
+      listActiveBankAccounts(businessId), getCoaTree(businessId, todayIso()), docId || cloneId ? getTransfer(businessId, docId ?? cloneId) : null,
     ]);
-    return { banks: banks.items, headGroup: headGroupOf(tree, BANK_CONTROL_ACCOUNT), doc };
-  }, [businessId, docId]);
+    return { banks: banks.items, headGroup: headGroupOf(tree, BANK_CONTROL_ACCOUNT), doc: docId ? source : null, clone: docId ? null : source };
+  }, [businessId, docId, cloneId]);
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -129,7 +129,7 @@ export default function TransferForm({ businessId, docId, allowed }) {
   const [filledFrom, setFilledFrom] = useState(undefined);
   if (data.data && filledFrom !== data.data) {
     setFilledFrom(data.data);
-    setForm(data.data.doc ? formFromDoc(data.data.doc) : NEW_FORM());
+    setForm(data.data.doc ? formFromDoc(data.data.doc) : data.data.clone ? asClone(formFromDoc(data.data.clone)) : NEW_FORM());
     setVersion(data.data.doc?.version ?? null);
   }
 

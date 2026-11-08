@@ -26,7 +26,7 @@ function RegisterLink({ account, onOpenRegister }) {
   return (
     <Button
       variant="link"
-      className="num h-auto p-0 text-inherit hover:text-link"
+      className="num amount-link h-auto p-0 font-normal text-inherit"
       aria-label={`Open the register of ${account.name}`}
       onClick={(event) => { event.stopPropagation(); onOpenRegister(account.id); }}
     >

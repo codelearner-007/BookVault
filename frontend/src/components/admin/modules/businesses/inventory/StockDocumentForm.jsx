@@ -11,7 +11,7 @@ import { inventoryItemsService, inventoryLocationsService } from '@/lib/services
 import { BackButton, ErrorAlert, JE_STATUS, todayIso, useTabNavigate } from '../ledger/ledger-parts';
 import { FormSkeleton, useLoad } from '../banking/banking-parts';
 import { lineAccountsFromTree } from '../banking/cash-directions';
-import { BlockedForm, DocumentFormActions, blockedReason, useDocumentSave } from '../banking/document-form';
+import { BlockedForm, DocumentFormActions, asClone, blockedReason, useDocumentSave } from '../banking/document-form';
 import { RecordSelect, TextInput } from '../sales/catalog-dialog';
 import { DEFAULT_LOCATION_LABEL } from './inventory-documents';
 import StockLinesEditor from './StockLinesEditor';
@@ -33,22 +33,23 @@ function itemsWithSaved(items, doc) {
   return active;
 }
 
-function useStockFormData(businessId, config, docId) {
+function useStockFormData(businessId, config, docId, cloneId) {
   return useLoad(async () => {
     const [items, locations, tree, doc] = await Promise.all([
       inventoryItemsService.listAll(businessId),
       inventoryLocationsService.listAll(businessId),
       config.lineAccount || config.production ? getCoaTree(businessId, todayIso()) : null,
-      docId ? config.service.get(businessId, docId) : null,
+      docId || cloneId ? config.service.get(businessId, docId ?? cloneId) : null,
     ]);
     const savedAccounts = [...(doc?.lines ?? []), ...(doc?.costs ?? [])].filter((line) => line.account_id);
     return {
-      doc,
+      doc: docId ? doc : null,
+      clone: docId ? null : doc,
       items: itemsWithSaved(items.items, doc),
       locations: locations.items,
       accounts: tree ? lineAccountsFromTree(tree, savedAccounts) : [],
     };
-  }, [businessId, config.type, docId]);
+  }, [businessId, config.type, docId, cloneId]);
 }
 
 function LocationFields({ config, form, setField, locations, disabled }) {
@@ -129,9 +130,9 @@ function LinesSection({ config, form, setForm, loaded, disabled }) {
   Save draft / Post (one primary); a posted document has one Update. Stock and cost errors (409 insufficient_stock)
   show the API message.
 */
-export default function StockDocumentForm({ businessId, config, docId = null, allowed }) {
+export default function StockDocumentForm({ businessId, config, docId = null, cloneId = null, allowed }) {
   const navigate = useTabNavigate(config.tab);
-  const data = useStockFormData(businessId, config, docId);
+  const data = useStockFormData(businessId, config, docId, cloneId);
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -145,7 +146,7 @@ export default function StockDocumentForm({ businessId, config, docId = null, al
   const [filledFrom, setFilledFrom] = useState(undefined);
   if (data.data && filledFrom !== data.data) {
     setFilledFrom(data.data);
-    setForm(stockForm(data.data.doc));
+    setForm(data.data.clone ? asClone(stockForm(data.data.clone)) : stockForm(data.data.doc));
     setVersion(data.data.doc?.version ?? null);
   }
 

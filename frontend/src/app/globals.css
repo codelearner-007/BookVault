@@ -10,9 +10,10 @@
   marker, the focus ring and every on state (switch, checkbox, radio). Hue kept clear of bad 25 and warn 95.
 */
 
-@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant dark (&:where(.dark, .dark *):not(.paper-light, .paper-light *));
 
-:root {
+:root,
+.paper-light {
   color-scheme: light;
 
   /* surfaces */
@@ -43,7 +44,7 @@
   /* brand and actions */
   --brand: oklch(0.5 0.17 255);
   --brand-foreground: oklch(0.99 0 0);
-  --link: oklch(0.47 0.16 255);
+  --link: var(--accent-contrast);
   --accent-contrast: oklch(0.56 0.16 50);
   --accent-contrast-hover: oklch(0.5 0.16 50);
   --accent-contrast-foreground: oklch(0.985 0.01 50);
@@ -149,7 +150,7 @@
 
   --brand: oklch(0.8 0.11 255);
   --brand-foreground: oklch(0.18 0.02 255);
-  --link: oklch(0.82 0.1 255);
+  --link: var(--accent-contrast);
   --accent-contrast: oklch(0.76 0.15 55);
   --accent-contrast-hover: oklch(0.81 0.13 55);
   --accent-contrast-foreground: oklch(0.18 0.04 55);
@@ -384,6 +385,18 @@
 @keyframes sheet-up { from { transform: translateY(100%); } }
 @keyframes drawer-in { from { transform: translateX(-105%); } }
 
+/* A drill-down amount (Summary, bank balances, lists, register): keeps its own colour; hover underlines it in the
+   accent, or in red when the amount is red. Never the blue link colour. */
+@utility amount-link {
+  color: inherit;
+  border-radius: 0.125rem;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1.5px;
+  &:hover { text-decoration-line: underline; text-decoration-color: var(--accent-contrast); }
+  &:hover:has(.text-bad), &.text-bad:hover { text-decoration-color: var(--bad); }
+  &:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+}
+
 @utility glass {
   background-color: var(--card);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -529,4 +542,55 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Document print / PDF copy (documents/document-output.js): the card alone, on light A4 paper, Nightglass type. */
+#bv-print-root {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline-start: -10000px;
+  background: var(--popover);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+}
+#bv-print-root [data-document-paper] {
+  background: var(--popover);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  padding: 0;
+}
+#bv-print-root [data-print-hide] { display: none !important; }
+#bv-print-root [data-print-only] { display: flex !important; }
+#bv-print-root [data-print-footer] { display: block !important; }
+#bv-print-root table { border-collapse: collapse; }
+#bv-print-root :is(th, td) { border-bottom: 1px solid var(--row-divider); padding-block: 0.5rem; }
+#bv-print-root th { color: var(--muted-foreground); font-weight: 600; }
+#bv-print-root tfoot tr:last-child td { border-top: 2px solid var(--accent-contrast); font-weight: 700; }
+#bv-print-root dl.ms-auto { border-top: 2px solid var(--accent-contrast); }
+#bv-print-root [data-print-page-footer] {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-top: 2.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--row-divider);
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+}
+#bv-print-root a { color: inherit; text-decoration: none; }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+    @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt var(--font-sans); color: var(--muted-foreground); }
+  }
+  html.bv-printing body > :not(#bv-print-root) { display: none !important; }
+  html.bv-printing, html.bv-printing body { background: var(--popover) !important; }
+  html.bv-printing #bv-print-root { position: static; width: auto; }
+  #bv-print-root tr, #bv-print-root header, #bv-print-root dl { break-inside: avoid; }
+  #bv-print-root * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }

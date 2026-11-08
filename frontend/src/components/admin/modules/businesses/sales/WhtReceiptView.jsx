@@ -1,15 +1,14 @@
 'use client';
 
-import { Card } from '@/components/ui/card';
+import { PARTY_KINDS } from '@/lib/services/parties.service';
 import { withholdingTaxReceiptsService } from '@/lib/services/withholding-tax.service';
 import { FormattedDate } from '@/components/common/business-format';
-import { Money } from '@/components/common/money';
 import { ErrorAlert, JE_STATUS, StatusBadge, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from '../banking/AttachmentsPanel';
 import { DocumentSkeleton, useLoad } from '../banking/banking-parts';
 import DocumentViewFrame from '../banking/DocumentViewFrame';
 import { SALES_TABS } from './sales-documents';
-import { Field } from './sales-parts';
+import DocumentHeader, { DocumentDescription, AmountTotal, DocumentPaper, usePartyRecord } from '../documents/DocumentHeader';
 
 const TITLE = 'Withholding Tax Receipt';
 
@@ -20,6 +19,7 @@ export default function WhtReceiptView({ business, receiptId, rights }) {
     () => withholdingTaxReceiptsService.get(business.id, receiptId),
     [business.id, receiptId],
   );
+  const partyRecord = usePartyRecord(business.id, PARTY_KINDS.customer, data?.customer_id);
 
   if (!data) return error ? <ErrorAlert>{error}</ErrorAlert> : <DocumentSkeleton />;
   const receipt = data;
@@ -32,25 +32,22 @@ export default function WhtReceiptView({ business, receiptId, rights }) {
       noun="withholding tax receipt"
       onBack={() => navigate({})}
       onEdit={() => navigate({ edit: receipt.id })}
+      onClone={() => navigate({ new: 1, clone: receipt.id })}
       postCall={(version, key) => withholdingTaxReceiptsService.post(business.id, receipt.id, version, key)}
       voidCall={(version, key) => withholdingTaxReceiptsService.void(business.id, receipt.id, version, key)}
       onChanged={reload}
     >
-      <Card className="p-card">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold">{TITLE}</h2>
-            {receipt.status !== JE_STATUS.posted && <StatusBadge status={receipt.status} />}
-          </div>
-          <p className="font-semibold">{business.name}</p>
-        </div>
-        <dl className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Date"><FormattedDate value={receipt.date} className="tabular-nums" /></Field>
-          <Field label="Customer">{receipt.customer_name}</Field>
-          <Field label="Amount"><Money value={receipt.amount} className="font-semibold" /></Field>
-        </dl>
-        {receipt.description && <p className="mt-6 whitespace-pre-wrap">{receipt.description}</p>}
-      </Card>
+      <DocumentPaper>
+        <DocumentHeader
+          title={TITLE}
+          status={receipt.status !== JE_STATUS.posted && <StatusBadge status={receipt.status} />}
+          business={business}
+          party={{ label: 'Customer', name: receipt.customer_name, record: partyRecord }}
+          meta={[['Reference', receipt.reference], ['Date', <FormattedDate key="d" value={receipt.date} />]]}
+        />
+        <DocumentDescription text={receipt.description} />
+        <AmountTotal label="Amount withheld" value={receipt.amount} />
+      </DocumentPaper>
       <AttachmentsPanel businessId={business.id} documentId={receipt.id} canEdit={rights.edit && !receipt.is_locked} />
     </DocumentViewFrame>
   );

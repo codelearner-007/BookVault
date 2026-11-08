@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EmptyState, ListCard, PageHeader } from '@/components/common/page';
-import { BackButton, JE_STATUS } from '../ledger/ledger-parts';
+import { BackButton, JE_STATUS, todayIso } from '../ledger/ledger-parts';
 import { useIdempotencyKey } from './banking-parts';
 
 /*
@@ -26,6 +26,11 @@ export function useDocumentSave({ docId, create, update, post }) {
   }
 
   return { save, setVersion };
+}
+
+// Clone: the copied form as a new document dated today, without the source's reference.
+export function asClone(form) {
+  return { ...form, date: todayIso(), reference: '' };
 }
 
 export function DocumentFormActions({ isPosted, saving, onSubmit, onCancel }) {

@@ -70,18 +70,18 @@ export function RecordTitle({ text, children }) {
   );
 }
 
-/** The quiet View / Edit pair at the start of a row (Manager's row buttons); `menu` adds a More menu. */
+/** The quiet View / Edit pair at the start of a row, split by the column rule (--row-divider); `menu` adds a More menu. */
 export function RowActions({ name, onView, onEdit, menu }) {
   return (
     // The cell's clicks never reach the row (the More menu opens in a portal).
-    <span className="flex items-center gap-0.5" onClick={(event) => event.stopPropagation()}>
+    <span className="flex items-center justify-center divide-x divide-row-divider" onClick={(event) => event.stopPropagation()}>
       {onView && (
-        <Button variant="ghost" size="sm" className="px-2.5 font-medium" onClick={onView} aria-label={COPY.viewRecord(name)}>
+        <Button variant="ghost" size="sm" className="mx-1 px-2 font-medium" onClick={onView} aria-label={COPY.viewRecord(name)}>
           {COPY.view}
         </Button>
       )}
       {onEdit && (
-        <Button variant="ghost" size="sm" className="px-2.5 font-medium" onClick={onEdit} aria-label={COPY.editRecord(name)}>
+        <Button variant="ghost" size="sm" className="mx-1 px-2 font-medium" onClick={onEdit} aria-label={COPY.editRecord(name)}>
           {COPY.edit}
         </Button>
       )}
@@ -127,7 +127,7 @@ export function ListTable({
     <Table>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
-          {withActions && <TableHead className="w-0 pe-0"><span className="sr-only">{COPY.actions}</span></TableHead>}
+          {withActions && <TableHead className="w-0 px-1"><span className="sr-only">{COPY.actions}</span></TableHead>}
           {visible.map((column) => (
             <TableHead key={column.key} className={alignClass(column.kind)}>{column.label}</TableHead>
           ))}
@@ -141,7 +141,7 @@ export function ListTable({
             onClick={openRow ? () => openRow(row) : undefined}
           >
             {withActions && (
-              <TableCell data-card="actions" className="md:w-0 md:pe-0 md:ps-2">
+              <TableCell data-card="actions" className="md:w-0 md:px-1">
                 <RowActions
                   name={nameOf(row)}
                   onView={onView && (() => onView(row))}

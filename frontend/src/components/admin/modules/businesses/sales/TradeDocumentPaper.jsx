@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { FormattedDate, useBusinessFormat } from '@/components/common/business-format';
 import { Money } from '@/components/common/money';
@@ -12,7 +11,8 @@ import { isZeroAmount } from '../coa/coa-tree';
 import { accountLabel } from '../ledger/ledger-parts';
 import { DOCUMENT_TYPE_LABELS, documentHref } from '../banking/banking-parts';
 import { DOC_TYPES, LATE_FEE_TYPE, ORDER_DELIVERY_STATUS, ORDER_INVOICE_STATUS, ROLES, plainNumber } from './sales-documents';
-import { Field, STICKY_CELL, StatusPill } from './sales-parts';
+import { STICKY_CELL, StatusPill } from './sales-parts';
+import DocumentHeader, { DocumentDescription, DocumentPaper } from '../documents/DocumentHeader';
 import { asReduction, totalsOfDoc, totalsRows } from './TradeTotals';
 
 function DocumentLabel({ entry: { document_type: type, reference, date } }) {
@@ -95,7 +95,7 @@ function TotalsRows({ doc, config, span }) {
 function LinesTable({ doc, config }) {
   const columns = lineColumns(doc, config);
   return (
-    <Table className="mt-4" cards={false}>
+    <Table cards={false}>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
           {columns.map(([key, label], index) => (
@@ -123,33 +123,27 @@ function LinesTable({ doc, config }) {
   );
 }
 
-function HeaderFields({ doc, config, locationName }) {
+// Number, dates, location and order statuses: the meta column of the header.
+function metaRows(doc, config, locationName) {
   const isType = (type) => config.type === type;
   const isRole = (role) => config.role === role;
-  return (
-    <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-      <Field label={config.dateLabel}><FormattedDate value={doc.date} className="tabular-nums" /></Field>
-      {isType(DOC_TYPES.quote) && doc.expiry_date && <Field label="Expiry date"><FormattedDate value={doc.expiry_date} className="tabular-nums" /></Field>}
-      {isRole(ROLES.invoice) && <Field label="Due date"><FormattedDate value={doc.due_date} className="tabular-nums" /></Field>}
-      <Field label={isRole(ROLES.invoice) ? 'Invoice number' : 'Reference'}>{doc.reference}</Field>
-      {isRole(ROLES.note) && <Field label={config.side.invoiceLabel}>{doc.invoice_reference ?? 'Automatic'}</Field>}
-      {locationName && <Field label="Inventory location">{locationName}</Field>}
-      {isType(DOC_TYPES.order) && (
-        <Field label="Status">
-          <span className="flex flex-wrap gap-2">
-            <StatusPill statuses={ORDER_INVOICE_STATUS} status={doc.invoice_status} />
-            <StatusPill statuses={ORDER_DELIVERY_STATUS} status={doc.delivery_status} />
-          </span>
-        </Field>
-      )}
-    </dl>
-  );
+  const date = (value) => value && <FormattedDate value={value} />;
+  return [
+    [isRole(ROLES.invoice) ? 'Invoice number' : 'Reference', doc.reference],
+    [config.dateLabel, date(doc.date)],
+    isType(DOC_TYPES.quote) && ['Expiry date', date(doc.expiry_date)],
+    isRole(ROLES.invoice) && ['Due date', date(doc.due_date)],
+    isRole(ROLES.note) && [config.side.invoiceLabel, doc.invoice_reference ?? 'Automatic'],
+    ['Inventory location', locationName],
+    isType(DOC_TYPES.order) && ['Invoicing', <StatusPill key="i" statuses={ORDER_INVOICE_STATUS} status={doc.invoice_status} />],
+    isType(DOC_TYPES.order) && ['Delivery', <StatusPill key="d" statuses={ORDER_DELIVERY_STATUS} status={doc.delivery_status} />],
+  ].filter(Boolean);
 }
 
 function Links({ links }) {
   if (links.length === 0) return null;
   return (
-    <ul className="mt-6 space-y-1 text-sm text-muted-foreground">
+    <ul className="space-y-1 text-sm text-muted-foreground" data-print-hide="">
       {links.map((link) => (
         <li key={`${link.relation}-${link.document_id}`}>
           {link.relation === 'source' ? 'Created from ' : 'Copied to '}
@@ -160,41 +154,40 @@ function Links({ links }) {
   );
 }
 
-// Manager's document layout: title and status, customer / supplier and address, dates, lines, totals, applied amounts.
-export default function TradeDocumentPaper({ doc, config, businessName, locationName = null }) {
+// Manager's document layout: business, customer / supplier, meta, lines, totals, applied amounts.
+// partyRecord: the customer / supplier record (email, code) when the user may read it.
+export default function TradeDocumentPaper({ doc, config, business, partyRecord = null, locationName = null }) {
   const address = config.type === DOC_TYPES.deliveryNote ? doc.delivery_address : doc.billing_address;
+  const status = (
+    <>
+      <StatusPill statuses={config.statuses} status={doc.display_status} />
+      {doc.is_closed && <Badge variant="neutral">Closed</Badge>}
+    </>
+  );
   return (
-    <Card className="p-card">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-bold">{doc.is_starting_balance ? 'Starting-balance invoice' : config.paperTitle}</h2>
-          <StatusPill statuses={config.statuses} status={doc.display_status} />
-          {doc.is_closed && <Badge variant="neutral">Closed</Badge>}
-        </div>
-        <p className="font-semibold">{businessName}</p>
-      </div>
-      <div className="mt-6 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-        <div>
-          <p className="font-semibold">{doc[config.side.partyNameField]}</p>
-          {address && <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{address}</p>}
-        </div>
-        <HeaderFields doc={doc} config={config} locationName={locationName} />
-      </div>
-      {doc.description && <p className="mt-6 font-semibold whitespace-pre-wrap">{doc.description}</p>}
+    <DocumentPaper>
+      <DocumentHeader
+        title={doc.is_starting_balance ? 'Starting-balance invoice' : config.paperTitle}
+        status={status}
+        business={business}
+        party={{ label: config.side.partyLabel, name: doc[config.side.partyNameField], address: address || null, record: partyRecord }}
+        meta={metaRows(doc, config, locationName)}
+      />
+      <DocumentDescription text={doc.description} />
       <LinesTable doc={doc} config={config} />
       {doc.is_starting_balance && (
-        <p className="mt-4 text-sm text-muted-foreground">Paid before start: <Money value={doc.paid_before_start} /></p>
+        <p className="text-sm text-muted-foreground">Paid before start: <Money value={doc.paid_before_start} /></p>
       )}
       {doc.early_discount && (
-        <p className="mt-4 text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Early payment discount of <Money value={doc.early_discount.amount} /> if paid by <FormattedDate value={doc.early_discount.until} />.
         </p>
       )}
       {doc.acts_as_stock_movement && config.stockMovementLabel && (
-        <p className="mt-4 text-sm text-muted-foreground">{config.stockMovementLabel}.</p>
+        <p className="text-sm text-muted-foreground">{config.stockMovementLabel}.</p>
       )}
       {config.role === ROLES.note && doc.applied?.length > 0 && (
-        <ul className="mt-4 space-y-1 text-sm text-muted-foreground">
+        <ul className="space-y-1 text-sm text-muted-foreground">
           {doc.applied.map((entry) => (
             <li key={entry.document_id}>
               Applied to <DocLink entry={entry}><DocumentLabel entry={entry} /></DocLink>: <Money value={entry.amount} />
@@ -203,6 +196,6 @@ export default function TradeDocumentPaper({ doc, config, businessName, location
         </ul>
       )}
       <Links links={doc.links ?? []} />
-    </Card>
+    </DocumentPaper>
   );
 }

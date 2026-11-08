@@ -11,7 +11,7 @@ export default function WhtReceiptsTab({ business }) {
   const route = useDocumentRoute(SALES_TABS.whtReceipts);
   const rights = useTabRights(SALES_TABS.whtReceipts);
 
-  if (route.isNew) return <WhtReceiptForm businessId={business.id} allowed={rights.create} />;
+  if (route.isNew) return <WhtReceiptForm key={route.cloneId ?? 'new'} cloneId={route.cloneId} businessId={business.id} allowed={rights.create} />;
   if (route.editId) return <WhtReceiptForm key={route.editId} businessId={business.id} receiptId={route.editId} allowed={rights.edit} />;
   if (route.viewId) return <WhtReceiptView key={route.viewId} business={business} receiptId={route.viewId} rights={rights} />;
   return <WhtReceiptsList businessId={business.id} page={route.page} active={route.active} canCreate={rights.create} canEdit={rights.edit} />;

@@ -13,7 +13,7 @@ import { toInputAmount } from '../coa/coa-tree';
 import { parseAmount } from '../ledger/JournalLinesEditor';
 import { BackButton, ErrorAlert, JE_STATUS, todayIso, useTabNavigate } from '../ledger/ledger-parts';
 import { FormSkeleton, useLoad } from '../banking/banking-parts';
-import { BlockedForm, DocumentFormActions, blockedReason, useDocumentSave } from '../banking/document-form';
+import { BlockedForm, DocumentFormActions, asClone, blockedReason, useDocumentSave } from '../banking/document-form';
 import { SALES_TABS } from './sales-documents';
 import { InvoiceSelect, TradePartyPicker } from './sales-parts';
 
@@ -51,9 +51,9 @@ function buildBody(form) {
 }
 
 // ?tab=late-payment-fees&new=1 or &edit=<id>: Date, Customer, the customer's invoice and the amount.
-export default function LateFeeForm({ businessId, feeId, allowed }) {
+export default function LateFeeForm({ businessId, feeId, cloneId = null, allowed }) {
   const navigate = useTabNavigate(SALES_TABS.lateFees);
-  const data = useLoad(() => (feeId ? latePaymentFeesService.get(businessId, feeId) : Promise.resolve(null)), [businessId, feeId]);
+  const data = useLoad(() => (feeId || cloneId ? latePaymentFeesService.get(businessId, feeId ?? cloneId) : Promise.resolve(null)), [businessId, feeId, cloneId]);
   const [form, setForm] = useState(null);
   const [filledFrom, setFilledFrom] = useState(undefined);
   const [saving, setSaving] = useState(false);
@@ -67,8 +67,8 @@ export default function LateFeeForm({ businessId, feeId, allowed }) {
 
   if (!data.loading && filledFrom !== data.data) {
     setFilledFrom(data.data);
-    setForm(formFrom(data.data));
-    setVersion(data.data?.version ?? null);
+    setForm(cloneId && !feeId ? asClone(formFrom(data.data)) : formFrom(data.data));
+    setVersion(feeId ? data.data?.version ?? null : null);
   }
 
   const customerId = form?.customer?.id ?? null;
@@ -78,7 +78,7 @@ export default function LateFeeForm({ businessId, feeId, allowed }) {
     [businessId, customerId, date],
   );
 
-  const fee = data.data;
+  const fee = feeId ? data.data : null;
   const title = feeId ? 'Edit Late Payment Fee' : 'New Late Payment Fee';
   const back = () => navigate(feeId ? { view: feeId } : {});
   const reason = blockedReason({ allowed, doc: fee, noun: NOUN });

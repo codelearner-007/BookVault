@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { EmptyState } from '@/components/common/page';
 import { Monogram } from '@/components/shell/BusinessSwitcher';
 import { WORKSPACE_COPY as COPY } from '@/lib/copy/workspace';
+import { downloadJson } from '@/lib/utils/download';
 import {
   deleteBusiness, exportBusiness, listBusinesses, listDeletedBusinesses, permanentDeleteBusiness, restoreBusiness,
 } from '@/lib/services/business.service';
@@ -181,15 +182,6 @@ function PermanentDeleteDialog({ open, onOpenChange, name, typed, onTypedChange,
       </AlertDialogContent>
     </AlertDialog>
   );
-}
-
-function downloadJson(data, filename) {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 function useRemoveFlow({ onChanged, onError }) {

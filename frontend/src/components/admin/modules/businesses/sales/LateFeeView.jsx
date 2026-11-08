@@ -1,16 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { Card } from '@/components/ui/card';
+import { PARTY_KINDS } from '@/lib/services/parties.service';
 import { latePaymentFeesService } from '@/lib/services/late-payment-fees.service';
 import { FormattedDate } from '@/components/common/business-format';
-import { Money } from '@/components/common/money';
 import { ErrorAlert, JE_STATUS, StatusBadge, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from '../banking/AttachmentsPanel';
 import { DocumentSkeleton, documentHref, useLoad } from '../banking/banking-parts';
 import DocumentViewFrame from '../banking/DocumentViewFrame';
 import { DOC_TYPES, SALES_TABS } from './sales-documents';
-import { Field } from './sales-parts';
+import DocumentHeader, { DocumentDescription, AmountTotal, DocumentPaper, usePartyRecord } from '../documents/DocumentHeader';
 
 // ?tab=late-payment-fees&view=<id>: the fee, Edit / Post / Void and attachments.
 export default function LateFeeView({ business, feeId, rights }) {
@@ -19,6 +18,7 @@ export default function LateFeeView({ business, feeId, rights }) {
     () => latePaymentFeesService.get(business.id, feeId),
     [business.id, feeId],
   );
+  const partyRecord = usePartyRecord(business.id, PARTY_KINDS.customer, data?.customer_id);
 
   if (!data) return error ? <ErrorAlert>{error}</ErrorAlert> : <DocumentSkeleton />;
   const fee = data;
@@ -31,28 +31,26 @@ export default function LateFeeView({ business, feeId, rights }) {
       noun="late payment fee"
       onBack={() => navigate({})}
       onEdit={() => navigate({ edit: fee.id })}
+      onClone={() => navigate({ new: 1, clone: fee.id })}
       postCall={(version, key) => latePaymentFeesService.post(business.id, fee.id, version, key)}
       voidCall={(version, key) => latePaymentFeesService.void(business.id, fee.id, version, key)}
       onChanged={reload}
     >
-      <Card className="p-card">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold">Late Payment Fee</h2>
-            {fee.status !== JE_STATUS.posted && <StatusBadge status={fee.status} />}
-          </div>
-          <p className="font-semibold">{business.name}</p>
-        </div>
-        <dl className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Date"><FormattedDate value={fee.date} className="tabular-nums" /></Field>
-          <Field label="Customer">{fee.customer_name}</Field>
-          <Field label="Sales invoice">
-            <Link href={documentHref(DOC_TYPES.invoice, fee.invoice_id)} className="hover:text-link hover:underline">{fee.invoice_reference}</Link>
-          </Field>
-          <Field label="Amount"><Money value={fee.amount} className="font-semibold" /></Field>
-        </dl>
-        {fee.description && <p className="mt-6 whitespace-pre-wrap">{fee.description}</p>}
-      </Card>
+      <DocumentPaper>
+        <DocumentHeader
+          title="Late Payment Fee"
+          status={fee.status !== JE_STATUS.posted && <StatusBadge status={fee.status} />}
+          business={business}
+          party={{ label: 'Customer', name: fee.customer_name, record: partyRecord }}
+          meta={[
+            ['Reference', fee.reference],
+            ['Date', <FormattedDate key="d" value={fee.date} />],
+            ['Sales invoice', <Link key="i" href={documentHref(DOC_TYPES.invoice, fee.invoice_id)} className="hover:text-link hover:underline">{fee.invoice_reference}</Link>],
+          ]}
+        />
+        <DocumentDescription text={fee.description} />
+        <AmountTotal label="Fee" value={fee.amount} />
+      </DocumentPaper>
       <AttachmentsPanel businessId={business.id} documentId={fee.id} canEdit={rights.edit && !fee.is_locked} />
     </DocumentViewFrame>
   );

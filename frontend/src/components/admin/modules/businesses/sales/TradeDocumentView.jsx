@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Copy } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { ConfirmDialog } from '@/components/super-admin/platform-parts';
 import { useBusinessWorkspace } from '@/components/shell/ShellContext';
 import { RIGHT_CREATE } from '@/lib/constants/access-rights';
@@ -11,27 +11,38 @@ import { tabArea } from '@/lib/navigation/business-tabs';
 import { inventoryLocationsService } from '@/lib/services/inventory.service';
 import { ErrorAlert, JE_STATUS, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from '../banking/AttachmentsPanel';
-import { DocumentSkeleton, useLoad } from '../banking/banking-parts';
+import { BANKING_TABS, DocumentSkeleton, useLoad } from '../banking/banking-parts';
+import { isZeroAmount } from '../coa/coa-tree';
+import { usePartyRecord } from '../documents/DocumentHeader';
 import DocumentViewFrame from '../banking/DocumentViewFrame';
 import { INVENTORY_AREAS } from '../inventory/inventory-documents';
-import { CREDIT_LIMIT_WARNING, TRADE_DOCUMENTS, TRADE_ERRORS, movesStock } from './sales-documents';
+import { CREDIT_LIMIT_WARNING, ROLES, TRADE_DOCUMENTS, TRADE_ERRORS, TRADE_SIDES, movesStock } from './sales-documents';
 import { creditLimitConfirm } from './sales-parts';
 import { useMoneyFormatter } from '@/components/common/money';
 import TradeDocumentPaper from './TradeDocumentPaper';
 
-// "Copy to" entries the user may use: each opens the target's new form prefilled from this document.
-function useCopyItems(config, doc) {
+// The receipt (sales) or payment (purchases) that settles an invoice: Copy to opens it prefilled.
+const SETTLEMENT = {
+  [TRADE_SIDES.sales.key]: { tab: BANKING_TABS.receipts, title: 'Receipt' },
+  [TRADE_SIDES.purchases.key]: { tab: BANKING_TABS.payments, title: 'Payment' },
+};
+
+// "Copy to" targets the user may create: each opens the target's new form prefilled from this document.
+function useCopyTargets(config, doc) {
   const router = useRouter();
   const { access } = useBusinessWorkspace();
   if (!doc || doc.status === JE_STATUS.void) return [];
-  return config.copyTargets
+  const mayCreate = (tab) => can(access, tabArea(tab), RIGHT_CREATE);
+  const targets = config.copyTargets
     .map((type) => TRADE_DOCUMENTS[type])
-    .filter((target) => can(access, tabArea(target.tab), RIGHT_CREATE))
-    .map((target) => ({
-      label: `Copy to ${target.title}`,
-      icon: Copy,
-      onSelect: () => router.push(`?tab=${target.tab}&new=1&from=${doc.id}&from_type=${config.type}`),
-    }));
+    .filter((target) => mayCreate(target.tab))
+    .map((target) => ({ label: target.title, onSelect: () => router.push(`?tab=${target.tab}&new=1&from=${doc.id}&from_type=${config.type}`) }));
+  const settlement = SETTLEMENT[config.side.key];
+  const payable = config.role === ROLES.invoice && doc.status === JE_STATUS.posted && !isZeroAmount(doc.balance_due ?? '0');
+  if (payable && mayCreate(settlement.tab)) {
+    targets.push({ label: settlement.title, onSelect: () => router.push(`?tab=${settlement.tab}&new=1&invoice=${doc.id}`) });
+  }
+  return targets;
 }
 
 function Warnings({ warnings }) {
@@ -70,7 +81,8 @@ export default function TradeDocumentView({ business, config, docId, rights }) {
   const [overriding, setOverriding] = useState(false);
   const [postError, setPostError] = useState(null);
   const [doc, locations] = data ?? [];
-  const copyItems = useCopyItems(config, doc);
+  const copyTargets = useCopyTargets(config, doc);
+  const partyRecord = usePartyRecord(business.id, config.side.partyKind, doc?.[config.side.partyField]);
 
   if (!data) return error ? <ErrorAlert>{error}</ErrorAlert> : <DocumentSkeleton />;
   // Shown only when the document names a location (none = the default one).
@@ -107,10 +119,11 @@ export default function TradeDocumentView({ business, config, docId, rights }) {
       noun={config.noun}
       onBack={() => navigate({})}
       onEdit={() => navigate({ edit: doc.id })}
+      onClone={doc.is_starting_balance ? undefined : () => navigate({ new: 1, clone: doc.id })}
       postCall={postCall}
       voidCall={(version, key) => service.void(business.id, doc.id, version, key)}
       onChanged={reload}
-      menuItems={copyItems}
+      copyTargets={copyTargets}
       voidCopy={config.voidCopy}
     >
       <ConfirmDialog
@@ -122,7 +135,7 @@ export default function TradeDocumentView({ business, config, docId, rights }) {
       />
       {postError && <ErrorAlert>{postError}</ErrorAlert>}
       <Warnings warnings={doc.warnings} />
-      <TradeDocumentPaper doc={doc} config={config} businessName={business.name} locationName={locationName} />
+      <TradeDocumentPaper doc={doc} config={config} business={business} partyRecord={partyRecord} locationName={locationName} />
       <AttachmentsPanel businessId={business.id} documentId={doc.id} canEdit={rights.edit && !doc.is_locked} />
     </DocumentViewFrame>
   );

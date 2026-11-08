@@ -16,7 +16,7 @@ import { getWithholdingTaxSettings } from '@/lib/services/withholding-tax.servic
 import { BackButton, ErrorAlert, JE_STATUS, todayIso, useTabNavigate } from '../ledger/ledger-parts';
 import { FormSkeleton, useLoad } from '../banking/banking-parts';
 import { lineAccountsFromTree } from '../banking/cash-directions';
-import { BlockedForm, DocumentFormActions, blockedReason, useDocumentSave } from '../banking/document-form';
+import { BlockedForm, DocumentFormActions, asClone, blockedReason, useDocumentSave } from '../banking/document-form';
 import { INVENTORY_AREAS } from '../inventory/inventory-documents';
 import {
   CREDIT_LIMIT_WARNING, DOC_TYPES, ITEM_KINDS, ROLES, TRADE_DOCUMENTS, TRADE_ERRORS, TRADE_SIDES, movesStock,
@@ -58,46 +58,49 @@ async function listLineItems(businessId, side, mayView) {
   return [...plain.items, ...stocked.items.map(tagged(ITEM_KINDS.inventory)), ...kits.items.map(tagged(ITEM_KINDS.kit))];
 }
 
-function useTradeFormData(businessId, config, docId, copyFrom, startingBalance) {
+function useTradeFormData(businessId, config, docId, copyFrom, startingBalance, cloneId) {
   const { access } = useBusinessWorkspace();
   const mayView = (area) => can(access, area);
   return useLoad(async () => {
-    const [tree, items, taxCodes, locations, doc, copy, starting, whtSettings] = await Promise.all([
+    const [tree, items, taxCodes, locations, source, copy, starting, whtSettings] = await Promise.all([
       config.accounts ? getCoaTree(businessId, todayIso()) : null,
       listLineItems(businessId, config.side, mayView),
       config.priced ? taxCodesService.listAll(businessId) : null,
       movesStock(config) && mayView(INVENTORY_AREAS.locations) ? inventoryLocationsService.listAll(businessId) : null,
-      docId ? config.service.get(businessId, docId) : null,
+      docId || cloneId ? config.service.get(businessId, docId ?? cloneId) : null,
       copyFrom ? TRADE_DOCUMENTS[copyFrom.type].service.copyTo(businessId, copyFrom.id, config.type) : null,
       startingBalance ? listStartingBalanceInvoices(businessId, config.side.invoicesResource) : null,
       config.withholdingTax ? getWithholdingTaxSettings(businessId) : null,
     ]);
+    const [doc, clone] = docId ? [source, null] : [null, source];
     const prefill = copy?.prefill ?? null;
     const partyId = prefill?.[config.side.partyField];
     const party = partyId ? await config.side.parties.get(businessId, partyId) : null;
-    const savedLines = doc?.lines ?? [];
+    const savedLines = source?.lines ?? [];
     return {
       doc,
+      clone,
       prefill,
       party,
       starting,
       locations: locations?.items ?? null,
       // The setting only shows the block; a document that already withholds tax keeps it visible.
-      showWht: !!(whtSettings?.[config.withholdingTax] || doc?.withholding_tax || prefill?.withholding_tax),
+      showWht: !!(whtSettings?.[config.withholdingTax] || source?.withholding_tax || prefill?.withholding_tax),
       catalogs: {
         items: withSaved(items, savedLines, 'item_id', 'item_name'),
         taxCodes: taxCodes ? withSaved(taxCodes.items, savedLines, 'tax_code_id', 'tax_code_name') : [],
         accounts: tree ? lineAccountsFromTree(tree, savedLines.filter((line) => line.account_id)) : [],
       },
     };
-  }, [businessId, config.type, docId, copyFrom?.type, copyFrom?.id, startingBalance]);
+  }, [businessId, config.type, docId, copyFrom?.type, copyFrom?.id, startingBalance, cloneId]);
 }
 
 // Form state once per loaded record: a saved document, a copy-to prefill, or a new form.
 function initialForm(loaded, config, copyFrom, startingBalance) {
-  const { doc, prefill, party, starting } = loaded;
+  const { doc, clone, prefill, party, starting } = loaded;
   const { partyField, partyNameField } = config.side;
   if (doc) return tradeForm(doc, { id: doc[partyField], name: doc[partyNameField] });
+  if (clone) return asClone(tradeForm(clone, { id: clone[partyField], name: clone[partyNameField] }));
   const form = tradeForm(prefill, party ? { id: party.id, name: party.name } : null, {
     sourceId: copyFrom?.id ?? null, startingBalance, openingDate: starting?.opening_date,
   });
@@ -112,10 +115,10 @@ function initialForm(loaded, config, copyFrom, startingBalance) {
   ?tab=<type tab>&new=1 | &edit=<id>  [&from=<source id>&from_type=<type> after Copy to]  [&starting_balance=1]
   Save draft / Post (one primary); a posted document has one Update. One Idempotency-Key per submit.
 */
-export default function TradeDocumentForm({ businessId, config, docId, allowed, copyFrom = null, startingBalance = false }) {
+export default function TradeDocumentForm({ businessId, config, docId, allowed, copyFrom = null, startingBalance = false, cloneId = null }) {
   const router = useRouter();
   const navigate = useTabNavigate(config.tab);
-  const data = useTradeFormData(businessId, config, docId, copyFrom, startingBalance);
+  const data = useTradeFormData(businessId, config, docId, copyFrom, startingBalance, cloneId);
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);

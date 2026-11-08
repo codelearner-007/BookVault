@@ -16,6 +16,7 @@ import {
 } from '@/lib/services/journal-entries.service';
 import JournalLinesEditor, { emptyLine, parseAmount } from './JournalLinesEditor';
 import { BackButton, ErrorAlert, JE_STATUS, JE_TAB, todayIso, useTabNavigate } from './ledger-parts';
+import { asClone } from '../banking/document-form';
 
 const UNBALANCED = 'journal_unbalanced';
 const SKELETON_LINES = 2;
@@ -93,7 +94,7 @@ function errorText(err) {
   return err?.message ?? 'Failed to save the journal entry.';
 }
 
-function useFormData(businessId, entryId) {
+function useFormData(businessId, entryId, cloneId) {
   const [state, setState] = useState({ loading: true, entry: null, accounts: [], error: null });
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -101,14 +102,18 @@ function useFormData(businessId, entryId) {
     let active = true;
     Promise.all([
       getCoaTree(businessId, todayIso()),
-      entryId ? getJournalEntry(businessId, entryId) : Promise.resolve(null),
+      entryId || cloneId ? getJournalEntry(businessId, entryId ?? cloneId) : Promise.resolve(null),
     ])
-      .then(([tree, entry]) => { if (active) setState({ loading: false, entry, accounts: accountsFromTree(tree), error: null }); })
+      .then(([tree, source]) => {
+        if (!active) return;
+        const [entry, clone] = entryId ? [source, null] : [null, source];
+        setState({ loading: false, entry, clone, accounts: accountsFromTree(tree), error: null });
+      })
       .catch((err) => {
         if (active) setState({ loading: false, entry: null, accounts: [], error: err?.message ?? 'Failed to load.' });
       });
     return () => { active = false; };
-  }, [businessId, entryId, reloadKey]);
+  }, [businessId, entryId, cloneId, reloadKey]);
 
   return { ...state, reload: () => setReloadKey((k) => k + 1) };
 }
@@ -156,9 +161,9 @@ function FormActions({ isPosted, saving, onSubmit, onCancel }) {
 }
 
 // ?tab=journal-entries&new=1 or &edit=<id>. Save draft / Post create or update; a posted entry has one Update.
-export default function JournalEntryForm({ businessId, entryId, allowed }) {
+export default function JournalEntryForm({ businessId, entryId, cloneId = null, allowed }) {
   const navigate = useTabNavigate(JE_TAB);
-  const data = useFormData(businessId, entryId);
+  const data = useFormData(businessId, entryId, cloneId);
   const [form, setForm] = useState(null);
   const [version, setVersion] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -169,7 +174,7 @@ export default function JournalEntryForm({ businessId, entryId, allowed }) {
   const [filledFrom, setFilledFrom] = useState(undefined);
   if (!data.loading && filledFrom !== data.entry && (data.entry || !entryId)) {
     setFilledFrom(data.entry);
-    setForm(data.entry ? formFromEntry(data.entry) : NEW_FORM());
+    setForm(data.entry ? formFromEntry(data.entry) : data.clone ? asClone(formFromEntry(data.clone)) : NEW_FORM());
     setVersion(data.entry?.version ?? null);
   }
 

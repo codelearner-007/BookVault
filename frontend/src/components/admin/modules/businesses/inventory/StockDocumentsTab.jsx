@@ -16,7 +16,7 @@ export default function StockDocumentsTab({ business, type }) {
   const rights = useTabRights(config.tab);
   const searchParams = useSearchParams();
 
-  if (route.isNew) return <StockDocumentForm businessId={business.id} config={config} allowed={rights.create} />;
+  if (route.isNew) return <StockDocumentForm key={route.cloneId ?? 'new'} cloneId={route.cloneId} businessId={business.id} config={config} allowed={rights.create} />;
   if (route.editId) return <StockDocumentForm key={route.editId} businessId={business.id} config={config} docId={route.editId} allowed={rights.edit} />;
   if (route.viewId) return <StockDocumentView key={route.viewId} business={business} config={config} docId={route.viewId} rights={rights} />;
   return (

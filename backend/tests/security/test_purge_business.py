@@ -189,6 +189,29 @@ async def test_export_offered_before_purge_returns_business_rows(client, users):
     assert refused.status_code == 404
 
 
+async def test_backup_of_active_business_is_owner_only_scoped_and_audited(client, users, db_conn):
+    owner = await users.create()
+    business = await create_business(client, owner, "Backup Co")
+    other = await create_business(client, owner, "Other Co")
+    member = await users.create_member(owner, business["id"])
+    await add_member(client, owner, business["id"], member, access_mode="full")
+
+    backup = await client.get(f"{BASE}/{business['id']}/export", headers=owner.headers)
+    refused = await client.get(f"{BASE}/{business['id']}/export", headers=member.headers)
+
+    assert backup.status_code == 200, backup.text
+    tables = backup.json()["tables"]
+    assert [row["id"] for row in tables["businesses"]] == [business["id"]]
+    assert all(row["business_id"] == business["id"] for row in tables["coa_accounts"])
+    assert other["id"] not in backup.text
+    assert refused.status_code in (403, 404)
+    audited = await db_conn.execute(
+        text("SELECT count(*) FROM public.audit_logs WHERE action = 'export' AND business_id = CAST(:b AS uuid)"),
+        {"b": business["id"]},
+    )
+    assert audited.scalar_one() == 1
+
+
 @pytest.mark.parametrize(
     ("role", "statement"),
     [
