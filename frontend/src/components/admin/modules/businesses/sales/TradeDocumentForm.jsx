@@ -7,14 +7,13 @@ import { PageHeader } from '@/components/common/page';
 import { ConfirmDialog } from '@/components/super-admin/platform-parts';
 import { isVersionConflict } from '@/lib/services/api-client';
 import { getCoaTree } from '@/lib/services/coa.service';
-import { getCustomer, listOpenInvoices } from '@/lib/services/customers.service';
 import { nonInventoryItemsService, taxCodesService } from '@/lib/services/settings-catalog.service';
 import { listStartingBalanceInvoices } from '@/lib/services/starting-balances.service';
 import { BackButton, ErrorAlert, JE_STATUS, todayIso, useTabNavigate } from '../ledger/ledger-parts';
 import { FormSkeleton, useLoad } from '../banking/banking-parts';
 import { lineAccountsFromTree } from '../banking/cash-directions';
 import { BlockedForm, DocumentFormActions, blockedReason, useDocumentSave } from '../banking/document-form';
-import { CREDIT_LIMIT_WARNING, DOC_TYPES, TRADE_DOCUMENTS, TRADE_ERRORS } from './sales-documents';
+import { CREDIT_LIMIT_WARNING, DOC_TYPES, ROLES, TRADE_DOCUMENTS, TRADE_ERRORS } from './sales-documents';
 import { StartingBalanceFields, TradeHeaderFields, TradeOptions } from './TradeDocumentFields';
 import { creditLimitConfirm } from './sales-parts';
 import TradeLinesEditor from './TradeLinesEditor';
@@ -44,15 +43,16 @@ function useTradeFormData(businessId, config, docId, copyFrom, startingBalance) 
       config.priced ? taxCodesService.listAll(businessId) : null,
       docId ? config.service.get(businessId, docId) : null,
       copyFrom ? TRADE_DOCUMENTS[copyFrom.type].service.copyTo(businessId, copyFrom.id, config.type) : null,
-      startingBalance ? listStartingBalanceInvoices(businessId) : null,
+      startingBalance ? listStartingBalanceInvoices(businessId, config.side.invoicesResource) : null,
     ]);
     const prefill = copy?.prefill ?? null;
-    const customer = prefill?.customer_id ? await getCustomer(businessId, prefill.customer_id) : null;
+    const partyId = prefill?.[config.side.partyField];
+    const party = partyId ? await config.side.parties.get(businessId, partyId) : null;
     const savedLines = doc?.lines ?? [];
     return {
       doc,
       prefill,
-      customer,
+      party,
       starting,
       catalogs: {
         items: withSaved(items.items, savedLines, 'item_id', 'item_name'),
@@ -65,13 +65,15 @@ function useTradeFormData(businessId, config, docId, copyFrom, startingBalance) 
 
 // Form state once per loaded record: a saved document, a copy-to prefill, or a new form.
 function initialForm(loaded, config, copyFrom, startingBalance) {
-  const { doc, prefill, customer, starting } = loaded;
-  if (doc) return tradeForm(doc, { id: doc.customer_id, name: doc.customer_name });
-  const form = tradeForm(prefill, customer ? { id: customer.id, name: customer.name } : null, {
+  const { doc, prefill, party, starting } = loaded;
+  const { partyField, partyNameField } = config.side;
+  if (doc) return tradeForm(doc, { id: doc[partyField], name: doc[partyNameField] });
+  const form = tradeForm(prefill, party ? { id: party.id, name: party.name } : null, {
     sourceId: copyFrom?.id ?? null, startingBalance, openingDate: starting?.opening_date,
   });
-  if (config.type === DOC_TYPES.invoice && !prefill?.due_date && customer?.default_due_days != null) {
-    return { ...form, dueMode: DUE_MODES.net, dueDays: String(customer.default_due_days) };
+  // Customers carry default due days; suppliers do not.
+  if (config.role === ROLES.invoice && !prefill?.due_date && party?.default_due_days != null) {
+    return { ...form, dueMode: DUE_MODES.net, dueDays: String(party.default_due_days) };
   }
   return form;
 }
@@ -89,12 +91,12 @@ export default function TradeDocumentForm({ businessId, config, docId, allowed, 
   const [error, setError] = useState(null);
   const [creditPrompt, setCreditPrompt] = useState(null);
   const override = useRef(false);
-  const isInvoice = config.type === DOC_TYPES.invoice;
+  const hasCreditLimit = config.type === DOC_TYPES.invoice;
   const { save, setVersion } = useDocumentSave({
     docId,
     create: (body, key) => config.service.create(businessId, body, key),
     update: (body) => config.service.update(businessId, docId, body),
-    post: (version, key) => config.service.post(businessId, docId, { version, ...(isInvoice ? { credit_limit_override: override.current } : {}) }, key),
+    post: (version, key) => config.service.post(businessId, docId, { version, ...(hasCreditLimit ? { credit_limit_override: override.current } : {}) }, key),
   });
 
   const [filledFrom, setFilledFrom] = useState(undefined);
@@ -104,11 +106,12 @@ export default function TradeDocumentForm({ businessId, config, docId, allowed, 
     setVersion(data.data.doc?.version ?? null);
   }
 
-  const customerId = form?.customer?.id ?? null;
+  const partyId = form?.party?.id ?? null;
   const date = form?.date ?? null;
+  const isNote = config.role === ROLES.note;
   const invoices = useLoad(
-    () => (config.type === DOC_TYPES.creditNote && customerId && date ? listOpenInvoices(businessId, customerId, date) : Promise.resolve(NO_INVOICES)),
-    [businessId, config.type, customerId, date],
+    () => (isNote && partyId && date ? config.side.parties.openInvoices(businessId, partyId, date) : Promise.resolve(NO_INVOICES)),
+    [businessId, config.type, partyId, date],
   );
   const doc = data.data?.doc;
   const totals = useTradeTotals(config.service, businessId, form ? totalsRequest(form, config) : null, totalsOfDoc(doc));
@@ -126,20 +129,20 @@ export default function TradeDocumentForm({ businessId, config, docId, allowed, 
 
   const setField = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
-  async function pickCustomer(party) {
-    setForm((prev) => ({ ...prev, customer: party, invoiceId: '' }));
-    const record = await getCustomer(businessId, party.id).catch(() => null);
+  async function pickParty(party) {
+    setForm((prev) => ({ ...prev, party, invoiceId: '' }));
+    const record = await config.side.parties.get(businessId, party.id).catch(() => null);
     if (!record) return;
     setForm((prev) => ({
       ...prev,
       billingAddress: record.billing_address ?? '',
       deliveryAddress: record.delivery_address ?? '',
-      ...(isInvoice && record.default_due_days != null ? { dueMode: DUE_MODES.net, dueDays: String(record.default_due_days) } : {}),
+      ...(config.role === ROLES.invoice && record.default_due_days != null ? { dueMode: DUE_MODES.net, dueDays: String(record.default_due_days) } : {}),
     }));
   }
 
   async function submit(action, creditLimitOverride = false) {
-    const { body, error: invalid } = buildTradeBody(form, config, { creditLimitOverride });
+    const { body, error: invalid } = buildTradeBody(form, config, { creditLimitOverride, isEdit: !!docId });
     if (invalid) { setError({ message: invalid }); return; }
     override.current = creditLimitOverride;
     setSaving(true);
@@ -176,12 +179,14 @@ export default function TradeDocumentForm({ businessId, config, docId, allowed, 
           config={config}
           form={form}
           setField={setField}
-          onCustomer={pickCustomer}
+          onParty={pickParty}
           openInvoices={invoices.data?.items ?? []}
           currentInvoice={doc?.invoice_id ? { id: doc.invoice_id, reference: doc.invoice_reference } : null}
           disabled={saving}
         />
-        {isStarting && <StartingBalanceFields form={form} setField={setField} booksStartDate={data.data.starting?.books_start_date} disabled={saving} />}
+        {isStarting && (
+          <StartingBalanceFields config={config} form={form} setField={setField} booksStartDate={data.data.starting?.books_start_date} disabled={saving} />
+        )}
         <TradeLinesEditor
           config={config}
           lines={form.lines}
@@ -192,7 +197,7 @@ export default function TradeDocumentForm({ businessId, config, docId, allowed, 
           disabled={saving}
         />
         {config.priced && <TradeTotalsPanel totals={totals.totals} invalid={totals.invalid} />}
-        <TradeOptions config={config} form={form} setField={setField} disabled={saving} />
+        <TradeOptions config={config} form={form} setField={setField} isEdit={!!docId} disabled={saving} />
         <DocumentFormActions isPosted={doc?.status === JE_STATUS.posted} saving={saving} onSubmit={(action) => submit(action)} onCancel={back} />
       </div>
     </div>

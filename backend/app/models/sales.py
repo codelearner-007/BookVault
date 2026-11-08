@@ -77,6 +77,7 @@ class TradeDocument(Base):
     amounts_include_tax: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     discount_type_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    acts_as_stock_movement: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 class TradeDocumentLine(Base):
@@ -100,6 +101,7 @@ class TradeDocumentLine(Base):
     tax_code_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     tax_rate: Mapped[Decimal | None] = mapped_column(RATE, nullable=True)
     tax_account_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    line_kind_key: Mapped[str] = mapped_column(Text, nullable=False, default="standard")
 
 
 class InvoiceTerms(Base):
@@ -113,6 +115,7 @@ class InvoiceTerms(Base):
     early_discount_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     late_fee_rate: Mapped[Decimal | None] = mapped_column(RATE, nullable=True)
     is_starting_balance: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_closed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 class LatePaymentFee(Base):

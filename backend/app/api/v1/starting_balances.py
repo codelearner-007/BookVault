@@ -1,4 +1,5 @@
-"""Starting balances: balance-sheet accounts (B2), bank and cash accounts (B3), sales invoices (B4)."""
+"""Starting balances: balance-sheet accounts (B2), bank and cash accounts (B3), sales invoices (B4),
+purchase invoices (B5)."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,8 +18,13 @@ from app.schemas.response.coa import (
 from app.services.access_service import BusinessContext
 from app.schemas.request.sales import SetInvoiceStartingBalanceRequest
 from app.schemas.response.sales import InvoiceStartingBalanceItem, InvoiceStartingBalancesResponse
+from app.schemas.response.purchases import (
+    PurchaseInvoiceStartingBalanceItem,
+    PurchaseInvoiceStartingBalancesResponse,
+)
 from app.services.invoice_opening_service import InvoiceOpeningService
 from app.services.opening_balance_service import AREA, OpeningBalanceService
+from app.services.trade_types import PURCHASES
 
 router = APIRouter(prefix="/businesses/{business_id}/starting-balances", tags=["Starting Balances"])
 
@@ -82,3 +88,24 @@ async def set_invoice_starting_balance(
 ) -> InvoiceStartingBalanceItem:
     """Paid before start: void the invoice's opening document and post the new outstanding amount."""
     return await InvoiceOpeningService(db).set_paid(ctx, invoice_id, body.paid_before_start)
+
+
+@router.get("/purchase-invoices", response_model=PurchaseInvoiceStartingBalancesResponse)
+async def list_purchase_invoice_starting_balances(
+    params: PageParams = Depends(page_params),
+    ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.VIEW)),
+    db: AsyncSession = Depends(get_db, scope="function"),
+) -> PurchaseInvoiceStartingBalancesResponse:
+    """Starting-balance purchase invoices (PR-61, D-36) with what was paid before the books start."""
+    return await InvoiceOpeningService(db, PURCHASES).list_page(ctx.business_id, params)
+
+
+@router.put("/purchase-invoices/{invoice_id}", response_model=PurchaseInvoiceStartingBalanceItem)
+async def set_purchase_invoice_starting_balance(
+    invoice_id: IdStr,
+    body: SetInvoiceStartingBalanceRequest,
+    ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.EDIT)),
+    db: AsyncSession = Depends(get_db, scope="function"),
+) -> PurchaseInvoiceStartingBalanceItem:
+    """Paid before start: void the invoice's opening document and post the new outstanding amount (Cr AP)."""
+    return await InvoiceOpeningService(db, PURCHASES).set_paid(ctx, invoice_id, body.paid_before_start)

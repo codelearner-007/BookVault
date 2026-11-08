@@ -51,8 +51,6 @@ ROUTE_MAP = {
        ("groups/order", "groups/{group_id}", "accounts/order", "accounts/{account_id}")},
     **{f"DELETE /chart-of-accounts/{p}": [(COA, D)] for p in ("groups/{group_id}", "accounts/{account_id}")},
     "GET /suspense/balance": [("suspense", V)], "GET /suspense/entries": [("suspense", V)],
-    "GET /customers/{contact_id}/receipts": [("customers", V), ("receipts", V)],
-    "GET /suppliers/{contact_id}/receipts": [("suppliers", V), ("receipts", V)],
     "GET /history": [("history", V)],
     # B1: journal entries, Transaction Journal, ledger reports, book settings
     "GET /journal-entries": [(JE, V)], "POST /journal-entries": [(JE, C)],
@@ -84,9 +82,13 @@ for _path, _area in (("receipts", "receipts"), ("payments", "payments"),
         f"POST /{_path}/{{document_id}}/post": [(_area, E)], f"POST /{_path}/{{document_id}}/void": [(_area, D)],
     })
 # B4: sales trade documents, late fees, customers, tax codes, items, sales settings, invoice starting balances
+# B5: purchase trade documents share the same shape
 for _path, _area in (("sales-quotes", "sales_quotes"), ("sales-orders", "sales_orders"),
                      ("sales-invoices", "sales_invoices"), ("credit-notes", "credit_notes"),
-                     ("delivery-notes", "delivery_notes"), ("late-payment-fees", "late_payment_fees")):
+                     ("delivery-notes", "delivery_notes"), ("late-payment-fees", "late_payment_fees"),
+                     ("purchase-quotes", "purchase_quotes"), ("purchase-orders", "purchase_orders"),
+                     ("purchase-invoices", "purchase_invoices"), ("debit-notes", "debit_notes"),
+                     ("goods-receipts", "goods_receipts")):
     ROUTE_MAP.update({
         f"GET /{_path}": [(_area, V)], f"POST /{_path}": [(_area, C)],
         f"GET /{_path}/{{document_id}}": [(_area, V)], f"PUT /{_path}/{{document_id}}": [(_area, E)],
@@ -94,7 +96,8 @@ for _path, _area in (("sales-quotes", "sales_quotes"), ("sales-orders", "sales_o
     })
     if _area != "late_payment_fees":
         ROUTE_MAP.update({f"POST /{_path}/totals": [(_area, V)], f"GET /{_path}/lines": [(_area, V)]})
-    if _area in ("sales_quotes", "sales_orders", "sales_invoices"):
+    if _area in ("sales_quotes", "sales_orders", "sales_invoices", "purchase_quotes", "purchase_orders",
+                 "purchase_invoices"):
         ROUTE_MAP[f"POST /{_path}/{{document_id}}/copy-to"] = [(_area, V)]
 ROUTE_MAP.update({
     "GET /sales-invoices/early-payment-discounts": [("sales_invoices", V)],
@@ -106,6 +109,10 @@ ROUTE_MAP.update({
     "PUT /settings/sales": [("settings.business_details", E)],
     "GET /starting-balances/sales-invoices": [("settings.starting_balances", V)],
     "PUT /starting-balances/sales-invoices/{invoice_id}": [("settings.starting_balances", E)],
+    "GET /suppliers/{contact_id}/transactions": [("suppliers", V)],
+    "GET /suppliers/{contact_id}/open-invoices": [("payments", V)],
+    "GET /starting-balances/purchase-invoices": [("settings.starting_balances", V)],
+    "PUT /starting-balances/purchase-invoices/{invoice_id}": [("settings.starting_balances", E)],
 })
 for _path, _area, _id in (("tax-codes", "settings.tax_codes", "tax_code_id"),
                           ("non-inventory-items", "non_inventory_items", "item_id")):

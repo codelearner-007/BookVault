@@ -11,9 +11,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, ProgrammingError
 
-from app.db import session as db_session
 from app.main import app
-from tests.conftest import CSRF_HEADER, _add_idempotency_key
+from tests.conftest import CSRF_HEADER
 from tests.support.factories import TEST_BOOKS_START, create_bank_account, create_business, receipt_body
 from tests.support.ledger import (
     biz,
@@ -178,18 +177,6 @@ async def test_trigger_blocks_insert_before_lock_date(client, books, db_conn):
 
 
 # ---------------------------------------------------------------- mode C (real commits)
-
-@pytest.fixture
-async def live_client():
-    """The app with its real session dependency (commits before the response, B1 race fix)."""
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test",
-        headers={CSRF_HEADER: "web"}, event_hooks={"request": [_add_idempotency_key]},
-    ) as http:
-        yield http
-    await db_session.get_session_manager().close()
-    db_session._session_manager = None
-
 
 @pytest.mark.committed
 async def test_parallel_numbering_unique(committed, live_client):
@@ -371,3 +358,68 @@ async def test_receivable_equals_sum_of_customers(client, books, db_conn, seed):
     assert control == each == Decimal(listed["total_ar_balance"])
     assert without_party == 0 and business_net == 0
     assert all(Decimal(x["balance_due"]) >= 0 for x in invoices if x["balance_due"] is not None)
+
+
+# ---------------------------------------------------------------- B5 purchases (INV-2 AP, INV-3)
+
+
+async def _random_purchases(client, owner, bid, expense, bank, suppliers, rng) -> None:
+    """Purchase invoices (one closed), payments (named and Automatic, some overpaying), debit notes; some voided."""
+    invoices = []
+    for _ in range(5):
+        amount = str(Decimal(rng.randint(100, 50_000)) / 100)
+        body = {"date": DAY, "supplier_id": rng.choice(suppliers), "post": True,
+                "lines": [{"account_id": expense, "qty": "1", "unit_price": amount}]}
+        response = await client.post(biz(bid, "/purchase-invoices"), json=body, headers=owner.headers)
+        assert response.status_code == 201, response.text
+        invoices.append(response.json())
+    closed = invoices[0]
+    response = await client.put(biz(bid, f"/purchase-invoices/{closed['id']}"), headers=owner.headers, json={
+        "version": closed["version"], "date": DAY, "supplier_id": closed["supplier_id"], "is_closed": True,
+        "lines": [{"account_id": expense, "qty": "1", "unit_price": closed["total"]}]})
+    assert response.status_code == 200, response.text
+    ap = await system_account_id(client, owner, bid, "accounts_payable")
+    created = []
+    for _ in range(6):
+        invoice = rng.choice(invoices[1:])
+        amount = str(Decimal(rng.randint(100, 60_000)) / 100)
+        kind = rng.choice(["payments", "debit-notes"])
+        if kind == "payments":
+            line = {"account_id": ap, "party_id": invoice["supplier_id"], "unit_price": amount,
+                    "invoice_id": rng.choice([invoice["id"], None])}
+            body = {"date": DAY, "bank_account_id": bank, "post": True, "lines": [line]}
+        else:
+            body = {"date": DAY, "supplier_id": invoice["supplier_id"], "post": True,
+                    "invoice_id": rng.choice([invoice["id"], None]),
+                    "lines": [{"account_id": expense, "unit_price": amount}]}
+        response = await client.post(biz(bid, f"/{kind}"), json=body, headers=owner.headers)
+        assert response.status_code == 201, response.text
+        created.append((kind, response.json()))
+    for kind, doc in rng.sample(created, 2):
+        await client.post(biz(bid, f"/{kind}/{doc['id']}/void"), json={"version": doc["version"]},
+                          headers=owner.headers)
+
+
+@pytest.mark.parametrize("seed", [7, 31])
+async def test_payable_equals_sum_of_suppliers(client, books, db_conn, seed):
+    """INV-2: Accounts payable = Σ suppliers' AP balances; INV-3: no purchase invoice below 0; a
+    closed invoice is never allocated (PR-41c); every AP line carries its supplier."""
+    owner, bid, (_, expense, *_) = books
+    bank = (await create_bank_account(client, owner, bid))["id"]
+    suppliers = [(await client.post(biz(bid, "/suppliers"), json={"name": f"Supplier {i}"},
+                                    headers=owner.headers)).json()["id"] for i in range(3)]
+    await _random_purchases(client, owner, bid, expense, bank, suppliers, random.Random(seed))
+    ap = await system_account_id(client, owner, bid, "accounts_payable")
+    control = await _scalar(db_conn, "SELECT COALESCE(sum(credit - debit), 0) FROM public.journal_lines"
+                            " WHERE business_id = CAST(:b AS uuid) AND account_id = CAST(:a AS uuid)", b=bid, a=ap)
+    listed = (await client.get(biz(bid, "/suppliers"), headers=owner.headers)).json()
+    each = sum((Decimal(x["ap_balance"]) for x in listed["items"]), Decimal(0))
+    without_party = await _scalar(db_conn, "SELECT count(*) FROM public.journal_lines WHERE business_id = CAST(:b AS uuid)"
+                                  " AND account_id = CAST(:a AS uuid) AND party_id IS NULL", b=bid, a=ap)
+    invoices = (await client.get(biz(bid, "/purchase-invoices"), headers=owner.headers)).json()["items"]
+    closed = [x for x in invoices if x["is_closed"]]
+    assert control == each == Decimal(listed["total_ap_balance"])
+    assert without_party == 0
+    assert all(Decimal(x["balance_due"]) >= 0 for x in invoices)
+    assert len(closed) == 1 and closed[0]["balance_due"] == closed[0]["total"]
+    assert invoices[-1]["is_closed"]  # sorted to the bottom of the list (PR-41c)

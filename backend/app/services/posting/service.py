@@ -38,9 +38,10 @@ OPENING_BALANCE = "opening_balance"
 MIN_POSTED_LINES = 2
 
 # Sub-ledger kinds (system_account_types.subledger_kind) and the party kind each control account
-# takes; control accounts of later phases (AP: B5, assets: B9, ...) are not postable yet.
+# takes; control accounts of later phases (assets: B9, employees: B10, ...) are not postable yet.
 SUBLEDGER_NONE, SUBLEDGER_BANK, SUBLEDGER_PARTY = "none", "bank_account", "party"
-PARTY_KIND_OF_CONTROL = {"capital_control": "capital_account", "accounts_receivable": "customer"}
+PARTY_KIND_OF_CONTROL = {"capital_control": "capital_account", "accounts_receivable": "customer",
+                         "accounts_payable": "supplier"}
 
 
 @dataclass(frozen=True)

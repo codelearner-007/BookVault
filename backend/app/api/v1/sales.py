@@ -1,4 +1,5 @@
-"""Sales trade-document endpoints (B4): one router per type, same shape; early discounts; sales settings."""
+"""Trade-document endpoints (B4 sales, B5 purchases): one router per type, same shape; early discounts;
+sales settings. The party filter and fields are named per side (customer_id / supplier_id)."""
 
 import datetime as dt
 from typing import Optional
@@ -11,6 +12,19 @@ from app.core.dependencies import get_db, require_business_access, require_idemp
 from app.core.pagination import SEARCH_MAX, PageParams, page_params
 from app.schemas.common import IdStr
 from app.schemas.request.journal_entry import DocumentActionRequest
+from app.schemas.request.purchases import (
+    CreateDebitNoteRequest,
+    CreateGoodsReceiptRequest,
+    CreatePurchaseInvoiceRequest,
+    CreatePurchaseOrderRequest,
+    CreatePurchaseQuoteRequest,
+    PurchaseCopyToRequest,
+    UpdateDebitNoteRequest,
+    UpdateGoodsReceiptRequest,
+    UpdatePurchaseInvoiceRequest,
+    UpdatePurchaseOrderRequest,
+    UpdatePurchaseQuoteRequest,
+)
 from app.schemas.request.sales import (
     CopyToRequest,
     CreateCreditNoteRequest,
@@ -30,7 +44,10 @@ from app.schemas.request.sales import (
 from app.schemas.response.sales import (
     CopyToResponse,
     EarlyDiscountListResponse,
+    PurchaseDocumentListResponse,
+    PurchaseDocumentResponse,
     SalesSettingsResponse,
+    TradeDocumentBase,
     TradeDocumentListResponse,
     TradeDocumentResponse,
     TradeLineReportResponse,
@@ -41,7 +58,20 @@ from app.services.customer_service import CustomerService
 from app.services.idempotency_service import IdempotencyService, business_scope
 from app.services.sales_settings_service import SalesSettingsService
 from app.services.trade_document_service import TradeDocumentService
-from app.services.trade_types import CREDIT_NOTE, DELIVERY_NOTE, INVOICE, ORDER, QUOTE, TRADE_TYPES
+from app.services.trade_types import (
+    CREDIT_NOTE,
+    DEBIT_NOTE,
+    DELIVERY_NOTE,
+    GOODS_RECEIPT,
+    INVOICE,
+    ORDER,
+    PURCHASE_INVOICE,
+    PURCHASE_ORDER,
+    PURCHASE_QUOTE,
+    QUOTE,
+    SALES,
+    TRADE_TYPES,
+)
 
 BODIES = {
     QUOTE: (CreateQuoteRequest, UpdateQuoteRequest),
@@ -49,35 +79,55 @@ BODIES = {
     INVOICE: (CreateInvoiceRequest, UpdateInvoiceRequest),
     CREDIT_NOTE: (CreateCreditNoteRequest, UpdateCreditNoteRequest),
     DELIVERY_NOTE: (CreateDeliveryNoteRequest, UpdateDeliveryNoteRequest),
+    PURCHASE_QUOTE: (CreatePurchaseQuoteRequest, UpdatePurchaseQuoteRequest),
+    PURCHASE_ORDER: (CreatePurchaseOrderRequest, UpdatePurchaseOrderRequest),
+    PURCHASE_INVOICE: (CreatePurchaseInvoiceRequest, UpdatePurchaseInvoiceRequest),
+    DEBIT_NOTE: (CreateDebitNoteRequest, UpdateDebitNoteRequest),
+    GOODS_RECEIPT: (CreateGoodsReceiptRequest, UpdateGoodsReceiptRequest),
 }
 
 
 def build_trade_router(type_key: str) -> APIRouter:
     kind = TRADE_TYPES[type_key]
     area, create_body, update_body = kind.area, *BODIES[type_key]
+    sales = kind.side is SALES
+    document_model = TradeDocumentResponse if sales else PurchaseDocumentResponse
+    list_model = TradeDocumentListResponse if sales else PurchaseDocumentListResponse
+    copy_body = CopyToRequest if sales else PurchaseCopyToRequest
     router = APIRouter(prefix=f"/businesses/{{business_id}}/{kind.path}", tags=[kind.entity])
     view = require_business_access(area, AreaRight.VIEW)
 
     def service(db: AsyncSession) -> TradeDocumentService:
         return TradeDocumentService(db, kind)
 
-    @router.get("", response_model=TradeDocumentListResponse)
-    async def list_documents(
-        customer_id: IdStr | None = Query(None),
-        search: Optional[str] = Query(None, max_length=SEARCH_MAX),
-        params: PageParams = Depends(page_params),
-        ctx: BusinessContext = Depends(view),
-        db: AsyncSession = Depends(get_db, scope="function"),
-    ) -> TradeDocumentListResponse:
-        return await service(db).list_page(ctx.business_id, params, customer_id, search)
+    if sales:
+        @router.get("", response_model=list_model)
+        async def list_documents(
+            customer_id: IdStr | None = Query(None),
+            search: Optional[str] = Query(None, max_length=SEARCH_MAX),
+            params: PageParams = Depends(page_params),
+            ctx: BusinessContext = Depends(view),
+            db: AsyncSession = Depends(get_db, scope="function"),
+        ) -> TradeDocumentListResponse:
+            return await service(db).list_page(ctx.business_id, params, customer_id, search)
+    else:
+        @router.get("", response_model=list_model)
+        async def list_purchase_documents(
+            supplier_id: IdStr | None = Query(None),
+            search: Optional[str] = Query(None, max_length=SEARCH_MAX),
+            params: PageParams = Depends(page_params),
+            ctx: BusinessContext = Depends(view),
+            db: AsyncSession = Depends(get_db, scope="function"),
+        ) -> PurchaseDocumentListResponse:
+            return await service(db).list_page(ctx.business_id, params, supplier_id, search)
 
-    @router.post("", response_model=TradeDocumentResponse, status_code=status.HTTP_201_CREATED)
+    @router.post("", response_model=document_model, status_code=status.HTTP_201_CREATED)
     async def create_document(
         body: create_body,
         key: str = Depends(require_idempotency_key),
         ctx: BusinessContext = Depends(require_business_access(area, AreaRight.CREATE)),
         db: AsyncSession = Depends(get_db, scope="function"),
-    ) -> TradeDocumentResponse:
+    ) -> TradeDocumentBase:
         return await IdempotencyService(db).run(
             business_scope(ctx, key, area, f"POST {kind.path}"), body, lambda: service(db).create(ctx, body))
 
@@ -109,44 +159,44 @@ def build_trade_router(type_key: str) -> APIRouter:
             """Invoices whose early-payment discount window is open (PR-22; it posts on the receipt)."""
             return await CustomerService(db).early_discounts(ctx.business_id, as_of or dt.date.today(), params)
 
-    @router.get("/{document_id}", response_model=TradeDocumentResponse)
+    @router.get("/{document_id}", response_model=document_model)
     async def get_document(
         document_id: str,
         ctx: BusinessContext = Depends(view),
         db: AsyncSession = Depends(get_db, scope="function"),
-    ) -> TradeDocumentResponse:
+    ) -> TradeDocumentBase:
         return await service(db).get(ctx.business_id, document_id)
 
-    @router.put("/{document_id}", response_model=TradeDocumentResponse)
+    @router.put("/{document_id}", response_model=document_model)
     async def update_document(
         document_id: str,
         body: update_body,
         ctx: BusinessContext = Depends(require_business_access(area, AreaRight.EDIT)),
         db: AsyncSession = Depends(get_db, scope="function"),
-    ) -> TradeDocumentResponse:
+    ) -> TradeDocumentBase:
         return await service(db).update(ctx, document_id, body)
 
-    @router.post("/{document_id}/post", response_model=TradeDocumentResponse)
+    @router.post("/{document_id}/post", response_model=document_model)
     async def post_document(
         document_id: str,
         body: PostTradeDocumentRequest,
         key: str = Depends(require_idempotency_key),
         ctx: BusinessContext = Depends(require_business_access(area, AreaRight.EDIT)),
         db: AsyncSession = Depends(get_db, scope="function"),
-    ) -> TradeDocumentResponse:
+    ) -> TradeDocumentBase:
         return await IdempotencyService(db).run(
             business_scope(ctx, key, area, f"POST {kind.path}/{document_id}/post"), body,
             lambda: service(db).post(ctx, document_id, body.version, body.credit_limit_override),
             status_code=status.HTTP_200_OK)
 
-    @router.post("/{document_id}/void", response_model=TradeDocumentResponse)
+    @router.post("/{document_id}/void", response_model=document_model)
     async def void_document(
         document_id: str,
         body: DocumentActionRequest,
         key: str = Depends(require_idempotency_key),
         ctx: BusinessContext = Depends(require_business_access(area, AreaRight.DELETE)),
         db: AsyncSession = Depends(get_db, scope="function"),
-    ) -> TradeDocumentResponse:
+    ) -> TradeDocumentBase:
         """Posted: reversal entry + void (PR-74); quotes and orders: cancelled. Draft: discarded."""
         return await IdempotencyService(db).run(
             business_scope(ctx, key, area, f"POST {kind.path}/{document_id}/void"), body,
@@ -156,7 +206,7 @@ def build_trade_router(type_key: str) -> APIRouter:
         @router.post("/{document_id}/copy-to", response_model=CopyToResponse)
         async def copy_document(
             document_id: str,
-            body: CopyToRequest,
+            body: copy_body,
             ctx: BusinessContext = Depends(view),
             db: AsyncSession = Depends(get_db, scope="function"),
         ) -> CopyToResponse:

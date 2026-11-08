@@ -12,7 +12,6 @@ from app.api.v1 import (
     capital_accounts,
     cash_transactions,
     coa,
-    contacts,
     countries,
     customers,
     country_templates,
@@ -28,6 +27,7 @@ from app.api.v1 import (
     roles,
     sales,
     starting_balances,
+    suppliers,
     suspense,
     tab_columns,
     transfers,
@@ -43,11 +43,10 @@ for module in (
     auth, profile, roles, permissions, user_roles, users, audit, dashboard, members,
     businesses, coa, bank_accounts, tab_columns, transfers, capital_accounts, parties, attachments, suspense, admin_tabs, countries,
     journal_entries, ledger_reports, starting_balances, country_templates,
-    customers, master_data, late_payment_fees, sales,
+    customers, suppliers, master_data, late_payment_fees, sales,
 ):
     api_router.include_router(module.router)
 api_router.include_router(cash_transactions.receipts_router)
 api_router.include_router(cash_transactions.payments_router)
 for trade_router in sales.trade_routers:
     api_router.include_router(trade_router)
-api_router.include_router(contacts.suppliers_router)

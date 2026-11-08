@@ -2,49 +2,21 @@
 // through the account form, then see it in the Summary with a balanced Balance Sheet. Needs the local
 // stack, FastAPI on :8000 and Next.js on :3000 (PLAYWRIGHT_BASE_URL=http://localhost:3000).
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { PASSWORD, api, trackAccounts, uniqueSuffix } from './support/accounts';
 
-const PASSWORD = 'correct horse battery staple';
 const BOOKS_START = '2026-01-01';
 const OPENING_DATE = '2025-12-31'; // books_start_date - 1 (posting-rules §10)
 const AMOUNT = '400.00';
 
-function envLocal(name) {
-  const line = readFileSync(new URL('../.env.local', import.meta.url), 'utf8')
-    .split(/\r?\n/)
-    .find((l) => l.startsWith(`${name}=`));
-  return line?.slice(name.length + 1).trim();
-}
-
-function uniqueSuffix() {
-  return `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-}
-
 // Today as YYYY-MM-DD in the local time zone (what the app defaults to).
+
+const accounts = trackAccounts();
+test.afterEach(({ request, baseURL }) => accounts.cleanup(request, baseURL));
+
 function todayIso() {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, '0');
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
-
-async function createConfirmedUser(request, email, password) {
-  const key = envLocal('PRIVATE_SUPABASE_SERVICE_KEY');
-  const response = await request.post(`${envLocal('NEXT_PUBLIC_SUPABASE_URL')}/auth/v1/admin/users`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}` },
-    data: { email, password, email_confirm: true },
-  });
-  expect(response.ok()).toBeTruthy();
-}
-
-// Same-origin calls with the CSRF headers the routes require; creates carry an Idempotency-Key.
-function api(page, baseURL) {
-  const headers = { Origin: new URL(baseURL).origin, 'X-BookVault-Client': 'web' };
-  const send = (method) => (path, data) => page.request.fetch(path, {
-    method,
-    data: data ?? {},
-    headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() },
-  });
-  return { post: send('POST'), put: send('PUT') };
 }
 
 async function login(page, calls, email) {
@@ -62,13 +34,14 @@ test('add an account with a starting balance and see it in a balanced Summary', 
   const email = `coa-owner-${suffix}@e2e.bookvault.dev`;
   const accountName = `E2E Prepaid ${suffix}`;
   const accountRow = new RegExp(`^${accountName}`);
-  await createConfirmedUser(page.request, email, PASSWORD);
+  await accounts.createUser(page.request, email);
 
-  const calls = api(page, baseURL);
+  const calls = api(page.request, baseURL);
   await login(page, calls, email);
   const created = await calls.post('/api/v1/businesses', { name: 'Chart E2E', books_start_date: BOOKS_START });
   expect(created.ok(), await created.text()).toBeTruthy();
   const business = await created.json();
+  accounts.addBusiness(email, business);
 
   // Settings -> Chart of Accounts.
   await page.goto(`/admin/businesses/${business.id}?tab=settings`);

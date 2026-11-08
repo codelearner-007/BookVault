@@ -241,7 +241,7 @@ export default function CashTransactionForm({ businessId, direction, docId, allo
           setColumns={(update) => setForm((prev) => ({ ...prev, columns: update(prev.columns) }))}
           accounts={lineAccountsFromTree(data.data.tree, doc?.lines)}
           partyAccounts={direction.partyAccounts}
-          allocation={direction.allocatesInvoices ? { date: form.date } : null}
+          allocation={{ date: form.date }}
           initialTotals={doc ? { lines: doc.lines.map((l) => ({ amount: l.amount })), total: doc.total } : null}
           disabled={saving}
         />

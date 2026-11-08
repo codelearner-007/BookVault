@@ -5,8 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { DOC_TYPES } from './sales-documents';
-import { CustomerPicker, InvoiceSelect } from './sales-parts';
+import { DOC_TYPES, ROLES } from './sales-documents';
+import { InvoiceSelect, TradePartyPicker } from './sales-parts';
 import { DISCOUNT_TYPES, DUE_MODES, ROUNDING } from './trade-form-model';
 
 /* The header fields and the options of a trade document form, in Manager's order. */
@@ -60,21 +60,22 @@ function DueDateField({ form, setField, disabled }) {
   );
 }
 
-export function TradeHeaderFields({ businessId, config, form, setField, onCustomer, openInvoices, currentInvoice, disabled }) {
+export function TradeHeaderFields({ businessId, config, form, setField, onParty, openInvoices, currentInvoice, disabled }) {
   const isType = (type) => config.type === type;
+  const isRole = (role) => config.role === role;
   return (
     <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
       <TextField id="trade-date" label={config.dateLabel} type="date" value={form.date} onChange={(v) => setField('date', v)} disabled={disabled} />
       {isType(DOC_TYPES.quote) && (
         <TextField id="trade-expiry" label="Expiry date" type="date" value={form.expiryDate} onChange={(v) => setField('expiryDate', v)} disabled={disabled} />
       )}
-      {isType(DOC_TYPES.invoice) && !form.isStartingBalance && <DueDateField form={form} setField={setField} disabled={disabled} />}
+      {isRole(ROLES.invoice) && !form.isStartingBalance && <DueDateField form={form} setField={setField} disabled={disabled} />}
       <TextField id="trade-reference" label="Reference" placeholder="Automatic" value={form.reference} onChange={(v) => setField('reference', v)} disabled={disabled} />
-      <CustomerPicker businessId={businessId} value={form.customer} onChange={onCustomer} disabled={disabled} />
-      {isType(DOC_TYPES.creditNote) && (
+      <TradePartyPicker businessId={businessId} side={config.side} value={form.party} onChange={onParty} disabled={disabled} />
+      {isRole(ROLES.note) && (
         <InvoiceSelect
-          id="trade-invoice" invoices={openInvoices} current={currentInvoice} value={form.invoiceId}
-          onChange={(id) => setField('invoiceId', id)} disabled={disabled || !form.customer}
+          id="trade-invoice" label={config.side.invoiceLabel} invoices={openInvoices} current={currentInvoice} value={form.invoiceId}
+          onChange={(id) => setField('invoiceId', id)} disabled={disabled || !form.party}
         />
       )}
       {config.priced && (
@@ -128,17 +129,21 @@ function SelectOption({ id, label, value, options, onChange, disabled }) {
 const DISCOUNT_OPTIONS = [[DISCOUNT_TYPES.none, 'None'], [DISCOUNT_TYPES.percentage, 'Percentage'], [DISCOUNT_TYPES.amount, 'Exact amount']];
 const ROUNDING_OPTIONS = [[ROUNDING.none, 'None'], [ROUNDING.nearest, 'To nearest'], [ROUNDING.down, 'Round down']];
 
-// The options under the lines: tax inclusive, discount column, and the invoice terms.
-export function TradeOptions({ config, form, setField, disabled }) {
+// The options under the lines: tax inclusive, discount column, the invoice terms and the purchase checkboxes.
+export function TradeOptions({ config, form, setField, isEdit, disabled }) {
   if (!config.priced) return null;
-  const isInvoice = config.type === DOC_TYPES.invoice;
+  const check = (field) => ({ checked: form[field], onChange: (on) => setField(field, on), disabled });
   return (
     <section aria-label="Options" className="space-y-4">
-      <CheckOption id="trade-tax-inclusive" label="Amounts are tax inclusive" checked={form.amountsIncludeTax} onChange={(on) => setField('amountsIncludeTax', on)} disabled={disabled} />
+      <CheckOption id="trade-tax-inclusive" label="Amounts are tax inclusive" {...check('amountsIncludeTax')} />
       <SelectOption id="trade-discount" label="Discount" value={form.discountType} options={DISCOUNT_OPTIONS} onChange={(v) => setField('discountType', v)} disabled={disabled} />
-      {isInvoice && (
+      {config.role === ROLES.invoice && (
+        <SelectOption id="trade-rounding" label="Rounding" value={form.rounding} options={ROUNDING_OPTIONS} onChange={(v) => setField('rounding', v)} disabled={disabled} />
+      )}
+      {config.stockMovementLabel && <CheckOption id="trade-stock-movement" label={config.stockMovementLabel} {...check('actsAsStockMovement')} />}
+      {config.closable && isEdit && <CheckOption id="trade-closed" label="Closed invoice" {...check('isClosed')} />}
+      {config.type === DOC_TYPES.invoice && (
         <>
-          <SelectOption id="trade-rounding" label="Rounding" value={form.rounding} options={ROUNDING_OPTIONS} onChange={(v) => setField('rounding', v)} disabled={disabled} />
           <CheckOption id="trade-early-discount" label="Early payment discount" checked={form.earlyDiscount} onChange={(on) => setField('earlyDiscount', on)} disabled={disabled}>
             <RateInput label="Early payment discount rate" value={form.earlyDiscountRate} onChange={(v) => setField('earlyDiscountRate', v)} disabled={disabled} suffix="% if paid within" />
             <RateInput label="Early payment discount days" value={form.earlyDiscountDays} onChange={(v) => setField('earlyDiscountDays', v.replace(/\D/g, ''))} disabled={disabled} suffix="days" />
@@ -152,12 +157,12 @@ export function TradeOptions({ config, form, setField, disabled }) {
   );
 }
 
-// Starting-balance invoices only: what the customer had already paid before the books start.
-export function StartingBalanceFields({ form, setField, booksStartDate, disabled }) {
+// Starting-balance invoices only: what had already been paid on it before the books start.
+export function StartingBalanceFields({ config, form, setField, booksStartDate, disabled }) {
   return (
     <div className="grid gap-2 rounded-card border border-card-border p-4 sm:max-w-md">
       <p className="text-sm text-muted-foreground">
-        Starting-balance invoice{booksStartDate ? `: date it before ${booksStartDate}, when the books start.` : '.'} It posts no revenue.
+        Starting-balance invoice{booksStartDate ? `: date it before ${booksStartDate}, when the books start.` : '.'} It posts no {config.side.ledgerEffect}.
       </p>
       <Label htmlFor="trade-paid-before-start">Paid before start</Label>
       <Input

@@ -6,7 +6,6 @@ import { ListCard } from '@/components/common/page';
 import { formatMoney } from '@/lib/utils/money';
 import { isZeroAmount } from '../coa/coa-tree';
 import { documentHref } from '../banking/banking-parts';
-import { DOC_TYPES } from './sales-documents';
 
 function Summary({ label, value }) {
   return (
@@ -17,14 +16,18 @@ function Summary({ label, value }) {
   );
 }
 
-// A receipt's invoice allocations (server-made: chosen invoice or oldest first), early discounts and any credit left.
-export default function ReceiptAllocations({ doc }) {
+const hasAmount = (value) => !!value && !isZeroAmount(value);
+
+/*
+  A receipt's or payment's invoice allocations (server-made: chosen invoice or oldest first), early payment
+  discounts (sales only) and any credit left for the party. `side` is the TRADE_SIDES entry of the direction.
+*/
+export default function ReceiptAllocations({ doc, side }) {
   const allocations = doc.allocations ?? [];
   const discount = doc.early_discount_total;
   const credit = doc.unallocated_credit;
-  const hasDiscount = discount && !isZeroAmount(discount);
-  const hasCredit = credit && !isZeroAmount(credit);
-  if (allocations.length === 0 && !hasDiscount && !hasCredit) return null;
+  const showDiscounts = hasAmount(discount) || allocations.some((allocation) => hasAmount(allocation.early_discount));
+  if (allocations.length === 0 && !hasAmount(discount) && !hasAmount(credit)) return null;
 
   return (
     <section aria-labelledby="receipt-allocations" className="mt-10">
@@ -34,8 +37,8 @@ export default function ReceiptAllocations({ doc }) {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead>Sales invoice</TableHead>
-                <TableHead className="text-end">Early payment discount</TableHead>
+                <TableHead>{side.invoiceLabel}</TableHead>
+                {showDiscounts && <TableHead className="text-end">Early payment discount</TableHead>}
                 <TableHead className="text-end">Amount</TableHead>
               </TableRow>
             </TableHeader>
@@ -43,21 +46,23 @@ export default function ReceiptAllocations({ doc }) {
               {allocations.map((allocation) => (
                 <TableRow key={allocation.invoice_id}>
                   <TableCell data-card="title">
-                    <Link href={documentHref(DOC_TYPES.invoice, allocation.invoice_id)} className="hover:text-link hover:underline">
-                      {allocation.invoice_reference || 'Sales invoice'}
+                    <Link href={documentHref(side.invoiceType, allocation.invoice_id)} className="hover:text-link hover:underline">
+                      {allocation.invoice_reference || side.invoiceLabel}
                     </Link>
                   </TableCell>
-                  <TableCell className="num" data-label="Early payment discount">
-                    {allocation.early_discount && !isZeroAmount(allocation.early_discount) ? formatMoney(allocation.early_discount) : ''}
-                  </TableCell>
+                  {showDiscounts && (
+                    <TableCell className="num" data-label="Early payment discount">
+                      {hasAmount(allocation.early_discount) ? formatMoney(allocation.early_discount) : ''}
+                    </TableCell>
+                  )}
                   <TableCell className="num" data-card="end">{formatMoney(allocation.amount)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
-        {hasDiscount && <Summary label="Early payment discount" value={discount} />}
-        {hasCredit && <Summary label="Unallocated credit (kept for the customer)" value={credit} />}
+        {hasAmount(discount) && <Summary label="Early payment discount" value={discount} />}
+        {hasAmount(credit) && <Summary label={`Unallocated credit (kept for the ${side.partyNoun})`} value={credit} />}
       </ListCard>
     </section>
   );

@@ -1,6 +1,5 @@
 'use client';
 
-import { listOpenInvoices } from '@/lib/services/customers.service';
 import { formatMoney } from '@/lib/utils/money';
 import { useLoad } from '../banking/banking-parts';
 import { InvoiceSelect } from './sales-parts';
@@ -8,14 +7,15 @@ import { InvoiceSelect } from './sales-parts';
 const NO_INVOICES = { items: [] };
 
 /*
-  On a receipt's Accounts receivable line: which of the customer's open invoices (as at the receipt date) the
-  line pays, or Automatic (oldest first). Shows the early payment discount still available on that invoice
-  and the amount that settles it in full. value: { id, reference } of the chosen invoice, or null.
+  On a receipt's Accounts receivable line (or a payment's Accounts payable line): which of the party's open
+  invoices (as at the document date) the line pays, or Automatic (oldest first). `side` is the TRADE_SIDES entry.
+  Sales invoices also show the early payment discount still available and the amount that settles them in full.
+  value: { id, reference } of the chosen invoice, or null.
 */
-export default function ReceiptInvoiceField({ businessId, customerId, date, value, onChange, disabled, number }) {
+export default function ReceiptInvoiceField({ businessId, side, partyId, date, value, onChange, disabled, number }) {
   const { data } = useLoad(
-    () => (customerId && date ? listOpenInvoices(businessId, customerId, date) : Promise.resolve(NO_INVOICES)),
-    [businessId, customerId, date],
+    () => (partyId && date ? side.parties.openInvoices(businessId, partyId, date) : Promise.resolve(NO_INVOICES)),
+    [businessId, side.key, partyId, date],
   );
   const invoices = data?.items ?? [];
   // Automatic pays the oldest open invoice first, so its discount is the one that applies.
@@ -26,7 +26,7 @@ export default function ReceiptInvoiceField({ businessId, customerId, date, valu
     <div className="grid gap-1.5">
       <InvoiceSelect
         id={`receipt-invoice-${number}`}
-        label={`Sales invoice, line ${number}`}
+        label={`${side.invoiceLabel}, line ${number}`}
         invoices={invoices}
         current={value}
         value={value?.id ?? ''}
@@ -34,7 +34,7 @@ export default function ReceiptInvoiceField({ businessId, customerId, date, valu
           const invoice = invoices.find((entry) => entry.invoice_id === id);
           onChange(id ? { id, reference: invoice?.reference ?? value?.reference ?? null } : null);
         }}
-        disabled={disabled || !customerId}
+        disabled={disabled || !partyId}
       />
       {discount && (
         <p className="text-sm text-muted-foreground">

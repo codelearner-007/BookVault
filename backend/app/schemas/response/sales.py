@@ -172,7 +172,9 @@ class DocumentWarning(BaseModel):
     message: str
 
 
-class TradeDocumentResponse(BaseModel):
+class TradeDocumentBase(BaseModel):
+    """Fields of every trade document; the party fields are named per side (customer / supplier)."""
+
     id: str
     document_type: str
     reference: str | None
@@ -181,8 +183,6 @@ class TradeDocumentResponse(BaseModel):
     display_status: str
     version: int
     is_locked: bool
-    customer_id: str
-    customer_name: str | None
     billing_address: str | None
     delivery_address: str | None
     description: str | None
@@ -210,18 +210,28 @@ class TradeDocumentResponse(BaseModel):
     late_fees: list[LateFeeOnInvoice] = []
     invoice_id: str | None = None
     invoice_reference: str | None = None
+    is_closed: bool | None = None
+    acts_as_stock_movement: bool = False
     links: list[LinkedDocument] = []
     warnings: list[DocumentWarning] = []
     created_at: datetime
     updated_at: datetime
 
 
-class TradeDocumentListItem(BaseModel):
+class TradeDocumentResponse(TradeDocumentBase):
+    customer_id: str
+    customer_name: str | None
+
+
+class PurchaseDocumentResponse(TradeDocumentBase):
+    supplier_id: str
+    supplier_name: str | None
+
+
+class TradeDocumentListItemBase(BaseModel):
     id: str
     reference: str | None
     date: date
-    customer_id: str
-    customer_name: str | None
     description: str | None
     total: MoneyOut
     status: str
@@ -234,9 +244,25 @@ class TradeDocumentListItem(BaseModel):
     delivery_status: str | None = None
     invoice_reference: str | None = None
     source_reference: str | None = None
+    is_closed: bool | None = None
+
+
+class TradeDocumentListItem(TradeDocumentListItemBase):
+    customer_id: str
+    customer_name: str | None
+
+
+class PurchaseDocumentListItem(TradeDocumentListItemBase):
+    supplier_id: str
+    supplier_name: str | None
 
 
 class TradeDocumentListResponse(PaginatedResponse[TradeDocumentListItem]):
+    total_amount: MoneyOut
+    total_balance_due: MoneyOut | None = None
+
+
+class PurchaseDocumentListResponse(PaginatedResponse[PurchaseDocumentListItem]):
     total_amount: MoneyOut
     total_balance_due: MoneyOut | None = None
 
@@ -260,7 +286,7 @@ class TradeLineReportItem(BaseModel):
     document_id: str
     date: date
     reference: str | None
-    customer_name: str | None
+    party_name: str | None
     item_name: str | None
     account_name: str | None
     description: str | None

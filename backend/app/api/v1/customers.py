@@ -10,7 +10,6 @@ from app.core.access_rights import AreaRight
 from app.core.dependencies import get_db, require_business_access, require_idempotency_key
 from app.core.pagination import SEARCH_MAX, PageParams, page_params
 from app.schemas.request.sales import CreateCustomerRequest, UpdateCustomerRequest
-from app.schemas.response.cash_transaction import CashTransactionListResponse
 from app.schemas.response.sales import (
     CustomerListResponse,
     CustomerResponse,
@@ -18,7 +17,6 @@ from app.schemas.response.sales import (
     OpenInvoicesResponse,
 )
 from app.services.access_service import BusinessContext
-from app.services.cash_transaction_service import RECEIPT, CashTransactionService
 from app.services.customer_service import CustomerService
 from app.services.idempotency_service import IdempotencyService, business_scope
 
@@ -78,19 +76,6 @@ async def list_customer_open_invoices(
 ) -> OpenInvoicesResponse:
     """Receipt allocation panel: open invoices oldest first with the early-payment discount hint."""
     return await CustomerService(db).open_invoices(ctx.business_id, contact_id, as_of or dt.date.today(), params)
-
-
-@router.get("/{contact_id}/receipts", response_model=CashTransactionListResponse)
-async def list_customer_receipts(
-    contact_id: str,
-    params: PageParams = Depends(page_params),
-    ctx: BusinessContext = Depends(view),
-    _receipts: BusinessContext = Depends(require_business_access("receipts", AreaRight.VIEW)),
-    db: AsyncSession = Depends(get_db, scope="function"),
-) -> CashTransactionListResponse:
-    """Alias kept until B5 (superseded by /transactions)."""
-    customer = await CustomerService(db).get(ctx.business_id, contact_id)
-    return await CashTransactionService(db, RECEIPT).list_page(ctx.business_id, params, party_id=customer.id)
 
 
 @router.put("/{contact_id}", response_model=CustomerResponse)

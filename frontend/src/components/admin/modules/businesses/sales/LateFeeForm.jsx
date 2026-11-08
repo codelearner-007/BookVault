@@ -14,7 +14,7 @@ import { BackButton, ErrorAlert, JE_STATUS, todayIso, useTabNavigate } from '../
 import { FormSkeleton, useLoad } from '../banking/banking-parts';
 import { BlockedForm, DocumentFormActions, blockedReason, useDocumentSave } from '../banking/document-form';
 import { SALES_TABS } from './sales-documents';
-import { CustomerPicker, InvoiceSelect } from './sales-parts';
+import { InvoiceSelect, TradePartyPicker } from './sales-parts';
 
 const NOUN = 'late payment fee';
 const NO_INVOICES = { items: [] };
@@ -119,7 +119,7 @@ export default function LateFeeForm({ businessId, feeId, allowed }) {
             <Label htmlFor="fee-reference">Reference</Label>
             <Input id="fee-reference" placeholder="Automatic" value={form.reference} onChange={(e) => setField('reference', e.target.value)} disabled={saving} />
           </div>
-          <CustomerPicker businessId={businessId} value={form.customer} onChange={(party) => setForm((prev) => ({ ...prev, customer: party, invoiceId: '' }))} disabled={saving} />
+          <TradePartyPicker businessId={businessId} value={form.customer} onChange={(party) => setForm((prev) => ({ ...prev, customer: party, invoiceId: '' }))} disabled={saving} />
           <InvoiceSelect
             id="fee-invoice" automatic={false} invoices={invoices.data?.items ?? []}
             current={fee ? { id: fee.invoice_id, reference: fee.invoice_reference } : null}

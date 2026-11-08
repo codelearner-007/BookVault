@@ -4,24 +4,15 @@
 // land on the same host as the PKCE cookies.
 import { test, expect } from '@playwright/test';
 import { createHmac } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { PASSWORD, trackAccounts, uniqueEmail } from './support/accounts';
 
 const MAILPIT = process.env.MAILPIT_URL || 'http://127.0.0.1:55344/api/v1';
-const PASSWORD = 'correct horse battery staple';
 const NEW_PASSWORD = 'a different long passphrase';
 const VERIFY_LINK = /https?:\/\/[^\s"'<>]+\/auth\/v1\/verify\?[^\s"'<>)]+/;
 const TOTP_STEP_SECONDS = 30;
 
-function envLocal(name) {
-  const line = readFileSync(new URL('../.env.local', import.meta.url), 'utf8')
-    .split(/\r?\n/)
-    .find((l) => l.startsWith(`${name}=`));
-  return line?.slice(name.length + 1).trim();
-}
-
-function uniqueEmail(prefix) {
-  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@e2e.bookvault.dev`;
-}
+const accounts = trackAccounts();
+test.afterEach(({ request, baseURL }) => accounts.cleanup(request, baseURL));
 
 // ---------------------------------------------------------------- TOTP (RFC 6238)
 
@@ -90,20 +81,12 @@ async function loginUi(page, email, password) {
   await page.getByRole('button', { name: 'Log in' }).click();
 }
 
-async function createConfirmedUser(request, email, password) {
-  const key = envLocal('PRIVATE_SUPABASE_SERVICE_KEY');
-  const response = await request.post(`${envLocal('NEXT_PUBLIC_SUPABASE_URL')}/auth/v1/admin/users`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}` },
-    data: { email, password, email_confirm: true },
-  });
-  expect(response.ok()).toBeTruthy();
-}
-
 // ---------------------------------------------------------------- flows
 
 test('signup -> verify -> login -> 2FA enroll -> logout -> TOTP login -> recovery code', async ({ page }) => {
   test.setTimeout(180_000);
   const email = uniqueEmail('signup');
+  accounts.addUser(email);
 
   // Signup with the country picker (prefilled from the browser locale; chosen explicitly here).
   await page.goto('/auth/register');
@@ -168,7 +151,7 @@ test('signup -> verify -> login -> 2FA enroll -> logout -> TOTP login -> recover
 test('forgot password -> reset from the email; the link cannot be used twice', async ({ page, browser }) => {
   test.setTimeout(120_000);
   const email = uniqueEmail('reset');
-  await createConfirmedUser(page.request, email, PASSWORD);
+  await accounts.createUser(page.request, email);
 
   await page.goto('/auth/forgot-password');
   await page.getByLabel('Email').fill(email);
@@ -204,7 +187,7 @@ test('forgot password -> reset from the email; the link cannot be used twice', a
 test('Account -> Security: password, 2FA on with codes, new codes, 2FA off, other sessions', async ({ page }) => {
   test.setTimeout(180_000);
   const email = uniqueEmail('security');
-  await createConfirmedUser(page.request, email, PASSWORD);
+  await accounts.createUser(page.request, email);
   await loginUi(page, email, PASSWORD);
   await expect(page).toHaveURL(/\/admin/);
   await page.goto('/admin/profile?tab=security');

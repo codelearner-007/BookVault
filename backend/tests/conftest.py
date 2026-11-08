@@ -138,3 +138,17 @@ async def committed() -> AsyncGenerator[UserFactory, None]:
         finally:
             await factory.purge_created()
     await engine.dispose()
+
+
+@pytest.fixture
+async def live_client():
+    """Mode C: the app with its real session dependency (commits before the response, B1 race fix)."""
+    from app.db import session as db_session
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test",
+        headers={CSRF_HEADER: "web"}, event_hooks={"request": [_add_idempotency_key]},
+    ) as http:
+        yield http
+    await db_session.get_session_manager().close()
+    db_session._session_manager = None

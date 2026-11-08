@@ -1,8 +1,9 @@
-"""Read side of trade documents (B4): the document view, list items and derived statuses.
+"""Read side of trade documents (B4 sales, B5 purchases): the document view, list items and derived statuses.
 
 Amounts come from the database views (one rounding implementation); statuses are derived
 (domain-model §6): invoices from balance due and due date, quotes from expiry and links,
-orders from their linked invoices and delivery notes.
+orders from their linked invoices and delivery notes / goods receipts. The party fields are
+named per side (customer_* / supplier_*).
 """
 
 from datetime import date, timedelta
@@ -17,16 +18,40 @@ from app.schemas.response.sales import (
     EarlyDiscountTerms,
     LateFeeOnInvoice,
     LinkedDocument,
+    PurchaseDocumentListItem,
+    PurchaseDocumentResponse,
     TaxBreakdownItem,
+    TradeDocumentBase,
     TradeDocumentListItem,
+    TradeDocumentListItemBase,
     TradeDocumentResponse,
     TradeLineResponse,
 )
 from app.services.posting import POSTED, VOID, PostingService
 from app.services.sales_rules import HUNDRED, invoice_display_status
-from app.services.trade_types import CREDIT_NOTE, CREDIT_NOTE_LINK, DELIVERY_NOTE, INVOICE, ORDER, QUOTE, TradeType
+from app.services.trade_types import (
+    NOTE_LINKS,
+    ORDER_LINKS,
+    ROLE_INVOICE,
+    ROLE_NOTE,
+    ROLE_ORDER,
+    ROLE_QUOTE,
+    ROLE_STOCK,
+    SALES,
+    TradeType,
+)
 
 ZERO = Decimal(0)
+
+
+def _classes(kind: TradeType) -> tuple[type[TradeDocumentBase], type[TradeDocumentListItemBase]]:
+    if kind.side is SALES:
+        return TradeDocumentResponse, TradeDocumentListItem
+    return PurchaseDocumentResponse, PurchaseDocumentListItem
+
+
+def _party(kind: TradeType, party_id: str, party_name: str | None) -> dict:
+    return {kind.side.party_field: party_id, kind.side.party_name_field: party_name}
 
 
 def tax_breakdown(rows: list, dp: int) -> list[TaxBreakdownItem]:
@@ -46,31 +71,33 @@ def _live_targets(links: list, document_id: str, link_type: str) -> list:
     return [k for k in links if k.from_id == document_id and k.link_type_key == link_type and k.to_status != VOID]
 
 
-def order_statuses(links: list, document_id: str) -> tuple[str, str]:
-    invoiced = _live_targets(links, document_id, "order_to_invoice")
-    delivered = _live_targets(links, document_id, "order_to_delivery")
+def order_statuses(links: list, document_id: str, side: str = SALES.key) -> tuple[str, str]:
+    invoice_link, stock_link = ORDER_LINKS[side]
+    invoiced = _live_targets(links, document_id, invoice_link)
+    delivered = _live_targets(links, document_id, stock_link)
     return ("invoiced" if invoiced else "uninvoiced"), ("delivered" if delivered else "pending")
 
 
-def display_status(kind: str, status: str, today: date, *, expiry: date | None = None, links=(),
+def display_status(kind: TradeType, status: str, today: date, *, expiry: date | None = None, links=(),
                    document_id: str = "", balance_due=None, due_date: date | None = None) -> str:
-    if kind == INVOICE:
+    if kind.role == ROLE_INVOICE:
         return invoice_display_status(status, balance_due, due_date, today)
-    if status == VOID and kind in (QUOTE, ORDER):
+    if status == VOID and kind.role in (ROLE_QUOTE, ROLE_ORDER):
         return "cancelled"
     if status != POSTED:
         return status
-    if kind == QUOTE:
+    if kind.role == ROLE_QUOTE:
         if any(k.from_id == document_id and k.to_status != VOID for k in links):
             return "accepted"
         return "expired" if expiry is not None and expiry < today else "active"
-    if kind == ORDER:
-        return "invoiced" if order_statuses(list(links), document_id)[0] == "invoiced" else "open"
+    if kind.role == ROLE_ORDER:
+        return "invoiced" if order_statuses(list(links), document_id, kind.side.key)[0] == "invoiced" else "open"
     return status
 
 
 def linked_invoice(links: list, document_id: str):
-    return next((k for k in links if k.to_id == document_id and k.link_type_key == CREDIT_NOTE_LINK), None)
+    """The invoice a credit note or debit note is linked to (None = Automatic)."""
+    return next((k for k in links if k.to_id == document_id and k.link_type_key in NOTE_LINKS), None)
 
 
 class TradeView:
@@ -79,7 +106,7 @@ class TradeView:
         self.posting = posting
 
     async def response(self, kind: TradeType, document: Document,
-                       warnings: list[DocumentWarning] | None = None) -> TradeDocumentResponse:
+                       warnings: list[DocumentWarning] | None = None) -> TradeDocumentBase:
         business_id, dp = document.business_id, await self.posting.decimals(document.business_id)
         extension = await self.repo.get(business_id, document.id)
         detail = await self.repo.detail(business_id, document.id)
@@ -90,34 +117,34 @@ class TradeView:
         lines = [TradeLineResponse.model_validate({**r._mapping, "net": round_money(r.net, dp),
                                                    "tax": round_money(r.tax, dp),
                                                    "total": round_money(r.net + r.tax, dp)}) for r in rows]
-        extra = await self._invoice_parts(document, dp, status, today) if kind.key == INVOICE else {}
-        if kind.key == QUOTE:
+        extra = await self._invoice_parts(kind, document, dp) if kind.role == ROLE_INVOICE else {}
+        if kind.role == ROLE_QUOTE:
             extra["expiry_date"] = extension.expiry_date
-        if kind.key == ORDER:
-            extra["invoice_status"], extra["delivery_status"] = order_statuses(links, document.id)
-        if kind.key == CREDIT_NOTE:
-            extra.update(await self._credit_note_parts(document, links, dp))
-        return TradeDocumentResponse(
+        if kind.role == ROLE_ORDER:
+            extra["invoice_status"], extra["delivery_status"] = order_statuses(links, document.id, kind.side.key)
+        if kind.role == ROLE_NOTE:
+            extra.update(await self._note_parts(document, links, dp))
+        return _classes(kind)[0](
             id=document.id, document_type=kind.key, reference=document.reference, date=document.document_date,
             status=status, version=document.version, is_locked=await self.posting.is_locked(document),
-            display_status=display_status(kind.key, status, today, expiry=extension.expiry_date, links=links,
+            display_status=display_status(kind, status, today, expiry=extension.expiry_date, links=links,
                                           document_id=document.id, balance_due=extra.get("balance_due"),
                                           due_date=extra.get("due_date")),
-            customer_id=extension.party_id, customer_name=detail.customer_name,
+            **_party(kind, extension.party_id, detail.party_name),
             billing_address=extension.billing_address, delivery_address=extension.delivery_address,
             description=document.description, amounts_include_tax=extension.amounts_include_tax,
-            discount_type=extension.discount_type_key, lines=lines,
-            subtotal=round_money(detail.subtotal, dp), tax_total=round_money(detail.tax_total, dp),
+            discount_type=extension.discount_type_key, acts_as_stock_movement=extension.acts_as_stock_movement,
+            lines=lines, subtotal=round_money(detail.subtotal, dp), tax_total=round_money(detail.tax_total, dp),
             rounding=round_money(detail.rounding, dp), total=round_money(detail.total, dp),
             tax_breakdown=tax_breakdown(rows, dp), links=self._links(links, document.id),
             warnings=warnings or [], created_at=document.created_at, updated_at=document.updated_at, **extra,
         )
 
-    async def _invoice_parts(self, document: Document, dp: int, status: str, today: date) -> dict:
+    async def _invoice_parts(self, kind: TradeType, document: Document, dp: int) -> dict:
         business_id = document.business_id
         terms = await self.repo.terms(business_id, document.id)
         detail = await self.repo.detail(business_id, document.id)
-        balance = next(iter(await self.repo.balances(business_id, [document.id])), None)
+        balance = next(iter(await self.repo.balances(business_id, [document.id], type_key=kind.key)), None)
         applied = [AppliedDocument(**{**r._mapping, "amount": round_money(r.amount, dp),
                                       "early_discount": round_money(r.early_discount, dp)})
                    for r in await self.repo.applications(business_id, document.id)]
@@ -137,9 +164,10 @@ class TradeView:
             "paid_before_start": paid_before if terms.is_starting_balance else None,
             "balance_due": round_money(balance.balance_due, dp) if balance else None,
             "applied": applied, "late_fees": fees,
+            "is_closed": None if kind.side is SALES else terms.is_closed,
         }
 
-    async def _credit_note_parts(self, document: Document, links: list, dp: int) -> dict:
+    async def _note_parts(self, document: Document, links: list, dp: int) -> dict:
         link = linked_invoice(links, document.id)
         applied = [AppliedDocument(**{**r._mapping, "amount": round_money(r.amount, dp),
                                       "early_discount": round_money(r.early_discount, dp)})
@@ -159,30 +187,35 @@ class TradeView:
                 relation="source" if source else "target"))
         return out
 
-    async def list_items(self, kind: TradeType, business_id: str, rows: list) -> list[TradeDocumentListItem]:
+    async def list_items(self, kind: TradeType, business_id: str, rows: list) -> list[TradeDocumentListItemBase]:
         dp = await self.posting.decimals(business_id)
         ids = [r.id for r in rows]
         links = await self.repo.links(business_id, ids)
-        balances = ({b.invoice_id: b.balance_due for b in await self.repo.balances(business_id, ids)}
-                    if kind.key == INVOICE and ids else {})
+        balances = {}
+        if kind.role == ROLE_INVOICE and ids:
+            balances = {b.invoice_id: b.balance_due for b in await self.repo.balances(business_id, ids,
+                                                                                      type_key=kind.key)}
+        item_class = _classes(kind)[1]
         today = date.today()
         items = []
         for r in rows:
             balance = balances.get(r.id)
             extra = {}
-            if kind.key == ORDER:
-                extra["invoice_status"], extra["delivery_status"] = order_statuses(links, r.id)
-            if kind.key == CREDIT_NOTE and (link := linked_invoice(links, r.id)):
+            if kind.role == ROLE_ORDER:
+                extra["invoice_status"], extra["delivery_status"] = order_statuses(links, r.id, kind.side.key)
+            if kind.role == ROLE_NOTE and (link := linked_invoice(links, r.id)):
                 extra["invoice_reference"] = link.from_reference
-            if kind.key in (ORDER, DELIVERY_NOTE, INVOICE):
+            if kind.role in (ROLE_ORDER, ROLE_STOCK, ROLE_INVOICE):
                 source = next((k for k in links if k.to_id == r.id), None)
                 extra["source_reference"] = source.from_reference if source else None
-            items.append(TradeDocumentListItem(
-                id=r.id, reference=r.reference, date=r.date, customer_id=r.customer_id,
-                customer_name=r.customer_name, description=r.description, total=round_money(r.total, dp),
+            if kind.role == ROLE_INVOICE and kind.side is not SALES:
+                extra["is_closed"] = r.is_closed
+            items.append(item_class(
+                id=r.id, reference=r.reference, date=r.date, **_party(kind, r.party_id, r.party_name),
+                description=r.description, total=round_money(r.total, dp),
                 status=r.status, version=r.version, expiry_date=r.expiry_date, due_date=r.due_date,
                 balance_due=round_money(balance, dp) if balance is not None else None,
-                display_status=display_status(kind.key, r.status, today, expiry=r.expiry_date, links=links,
+                display_status=display_status(kind, r.status, today, expiry=r.expiry_date, links=links,
                                               document_id=r.id, balance_due=balance, due_date=r.due_date),
                 **extra,
             ))

@@ -1,14 +1,14 @@
 'use client';
 
-import CustomersTab from '../sales/CustomersTab';
 import LateFeesTab from '../sales/LateFeesTab';
-import { DOC_TYPES } from '../sales/sales-documents';
+import PartiesTab from '../sales/PartiesTab';
+import { DOC_TYPES, TRADE_SIDES } from '../sales/sales-documents';
 import TradeDocumentsTab from '../sales/TradeDocumentsTab';
 
 /* The Sales sidebar tabs (B4): customers, the five trade documents and late payment fees. */
 
 export function BusinessCustomers({ business }) {
-  return <CustomersTab business={business} />;
+  return <PartiesTab business={business} side={TRADE_SIDES.sales} />;
 }
 
 export function BusinessSalesQuotes({ business }) {

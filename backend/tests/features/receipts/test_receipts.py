@@ -172,11 +172,11 @@ async def test_capital_line_needs_a_capital_account_party(client, books):
     assert listed["items"][0]["balance"] == "-10.00"
 
 
-async def test_counterparty_and_contact_alias(client, books):
+async def test_counterparty_and_contact_in_use(client, books):
     owner, bid, bank, sales, _ = books
     customer = await create_contact(client, owner, bid, "customers")
     await _create(client, owner, bid, receipt_body(bank["id"], [(sales, "12")], counterparty_party_id=customer["id"]))
-    listed = await client.get(biz(bid, f"/customers/{customer['id']}/receipts"), headers=owner.headers)
+    listed = await client.get(biz(bid, "/receipts"), headers=owner.headers)
     assert listed.json()["items"][0]["counterparty"] == customer["name"]
     deleted = await client.delete(biz(bid, f"/customers/{customer['id']}"), params={"version": customer["version"]},
                                   headers=owner.headers)

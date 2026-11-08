@@ -5,6 +5,8 @@ depends_on closure, in file order; fixture-scoped settings are restored afterwar
 through the audited path (runner.settings_lifetime).
 """
 
+from decimal import Decimal
+
 import pytest
 
 from tests.golden.adapters import GoldenRun, adapter_for, runner_supports
@@ -23,11 +25,11 @@ from tests.golden.loader import (
     load_golden_file,
 )
 from tests.support.factories import create_business
-from tests.support.ledger import SIDE_TO_TYPE, biz, create_account, set_lock_date
+from tests.support.ledger import SIDE_TO_TYPE, biz, create_account, set_lock_date, trial_balance
 
 TEARDOWN_REASON = "golden-fixture teardown"
 
-EXPECTED_DOCUMENTS = 107
+EXPECTED_DOCUMENTS = 107  # v2 + T102, T103 (receipt / payment without a bank account)
 EXPECTED_CHECKPOINTS = 6
 
 DOCUMENTS = fixtures_of_kind(DOCUMENT_KIND)
@@ -51,9 +53,9 @@ def test_manager_only_setup_records_are_skipped():
     assert bookvault_setup_records(records) == [{"kind": "price"}]
 
 
-def test_b1_to_b4_schedule_is_runnable():
-    assert {f["id"] for f in RUNNABLE} == (B1_FIXTURES | B2_FIXTURES | B3_FIXTURES | B4_FIXTURES | B7_EARLY
-                                           | BOOKVAULT_ONLY)
+def test_b1_to_b5_schedule_is_runnable():
+    assert {f["id"] for f in RUNNABLE} == (B1_FIXTURES | B2_FIXTURES | B3_FIXTURES | B4_FIXTURES | B5_FIXTURES
+                                          | B7_EARLY | BOOKVAULT_ONLY)
 
 
 def test_golden_support_report(capsys):
@@ -61,7 +63,7 @@ def test_golden_support_report(capsys):
     with capsys.disabled():
         print(
             f"\n[golden] {supported} of {len(DOCUMENTS)} document fixtures supported, "
-            f"0 of {len(CHECKPOINTS)} checkpoints runnable"
+            f"{len(RUNNABLE_CHECKPOINTS)} of {len(CHECKPOINTS)} checkpoints runnable"
         )
 
 
@@ -152,7 +154,7 @@ async def _setup_banks(run: GoldenRun, fixture: dict) -> None:
             run.pending_banks.add(key)
 
 
-PARTY_ROUTES = {"capital_account": "/capital-accounts", "customer": "/customers"}
+PARTY_ROUTES = {"capital_account": "/capital-accounts", "customer": "/customers", "supplier": "/suppliers"}
 
 
 async def _setup_parties(run: GoldenRun, fixture: dict) -> None:
@@ -212,7 +214,7 @@ def _lock_setting(fixture: dict) -> dict | None:
 
 
 DOCUMENT_LISTS = ("/journal-entries", "/receipts", "/payments", "/inter-account-transfers", "/sales-invoices",
-                  "/credit-notes", "/late-payment-fees")
+                  "/credit-notes", "/late-payment-fees", "/purchase-invoices", "/debit-notes")
 
 
 async def _document_count(run: GoldenRun) -> int:
@@ -283,6 +285,7 @@ B2_FIXTURES = {"T36", "T95"}
 B3_FIXTURES = {"T01", "T02", "T03", "T08", "T31", "T41", "T64", "T65", "T67", "T74", "T83", "T84", "T85"}
 B4_FIXTURES = {"T04", "T05", "T09", "T37", "T42a", "T42b", "T43", "T47", "T56", "T62", "T68a", "T68", "T97", "T98",
                "T99", "T100", "T101"}
+B5_FIXTURES = {"T06", "T07", "T63", "T79"}
 # Scheduled for B7 but already runnable on the single-rate engine (inclusive tax T53, per-line rounding T82);
 # B7 re-asserts them with the full tax engine.
 B7_EARLY = {"T53", "T82"}
@@ -304,6 +307,100 @@ async def test_golden_document_fixture(fixture, client, users):
         await _run_fixture(run, step)
 
 
-@pytest.mark.parametrize("checkpoint", CHECKPOINTS, ids=[c["id"] for c in CHECKPOINTS])
-def test_golden_report_checkpoint(checkpoint):
-    pytest.skip("not yet supported: report checkpoints run once their fixtures are (B1+)")
+# ---------------------------------------------------------------- report checkpoints (B5: CP-T09)
+CHECKPOINT_METRICS = {"stored_debits_in_period", "stored_debits_cumulative", "retained_earnings_report_line",
+                      "net_profit", "account_balance"}
+EARLIEST = "1900-01-01"
+PAGE = 100
+
+
+def _before(checkpoint: dict) -> list[dict]:
+    """Every fixture before the checkpoint, in file order (runner.execution)."""
+    everything = load_golden_file()["fixtures"]
+    return everything[:next(i for i, f in enumerate(everything) if f["id"] == checkpoint["id"])]
+
+
+def _checkpoint_runnable(checkpoint: dict) -> bool:
+    figures = checkpoint["bookvault_expected"]["report_checkpoint"]["figures"]
+    prior = [f for f in _before(checkpoint) if f["kind"] != CHECKPOINT_KIND]
+    return (all(f["kind"] == DOCUMENT_KIND and _supported(f) for f in prior)
+            and {m["metric"] for m in figures} <= CHECKPOINT_METRICS)
+
+
+RUNNABLE_CHECKPOINTS = [c for c in CHECKPOINTS if _checkpoint_runnable(c)]
+NOT_YET_CHECKPOINTS = [c for c in CHECKPOINTS if not _checkpoint_runnable(c)]
+
+
+def test_b5_checkpoint_is_runnable():
+    assert [c["id"] for c in RUNNABLE_CHECKPOINTS] == ["CP-T09"]
+
+
+async def _stored_debits(run: GoldenRun, date_from: str, date_to: str) -> Decimal:
+    total, page = Decimal(0), 1
+    while True:
+        response = await run.client.get(biz(run.business_id, "/reports/general-ledger-transactions"),
+                                        params={"from": date_from, "to": date_to, "page": page, "page_size": PAGE},
+                                        headers=run.owner.headers)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        total += sum((Decimal(x["debit"]) for x in body["items"]), Decimal(0))
+        if page * PAGE >= body["total"]:
+            return total
+        page += 1
+
+
+async def _listed_balance(run: GoldenRun, path: str, record_id: str, field: str) -> Decimal:
+    response = await run.client.get(biz(run.business_id, path), params={"page_size": PAGE}, headers=run.owner.headers)
+    assert response.status_code == 200, response.text
+    return Decimal(next(x[field] for x in response.json()["items"] if x["id"] == record_id))
+
+
+async def _account_balance(run: GoldenRun, figure: dict, as_at: str) -> Decimal:
+    """Dr positive / Cr negative (conventions.signed_values); a dimension reads its sub-ledger."""
+    dims = figure.get("dimensions", {})
+    if "bank_account" in dims:
+        return await _listed_balance(run, "/bank-accounts", run.banks[dims["bank_account"]], "actual_balance")
+    if "party" in dims:
+        kind = load_golden_file()["master_data"]["parties"][dims["party"]]["kind"]
+        return await _listed_balance(run, PARTY_ROUTES[kind], run.parties[dims["party"]], "balance")
+    rows = (await trial_balance(run.client, run.owner, run.business_id, as_at))["rows"]
+    row = next((r for r in rows if r["account_id"] == run.accounts[figure["account_key"]]), None)
+    return Decimal(row["debit"]) - Decimal(row["credit"]) if row else Decimal(0)
+
+
+async def _figure(run: GoldenRun, figure: dict, report: dict, summary: dict) -> Decimal:
+    metric = figure["metric"]
+    if metric == "stored_debits_in_period":
+        return await _stored_debits(run, report["period"]["from"], report["period"]["to"])
+    if metric == "stored_debits_cumulative":
+        return await _stored_debits(run, EARLIEST, report["as_at"])
+    if metric == "net_profit":
+        return Decimal(summary["profit_and_loss"]["net_profit"])
+    if metric == "retained_earnings_report_line":
+        return -Decimal(summary["retained_earnings"]["cumulative_profit"])  # Dr positive
+    return await _account_balance(run, figure, report["as_at"])
+
+
+@pytest.mark.parametrize("checkpoint", NOT_YET_CHECKPOINTS, ids=[c["id"] for c in NOT_YET_CHECKPOINTS])
+def test_golden_report_checkpoint_not_yet_supported(checkpoint):
+    pytest.skip("not yet supported: a fixture or metric before this checkpoint belongs to a later phase")
+
+
+@pytest.mark.parametrize("checkpoint", RUNNABLE_CHECKPOINTS, ids=[c["id"] for c in RUNNABLE_CHECKPOINTS])
+async def test_golden_report_checkpoint(checkpoint, client, users):
+    run = await _new_run(client, users)
+    for fixture in _before(checkpoint):
+        if fixture["kind"] == DOCUMENT_KIND:
+            await _run_fixture(run, fixture)
+    report = checkpoint["bookvault_expected"]["report_checkpoint"]
+    response = await run.client.get(biz(run.business_id, "/reports/summary"), headers=run.owner.headers,
+                                    params={"from": report["period"]["from"], "to": report["period"]["to"]})
+    assert response.status_code == 200, response.text
+    summary = response.json()
+    await _setup_accounts(run, {"setup": {"accounts": [f["account_key"] for f in report["figures"]
+                                                       if "account_key" in f]}})
+    got = {(f["metric"], f.get("account_key"), str(f.get("dimensions"))): await _figure(run, f, report, summary)
+           for f in report["figures"]}
+    wanted = {(f["metric"], f.get("account_key"), str(f.get("dimensions"))): Decimal(f["value"])
+              for f in report["figures"]}
+    assert got == wanted

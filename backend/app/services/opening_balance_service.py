@@ -35,7 +35,7 @@ from app.services.posting import OPENING_BALANCE, POSTED, SOURCE_OPENING, Docume
 AREA = "settings.starting_balances"
 KIND_ACCOUNT = "account"
 KIND_BANK_ACCOUNT = "bank_account"
-KIND_SALES_INVOICE = "sales_invoice"
+INVOICE_KINDS = {"sales_invoice", "purchase_invoice"}
 CASH_CONTROL = "cash_control"
 ENTITY = "StartingBalance"
 RETAINED_EARNINGS = "retained_earnings"
@@ -175,7 +175,7 @@ class OpeningBalanceService:
             raise LedgerValidationError(
                 "Documents are dated before the new books start date", "documents_before_books_start"
             )
-        live = [r for r in await self.openings.live_documents(ctx.business_id) if r.kind_key != KIND_SALES_INVOICE]
+        live = [r for r in await self.openings.live_documents(ctx.business_id) if r.kind_key not in INVOICE_KINDS]
         plug = await self.coa.system_account_id(ctx.business_id, RETAINED_EARNINGS)
         await InvoiceOpeningService(self.session).redate(ctx, new_start)
         for row in live:

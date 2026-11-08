@@ -108,7 +108,7 @@ class CustomerService:
     async def transactions(self, business_id: str, customer_id: str,
                            params: PageParams) -> CustomerTransactionsResponse:
         customer = await self._customer(business_id, customer_id)
-        rows, total = await self.sales.customer_transactions(business_id, customer.id, params.offset,
+        rows, total = await self.sales.party_transactions(business_id, customer.id, "accounts_receivable", params.offset,
                                                              params.page_size)
         dp = await self.posting.decimals(business_id)
         items = [CustomerTransaction.model_validate({**r._mapping, "amount": round_money(r.amount, dp)})

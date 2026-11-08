@@ -2,8 +2,7 @@
 
 import pytest
 
-from tests.support.factories import create_bank_account, create_business, create_contact, receipt_body
-from tests.support.ledger import create_account
+from tests.support.factories import create_business, create_contact
 
 KINDS = ["customers", "suppliers"]
 
@@ -30,22 +29,12 @@ async def test_contacts_crud(client, users, kind):
     assert removed.status_code == 204
 
 
-@pytest.mark.parametrize(("kind", "contact_type"), [("customers", "customer"), ("suppliers", "supplier")])
-async def test_contact_receipts_list(client, users, kind, contact_type):
+@pytest.mark.parametrize("kind", ["customers", "suppliers"])
+async def test_contact_receipts_alias_removed(client, users, kind):
+    """NA-10 (B5): /{kind}/{id}/receipts is gone; /transactions replaces it."""
     owner = await users.create()
     business_id = (await create_business(client, owner))["id"]
     contact = await create_contact(client, owner, business_id, kind)
-    bank = await create_bank_account(client, owner, business_id)
-    income = await create_account(client, owner, business_id, "Service income", "income")
-    created = await client.post(
-        f"/api/v1/businesses/{business_id}/receipts",
-        json=receipt_body(bank["id"], [(income, "3")], counterparty_party_id=contact["id"]),
-        headers=owner.headers,
-    )
-    assert created.status_code == 201, created.text
-
-    receipts = await client.get(
-        f"/api/v1/businesses/{business_id}/{kind}/{contact['id']}/receipts", headers=owner.headers
-    )
-
-    assert receipts.json()["total"] == 1
+    base = f"/api/v1/businesses/{business_id}/{kind}/{contact['id']}"
+    assert (await client.get(f"{base}/receipts", headers=owner.headers)).status_code == 404
+    assert (await client.get(f"{base}/transactions", headers=owner.headers)).json()["total"] == 0

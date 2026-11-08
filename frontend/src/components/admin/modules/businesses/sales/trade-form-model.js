@@ -2,7 +2,7 @@ import { toInputAmount } from '../coa/coa-tree';
 import { parseAmount } from '../ledger/JournalLinesEditor';
 import { todayIso } from '../ledger/ledger-parts';
 import { optionalNumber } from '../banking/CashLinesEditor';
-import { DOC_TYPES, plainNumber } from './sales-documents';
+import { DOC_TYPES, ROLES, plainNumber } from './sales-documents';
 
 /*
   Form state of a trade document and the request bodies built from it, field by field (strict API bodies:
@@ -41,14 +41,14 @@ function linesFrom(source) {
 
 /*
   Form state from a saved document, a copy-to prefill (a create body) or nothing (a new form).
-  customer: { id, name } | null. options: { sourceId, startingBalance, openingDate }.
+  party: the customer or supplier { id, name } | null. options: { sourceId, startingBalance, openingDate }.
 */
-export function tradeForm(source, customer, { sourceId = null, startingBalance = false, openingDate = null } = {}) {
+export function tradeForm(source, party, { sourceId = null, startingBalance = false, openingDate = null } = {}) {
   const src = source ?? {};
   return {
     date: src.date ?? (startingBalance && openingDate ? openingDate : todayIso()),
     reference: src.reference ?? '',
-    customer,
+    party,
     billingAddress: src.billing_address ?? '',
     deliveryAddress: src.delivery_address ?? '',
     description: src.description ?? '',
@@ -68,6 +68,8 @@ export function tradeForm(source, customer, { sourceId = null, startingBalance =
     invoiceId: src.invoice_id ?? '',
     isStartingBalance: src.is_starting_balance ?? startingBalance,
     paidBeforeStart: textOf(src.paid_before_start),
+    actsAsStockMovement: src.acts_as_stock_movement ?? false,
+    isClosed: src.is_closed ?? false,
     sourceId,
   };
 }
@@ -89,7 +91,7 @@ export function totalsRequest(form, config) {
   return {
     amounts_include_tax: form.amountsIncludeTax,
     discount_type: form.discountType === DISCOUNT_TYPES.none ? null : form.discountType,
-    ...(config.type === DOC_TYPES.invoice ? { rounding: form.rounding } : {}),
+    ...(config.role === ROLES.invoice ? { rounding: form.rounding } : {}),
     lines: form.lines.map((line) => ({
       qty: optionalNumber(line.qty),
       unit_price: parseAmount(line.unit_price),
@@ -112,31 +114,46 @@ function lineBody(line, form, config) {
   };
 }
 
-function invoiceFields(form, creditLimitOverride) {
+// Sales invoices only: early payment discount, late fees and the credit-limit override.
+function salesTerms(form, creditLimitOverride) {
+  return {
+    early_discount_rate: form.earlyDiscount ? optionalNumber(form.earlyDiscountRate) : null,
+    early_discount_days: form.earlyDiscount && form.earlyDiscountDays !== '' ? Number(form.earlyDiscountDays) : null,
+    late_fee_rate: form.lateFee ? optionalNumber(form.lateFeeRate) : null,
+    credit_limit_override: creditLimitOverride,
+  };
+}
+
+function invoiceFields(form, config, { creditLimitOverride, isEdit }) {
   const netDays = form.dueDays === '' ? null : Number(form.dueDays);
   const dueDate = form.dueMode === DUE_MODES.date ? form.dueDate || null : netDays === null ? null : addDays(form.date, netDays);
   return {
     due_date: dueDate,
     rounding: form.rounding,
-    early_discount_rate: form.earlyDiscount ? optionalNumber(form.earlyDiscountRate) : null,
-    early_discount_days: form.earlyDiscount && form.earlyDiscountDays !== '' ? Number(form.earlyDiscountDays) : null,
-    late_fee_rate: form.lateFee ? optionalNumber(form.lateFeeRate) : null,
-    credit_limit_override: creditLimitOverride,
+    ...(config.type === DOC_TYPES.invoice ? salesTerms(form, creditLimitOverride) : {}),
+    ...(config.stockMovementLabel ? { acts_as_stock_movement: form.actsAsStockMovement } : {}),
+    // The API takes is_closed on update only (no ledger effect).
+    ...(config.closable && isEdit ? { is_closed: form.isClosed } : {}),
     ...(form.isStartingBalance ? { is_starting_balance: true, paid_before_start: optionalNumber(form.paidBeforeStart) ?? '0' } : {}),
   };
 }
 
-function typeFields(form, config, creditLimitOverride) {
+function typeFields(form, config, options) {
   if (config.type === DOC_TYPES.quote) return { expiry_date: form.expiryDate || null };
-  if (config.type === DOC_TYPES.invoice) return invoiceFields(form, creditLimitOverride);
-  if (config.type === DOC_TYPES.creditNote) return { invoice_id: form.invoiceId || null };
+  if (config.role === ROLES.invoice) return invoiceFields(form, config, options);
+  if (config.role === ROLES.note) {
+    return {
+      invoice_id: form.invoiceId || null,
+      ...(config.stockMovementLabel ? { acts_as_stock_movement: form.actsAsStockMovement } : {}),
+    };
+  }
   if (config.type === DOC_TYPES.deliveryNote) return { delivery_address: form.deliveryAddress.trim() || null };
   return {};
 }
 
 function validate(form, lines, config) {
   if (!form.date) return 'Date is required.';
-  if (!form.customer) return 'Choose a customer.';
+  if (!form.party) return `Choose a ${config.side.partyNoun}.`;
   if (lines.length === 0) return 'Add at least one line.';
   if (lines.some((line) => isInvalidTradeLine(line, config.priced))) return 'Amounts must be numbers, for example 1250.00.';
   if (!config.priced && lines.some((line) => !line.item_id)) return 'Choose an item on every line.';
@@ -146,7 +163,7 @@ function validate(form, lines, config) {
 }
 
 // Field-by-field create / update body; returns { error } when the form cannot be sent.
-export function buildTradeBody(form, config, { creditLimitOverride = false } = {}) {
+export function buildTradeBody(form, config, { creditLimitOverride = false, isEdit = false } = {}) {
   const lines = form.lines.filter((line) => !isBlankLine(line));
   const error = validate(form, lines, config);
   if (error) return { error };
@@ -161,11 +178,11 @@ export function buildTradeBody(form, config, { creditLimitOverride = false } = {
     body: {
       date: form.date,
       reference: form.reference.trim() || null,
-      customer_id: form.customer.id,
+      [config.side.partyField]: form.party.id,
       description: form.description.trim() || null,
       ...priced,
       lines: lines.map((line) => lineBody(line, form, config)),
-      ...typeFields(form, config, creditLimitOverride),
+      ...typeFields(form, config, { creditLimitOverride, isEdit }),
     },
   };
 }

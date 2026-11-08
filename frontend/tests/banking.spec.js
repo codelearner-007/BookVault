@@ -2,43 +2,14 @@
 // the bank account's Actual balance and the Summary's Cash & cash equivalents; then voided and the balance is back.
 // Needs the local stack: Next.js at PLAYWRIGHT_BASE_URL (e.g. http://localhost:3020) proxying /api/v1 to FastAPI.
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { PASSWORD, api, trackAccounts, uniqueSuffix } from './support/accounts';
 
-const PASSWORD = 'correct horse battery staple';
 const LINE_AMOUNTS = ['100.25', '25.25'];
 const TOTAL = '125.50';
 const ZERO = '0.00';
 
-function envLocal(name) {
-  const line = readFileSync(new URL('../.env.local', import.meta.url), 'utf8')
-    .split(/\r?\n/)
-    .find((l) => l.startsWith(`${name}=`));
-  return line?.slice(name.length + 1).trim();
-}
-
-function uniqueSuffix() {
-  return `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-}
-
-async function createConfirmedUser(request, email, password) {
-  const key = envLocal('PRIVATE_SUPABASE_SERVICE_KEY');
-  const response = await request.post(`${envLocal('NEXT_PUBLIC_SUPABASE_URL')}/auth/v1/admin/users`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}` },
-    data: { email, password, email_confirm: true },
-  });
-  expect(response.ok()).toBeTruthy();
-}
-
-// Same-origin calls with the CSRF headers the routes require; creates carry an Idempotency-Key.
-function api(page, baseURL) {
-  const headers = { Origin: new URL(baseURL).origin, 'X-BookVault-Client': 'web' };
-  const send = (method) => (path, data) => page.request.fetch(path, {
-    method,
-    data: data ?? {},
-    headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() },
-  });
-  return { post: send('POST'), put: send('PUT') };
-}
+const accounts = trackAccounts();
+test.afterEach(({ request, baseURL }) => accounts.cleanup(request, baseURL));
 
 async function choose(page, comboboxName, optionName) {
   await page.getByRole('combobox', { name: comboboxName }).click();
@@ -58,15 +29,16 @@ test('post a two-line receipt, see it in the journal, bank balance and summary, 
   const email = `bank-owner-${suffix}@e2e.bookvault.dev`;
   const bankName = `E2E Bank ${suffix}`;
   const incomeAccounts = [`E2E Sales ${suffix}`, `E2E Interest ${suffix}`];
-  await createConfirmedUser(page.request, email, PASSWORD);
+  await accounts.createUser(page.request, email);
 
   // Setup through the API: sign in, a business with the banking tabs on, a bank account, two income accounts.
   await page.goto('/auth/login');
-  const calls = api(page, baseURL);
+  const calls = api(page.request, baseURL);
   expect((await calls.post('/api/auth/login', { email, password: PASSWORD })).ok()).toBeTruthy();
   const created = await calls.post('/api/v1/businesses', { name: 'Banking E2E' });
   expect(created.ok(), await created.text()).toBeTruthy();
   const business = await created.json();
+  accounts.addBusiness(email, business);
   const base = `/api/v1/businesses/${business.id}`;
   // A write right after the create can land before the create is visible (404); retry briefly.
   await expect.poll(async () => (await calls.put(`${base}/tabs`, {

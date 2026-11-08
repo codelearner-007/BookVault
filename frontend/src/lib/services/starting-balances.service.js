@@ -25,13 +25,14 @@ export async function setBankStartingBalance(businessId, bankAccountId, { side, 
   return apiClient.put(`${bankBase(businessId)}/${bankAccountId}`, { side, amount });
 }
 
-const invoiceBase = (businessId) => `/v1/businesses/${businessId}/starting-balances/sales-invoices`;
+// resource: 'sales-invoices' | 'purchase-invoices'.
+const invoiceBase = (businessId, resource) => `/v1/businesses/${businessId}/starting-balances/${resource}`;
 
-// Starting-balance sales invoices; the envelope also carries books_start_date and opening_date.
-export async function listStartingBalanceInvoices(businessId) {
-  return listAllPages(invoiceBase(businessId));
+// Starting-balance sales or purchase invoices; the envelope also carries books_start_date and opening_date.
+export async function listStartingBalanceInvoices(businessId, resource) {
+  return listAllPages(invoiceBase(businessId, resource));
 }
 
-export async function setPaidBeforeStart(businessId, invoiceId, paidBeforeStart) {
-  return apiClient.put(`${invoiceBase(businessId)}/${invoiceId}`, { paid_before_start: paidBeforeStart });
+export async function setPaidBeforeStart(businessId, resource, invoiceId, paidBeforeStart) {
+  return apiClient.put(`${invoiceBase(businessId, resource)}/${invoiceId}`, { paid_before_start: paidBeforeStart });
 }

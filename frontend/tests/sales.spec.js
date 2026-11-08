@@ -3,33 +3,10 @@
 // the Summary, and a credit note against the invoice.
 // Needs the local stack: Next.js at PLAYWRIGHT_BASE_URL proxying /api/v1 to FastAPI.
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { PASSWORD, api, trackAccounts, uniqueSuffix } from './support/accounts';
 
-const PASSWORD = 'correct horse battery staple';
-
-function envLocal(name) {
-  const line = readFileSync(new URL('../.env.local', import.meta.url), 'utf8')
-    .split(/\r?\n/)
-    .find((l) => l.startsWith(`${name}=`));
-  return line?.slice(name.length + 1).trim();
-}
-
-async function createConfirmedUser(request, email, password) {
-  const key = envLocal('PRIVATE_SUPABASE_SERVICE_KEY');
-  const response = await request.post(`${envLocal('NEXT_PUBLIC_SUPABASE_URL')}/auth/v1/admin/users`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}` },
-    data: { email, password, email_confirm: true },
-  });
-  expect(response.ok()).toBeTruthy();
-}
-
-function api(page, baseURL) {
-  const headers = { Origin: new URL(baseURL).origin, 'X-BookVault-Client': 'web' };
-  const send = (method) => (path, data) => page.request.fetch(path, {
-    method, data: data ?? {}, headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() },
-  });
-  return { post: send('POST'), put: send('PUT'), get: (path) => page.request.get(path, { headers }) };
-}
+const accounts = trackAccounts();
+test.afterEach(({ request, baseURL }) => accounts.cleanup(request, baseURL));
 
 async function choose(page, comboboxName, optionName) {
   await page.getByRole('combobox', { name: comboboxName }).click();
@@ -43,17 +20,18 @@ async function ok(response) {
 
 test('invoice with tax, partial receipt, status and AR, then a credit note', async ({ page, baseURL }) => {
   test.setTimeout(180_000);
-  const suffix = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const suffix = uniqueSuffix();
   const email = `sales-owner-${suffix}@e2e.bookvault.dev`;
   const customerName = `E2E Customer ${suffix}`;
   const incomeName = `E2E Service income ${suffix}`;
-  await createConfirmedUser(page.request, email, PASSWORD);
+  await accounts.createUser(page.request, email);
 
   // Setup through the API: a business with the sales tabs, a customer, an income account, GST 10%, a bank.
   await page.goto('/auth/login');
-  const calls = api(page, baseURL);
+  const calls = api(page.request, baseURL);
   expect((await calls.post('/api/auth/login', { email, password: PASSWORD })).ok()).toBeTruthy();
   const business = await ok(await calls.post('/api/v1/businesses', { name: 'Sales E2E', books_start_date: '2026-01-01' }));
+  accounts.addBusiness(email, business);
   const base = `/api/v1/businesses/${business.id}`;
   await expect.poll(async () => (await calls.put(`${base}/tabs`, {
     items: ['summary', 'receipts', 'customers', 'sales-invoices', 'credit-notes'].map((key) => ({ key, enabled: true })),

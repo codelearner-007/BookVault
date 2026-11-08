@@ -54,3 +54,4 @@ from app.schemas.role import RoleCreate  # alias for CreateRoleRequest
 - 27 total FastAPI routes
 - [Local migration apply](project_local_migrations.md) — CLI migration up broken; psql + schema_migrations row; auth triggers need _DUMP_SKIP_MARKERS
 - [Ledger test gotchas](project_ledger_test_gotchas.md) — data migrations need BEGIN/COMMIT; pytest never hits deferred checks; safe uuid casts
+- [B5 purchases patterns](project_b5_purchases_patterns.md) — TradeSide/role generalization; worktree env copies; SET ROLE for rls_owner functions

@@ -9,41 +9,42 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { EmptyState, ListCard, MoreMenu, PageHeader } from '@/components/common/page';
 import { ConfirmDialog, ListPagination } from '@/components/super-admin/platform-parts';
-import { deleteCustomer, getCustomer, listCustomerTransactions } from '@/lib/services/customers.service';
 import { formatMoney } from '@/lib/utils/money';
 import { BackButton, ErrorAlert, useTabNavigate } from '../ledger/ledger-parts';
 import { DOCUMENT_TYPE_LABELS, DocumentSkeleton, InactiveBadge, documentHref, useLoad } from '../banking/banking-parts';
-import { CUSTOMER_STATUS, SALES_TABS } from './sales-documents';
+import { PARTY_STATUS, TRADE_SIDES } from './sales-documents';
 import { Field, StatusPill } from './sales-parts';
 
 const CONTACT_IN_USE = 'contact_in_use';
 const SKELETON_ROWS = 3;
 
-function Details({ customer }) {
+// Customers add Uninvoiced, the default due date and the delivery address; suppliers keep one address.
+function Details({ side, party }) {
+  const isCustomer = side === TRADE_SIDES.sales;
   return (
     <Card className="p-card">
       <dl className="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="Accounts receivable"><span className="num font-semibold">{formatMoney(customer.ar_balance)}</span></Field>
-        <Field label="Available credit"><span className="num">{formatMoney(customer.available_credit)}</span></Field>
-        <Field label="Uninvoiced"><span className="num">{formatMoney(customer.uninvoiced)}</span></Field>
-        <Field label="Status"><StatusPill statuses={CUSTOMER_STATUS} status={customer.status} /></Field>
-        <Field label="Code">{customer.code}</Field>
-        <Field label="Email">{customer.email}</Field>
-        <Field label="Credit limit"><span className="num">{formatMoney(customer.credit_limit)}</span></Field>
-        <Field label="Due date">{customer.default_due_days === null ? null : `Net ${customer.default_due_days} days`}</Field>
-        <Field label="Billing address" className="sm:col-span-2">{customer.billing_address}</Field>
-        <Field label="Delivery address" className="sm:col-span-2">{customer.delivery_address}</Field>
+        <Field label={side.balance.label}><span className="num font-semibold">{formatMoney(party[side.balance.field])}</span></Field>
+        <Field label="Available credit"><span className="num">{formatMoney(party.available_credit)}</span></Field>
+        {isCustomer && <Field label="Uninvoiced"><span className="num">{formatMoney(party.uninvoiced)}</span></Field>}
+        <Field label="Status"><StatusPill statuses={PARTY_STATUS} status={party.status} /></Field>
+        <Field label="Code">{party.code}</Field>
+        <Field label="Email">{party.email}</Field>
+        <Field label="Credit limit"><span className="num">{formatMoney(party.credit_limit)}</span></Field>
+        {isCustomer && <Field label="Due date">{party.default_due_days === null ? null : `Net ${party.default_due_days} days`}</Field>}
+        <Field label={isCustomer ? 'Billing address' : 'Address'} className="sm:col-span-2">{party.billing_address}</Field>
+        {isCustomer && <Field label="Delivery address" className="sm:col-span-2">{party.delivery_address}</Field>}
       </dl>
     </Card>
   );
 }
 
-// Documents that moved the customer's receivable (+ invoices and fees, - receipts and credit notes).
-function Transactions({ businessId, customerId, page, onPage }) {
-  const { data, error } = useLoad(() => listCustomerTransactions(businessId, customerId, page), [businessId, customerId, page]);
+// Documents that moved the party's balance (signed effect on the receivable / payable).
+function Transactions({ businessId, side, partyId, page, onPage }) {
+  const { data, error } = useLoad(() => side.parties.transactions(businessId, partyId, page), [businessId, side.key, partyId, page]);
   return (
-    <section aria-labelledby="customer-transactions" className="mt-10">
-      <h2 id="customer-transactions" className="mb-3 text-md font-semibold">Transactions</h2>
+    <section aria-labelledby="party-transactions" className="mt-10">
+      <h2 id="party-transactions" className="mb-3 text-md font-semibold">Transactions</h2>
       {error && <ErrorAlert>{error}</ErrorAlert>}
       <ListCard footer={data?.total > 0 && <ListPagination page={page} totalPages={Math.max(1, data.total_pages)} total={data.total} onPage={onPage} />}>
         {!data && !error && (
@@ -83,26 +84,26 @@ function Transactions({ businessId, customerId, page, onPage }) {
   );
 }
 
-// ?tab=customers&view=<id>[&p=N]: details, receivable balance, available credit and transactions.
-export default function CustomerView({ businessId, customerId, page, rights }) {
-  const navigate = useTabNavigate(SALES_TABS.customers);
-  const { data: customer, error, reload } = useLoad(() => getCustomer(businessId, customerId), [businessId, customerId]);
+// ?tab=customers|suppliers&view=<id>[&p=N]: details, balance, available credit and transactions.
+export default function PartyView({ businessId, side, partyId, page, rights }) {
+  const navigate = useTabNavigate(side.tab);
+  const { data: party, error, reload } = useLoad(() => side.parties.get(businessId, partyId), [businessId, side.key, partyId]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [actionError, setActionError] = useState(null);
 
-  if (!customer) return error ? <ErrorAlert>{error}</ErrorAlert> : <DocumentSkeleton />;
+  if (!party) return error ? <ErrorAlert>{error}</ErrorAlert> : <DocumentSkeleton />;
 
   async function remove() {
     setDeleting(true);
     setActionError(null);
     try {
-      await deleteCustomer(businessId, customer.id, customer.version);
+      await side.parties.remove(businessId, party.id, party.version);
       navigate({});
     } catch (err) {
       setActionError(err?.code === CONTACT_IN_USE
-        ? 'This customer has transactions, so it cannot be deleted. Mark it inactive instead.'
-        : err?.message ?? 'Failed to delete the customer.');
+        ? `This ${side.partyNoun} has transactions, so it cannot be deleted. Mark it inactive instead.`
+        : err?.message ?? `Failed to delete the ${side.partyNoun}.`);
       reload();
     } finally {
       setDeleting(false);
@@ -114,7 +115,7 @@ export default function CustomerView({ businessId, customerId, page, rights }) {
     <>
       {rights.delete && <MoreMenu items={[{ label: 'Delete', icon: Trash2, destructive: true, onSelect: () => setConfirmDelete(true) }]} />}
       {rights.edit && (
-        <Button onClick={() => navigate({ edit: customer.id })}>
+        <Button onClick={() => navigate({ edit: party.id })}>
           <Pencil />
           Edit
         </Button>
@@ -125,20 +126,20 @@ export default function CustomerView({ businessId, customerId, page, rights }) {
   return (
     <div className="max-w-5xl">
       <ConfirmDialog
-        confirm={confirmDelete ? { title: `Delete ${customer.name}?`, body: 'The customer is removed for good.', action: 'Delete', destructive: true } : null}
+        confirm={confirmDelete ? { title: `Delete ${party.name}?`, body: `The ${side.partyNoun} is removed for good.`, action: 'Delete', destructive: true } : null}
         busy={deleting}
         onConfirm={remove}
         onClose={() => setConfirmDelete(false)}
         cancelLabel="Cancel"
       />
       <PageHeader
-        title={<span className="flex flex-wrap items-center gap-3">{customer.name}{customer.is_inactive && <InactiveBadge />}</span>}
+        title={<span className="flex flex-wrap items-center gap-3">{party.name}{party.is_inactive && <InactiveBadge />}</span>}
         back={<BackButton onClick={() => navigate({})} />}
         actions={actions}
       />
       {actionError && <ErrorAlert>{actionError}</ErrorAlert>}
-      <Details customer={customer} />
-      <Transactions businessId={businessId} customerId={customer.id} page={page} onPage={(next) => navigate({ view: customer.id, p: next > 1 ? next : null })} />
+      <Details side={side} party={party} />
+      <Transactions businessId={businessId} side={side} partyId={party.id} page={page} onPage={(next) => navigate({ view: party.id, p: next > 1 ? next : null })} />
     </div>
   );
 }

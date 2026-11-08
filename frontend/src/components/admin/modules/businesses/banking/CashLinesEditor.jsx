@@ -11,8 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { formatMoney } from '@/lib/utils/money';
 import { parseAmount } from '../ledger/JournalLinesEditor';
 import ReceiptInvoiceField from '../sales/ReceiptInvoiceField';
+import { sideOfPartyKind } from '../sales/sales-documents';
 import { PARTY_LABELS } from './cash-directions';
-import { PARTY_KINDS } from '@/lib/services/parties.service';
 import PartyPicker from './PartyPicker';
 
 const TOTALS_DEBOUNCE_MS = 300;
@@ -69,11 +69,13 @@ export function FieldLabel({ children }) {
   return <span className="text-sm text-muted-foreground md:hidden" aria-hidden="true">{children}</span>;
 }
 
-// The line's account; a party control account adds its party (capital account, or a receipt's customer and invoice).
+// The line's account; a party control account adds its party (capital account, or a receipt's customer / a
+// payment's supplier and the invoice the line pays).
 function AccountCell({ line, number, accounts, businessId, disabled, onChange, partyAccounts, allocation }) {
   const account = accounts.find((a) => a.id === line.account_id);
   const partyKind = partyAccounts[account?.system_account_code];
   const partyLabel = PARTY_LABELS[partyKind];
+  const invoiceSide = allocation ? sideOfPartyKind(partyKind) : null;
   return (
     <div className="col-span-2 grid gap-1.5 md:col-span-1">
       <FieldLabel>Account</FieldLabel>
@@ -96,10 +98,11 @@ function AccountCell({ line, number, accounts, businessId, disabled, onChange, p
           placeholder={`Select ${partyLabel}`}
         />
       )}
-      {partyKind === PARTY_KINDS.customer && allocation && (
+      {invoiceSide && (
         <ReceiptInvoiceField
           businessId={businessId}
-          customerId={line.party?.id}
+          side={invoiceSide}
+          partyId={line.party?.id}
           date={allocation.date}
           value={line.invoice}
           onChange={(invoice) => onChange({ invoice })}
@@ -186,7 +189,8 @@ function ColumnToggles({ columns, setColumns, disabled }) {
 
 /*
   The line grid of a receipt or payment: Account (+ its party on a party control account: a capital account,
-  or on a receipt's Accounts receivable line a customer and the invoice it pays; allocation: { date }),
+  or on a receipt's Accounts receivable / a payment's Accounts payable line a customer / supplier and the
+  invoice it pays; allocation: { date }),
   optional Description / Qty / Discount columns, Amount (unit price) and the server-computed line total.
   Table-like columns on md+, stacked cards and a sticky total bar on phones.
 */

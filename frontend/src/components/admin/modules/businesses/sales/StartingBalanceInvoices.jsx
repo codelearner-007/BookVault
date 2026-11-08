@@ -12,25 +12,23 @@ import { formatMoney } from '@/lib/utils/money';
 import { MONEY_INPUT, toInputAmount } from '../coa/coa-tree';
 import { ErrorAlert } from '../ledger/ledger-parts';
 import { documentHref, useLoad, useTabRights } from '../banking/banking-parts';
-import { DOC_TYPES, SALES_TABS } from './sales-documents';
 
-const NEW_INVOICE_HREF = `?tab=${SALES_TABS.invoices}&new=1&starting_balance=1`;
 const SKELETON_ROWS = 2;
 
 // One invoice: what it was for, and "Paid before start" saved on its own.
-function InvoiceRow({ businessId, item, onSaved, canEdit }) {
+function InvoiceRow({ businessId, side, item, onSaved, canEdit }) {
   const [paid, setPaid] = useState(toInputAmount(item.paid_before_start));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const typed = paid.trim() || '0';
   const valid = MONEY_INPUT.test(typed);
-  const name = item.reference || 'Sales invoice';
+  const name = item.reference || side.invoiceLabel;
 
   async function save() {
     setSaving(true);
     setError(null);
     try {
-      await setPaidBeforeStart(businessId, item.invoice_id, typed);
+      await setPaidBeforeStart(businessId, side.invoicesResource, item.invoice_id, typed);
       onSaved();
     } catch (err) {
       setError(err?.message ?? 'Failed to save.');
@@ -41,9 +39,9 @@ function InvoiceRow({ businessId, item, onSaved, canEdit }) {
   return (
     <li className="flex flex-wrap items-center gap-3 border-b border-row-divider px-4 py-3 last:border-b-0">
       <div className="min-w-0 flex-1 basis-48">
-        <Link href={documentHref(DOC_TYPES.invoice, item.invoice_id)} className="font-medium hover:text-link hover:underline">{name}</Link>
+        <Link href={documentHref(side.invoiceType, item.invoice_id)} className="font-medium hover:text-link hover:underline">{name}</Link>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          {item.customer_name} · <span className="num">{item.date}</span> · total <span className="num">{formatMoney(item.total)}</span> · outstanding <span className="num">{formatMoney(item.outstanding)}</span>
+          {item[side.partyNameField]} · <span className="num">{item.date}</span> · total <span className="num">{formatMoney(item.total)}</span> · outstanding <span className="num">{formatMoney(item.outstanding)}</span>
         </p>
       </div>
       <Input
@@ -60,19 +58,25 @@ function InvoiceRow({ businessId, item, onSaved, canEdit }) {
   );
 }
 
-// Starting balances > Sales invoices: invoices customers owed when the books start (they post no revenue).
-export default function StartingBalanceInvoices({ businessId }) {
-  const rights = useTabRights(SALES_TABS.invoices);
-  const { data, error, reload } = useLoad(() => listStartingBalanceInvoices(businessId), [businessId]);
+/*
+  Starting balances > Sales invoices / Purchase invoices: what customers owed, or what the business owed
+  suppliers, when the books start (they post no revenue or expense). `side` is the TRADE_SIDES entry.
+*/
+export default function StartingBalanceInvoices({ businessId, side }) {
+  const rights = useTabRights(side.invoicesTab);
+  const { data, error, reload } = useLoad(() => listStartingBalanceInvoices(businessId, side.invoicesResource), [businessId, side.key]);
   const items = data?.items ?? [];
+  const heading = `${side.invoiceLabel}s`;
 
   return (
-    <section aria-label="Sales invoices" className="max-w-3xl">
+    <section aria-label={heading} className="max-w-3xl">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-md font-semibold">Sales invoices</h2>
+        <h2 className="text-md font-semibold">{heading}</h2>
         {rights.create && (
           <Button variant="secondary" size="sm" asChild>
-            <Link href={NEW_INVOICE_HREF}><Plus />New starting-balance invoice</Link>
+            <Link href={`?tab=${side.invoicesTab}&new=1&starting_balance=1`}>
+              <Plus />New starting-balance {side.invoiceLabel.toLowerCase()}
+            </Link>
           </Button>
         )}
       </div>
@@ -85,11 +89,12 @@ export default function StartingBalanceInvoices({ businessId }) {
         )}
         {data && items.length === 0 && <EmptyState icon={FileText} title="No starting-balance invoices" />}
         {items.length > 0 && (
-          <ul aria-label="Starting-balance sales invoices">
+          <ul aria-label={`Starting-balance ${heading.toLowerCase()}`}>
             {items.map((item) => (
               <InvoiceRow
                 key={`${item.invoice_id}:${item.paid_before_start}`}
                 businessId={businessId}
+                side={side}
                 item={item}
                 onSaved={reload}
                 canEdit={rights.edit}

@@ -3,13 +3,14 @@
 import { useSearchParams } from 'next/navigation';
 import { useDocumentRoute, useTabRights } from '../banking/banking-parts';
 import EarlyPaymentDiscounts from './EarlyPaymentDiscounts';
-import { DOC_TYPES, TRADE_DOCUMENTS } from './sales-documents';
+import { DOC_TYPES, ROLES, TRADE_DOCUMENTS } from './sales-documents';
 import TradeDocumentForm from './TradeDocumentForm';
 import TradeDocumentsList from './TradeDocumentsList';
 import TradeDocumentView from './TradeDocumentView';
 
 // ?tab=sales-quotes|sales-orders|sales-invoices|credit-notes|delivery-notes
-//   list (&q=search &p=N) · &new=1 [&from=<id>&from_type=<type>] [&starting_balance=1] · &edit=<id> · &view=<id>
+//     |purchase-quotes|purchase-orders|purchase-invoices|debit-notes|goods-receipts
+//   list (&q=search &p=N) · &new=1 [&from=<id>&from_type=<type>] [&starting_balance=1 on invoices] · &edit=<id> · &view=<id>
 //   sales-invoices also: &discounts=1 (early payment discounts available)
 // The server enforces every right; these only hide what the user cannot do.
 export default function TradeDocumentsTab({ business, type }) {
@@ -23,7 +24,7 @@ export default function TradeDocumentsTab({ business, type }) {
     const fromId = param('from');
     const fromType = param('from_type');
     const copyFrom = fromId && TRADE_DOCUMENTS[fromType] ? { id: fromId, type: fromType } : null;
-    const startingBalance = type === DOC_TYPES.invoice && !!param('starting_balance');
+    const startingBalance = config.role === ROLES.invoice && !!param('starting_balance');
     return (
       <TradeDocumentForm
         key={`${fromId}:${startingBalance}`}

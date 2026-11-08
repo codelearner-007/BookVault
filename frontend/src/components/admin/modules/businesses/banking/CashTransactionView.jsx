@@ -105,7 +105,7 @@ export default function CashTransactionView({ business, direction, docId, rights
       onChanged={reload}
     >
       <CashDocument doc={doc} direction={direction} businessName={business.name} />
-      <ReceiptAllocations doc={doc} />
+      <ReceiptAllocations doc={doc} side={direction.side} />
       <TransactionJournal journal={journal} />
       <AttachmentsPanel businessId={business.id} documentId={doc.id} canEdit={rights.edit && !doc.is_locked} />
     </DocumentViewFrame>

@@ -21,19 +21,20 @@ _LIST_FILTER = """
     JOIN public.document_statuses s ON s.id = d.status_id
     JOIN public.trade_documents td ON td.business_id = d.business_id AND td.document_id = d.id
     LEFT JOIN public.customers cu ON cu.business_id = td.business_id AND cu.id = td.party_id
+    LEFT JOIN public.suppliers su ON su.business_id = td.business_id AND su.id = td.party_id
     LEFT JOIN public.trade_document_totals t ON t.business_id = d.business_id AND t.document_id = d.id
     LEFT JOIN public.invoice_terms it ON it.business_id = d.business_id AND it.document_id = d.id
     WHERE d.business_id = :business_id
       AND (CAST(:party_id AS uuid) IS NULL OR td.party_id = CAST(:party_id AS uuid))
       AND (CAST(:search AS text) IS NULL OR d.reference ILIKE :pattern OR d.description ILIKE :pattern
-           OR cu.name ILIKE :pattern)
+           OR cu.name ILIKE :pattern OR su.name ILIKE :pattern)
 """
 _LIST_PAGE = text(f"""
-    SELECT CAST(d.id AS text) AS id, d.reference, d.document_date AS date, CAST(td.party_id AS text) AS customer_id,
-           cu.name AS customer_name, d.description, s.key AS status, d.version, COALESCE(t.total, 0) AS total,
-           td.expiry_date, it.due_date
+    SELECT CAST(d.id AS text) AS id, d.reference, d.document_date AS date, CAST(td.party_id AS text) AS party_id,
+           COALESCE(cu.name, su.name) AS party_name, d.description, s.key AS status, d.version,
+           COALESCE(t.total, 0) AS total, td.expiry_date, it.due_date, it.is_closed
     {_LIST_FILTER}
-    ORDER BY d.document_date DESC, d.id DESC
+    ORDER BY COALESCE(it.is_closed, false), d.document_date DESC, d.id DESC
     OFFSET :offset LIMIT :limit
 """)
 _LIST_TOTALS = text(f"""
@@ -41,9 +42,10 @@ _LIST_TOTALS = text(f"""
     {_LIST_FILTER}
 """)
 _DETAIL = text("""
-    SELECT cu.name AS customer_name, t.subtotal, t.tax_total, t.rounding, t.total
+    SELECT COALESCE(cu.name, su.name) AS party_name, t.subtotal, t.tax_total, t.rounding, t.total
     FROM public.trade_documents td
     LEFT JOIN public.customers cu ON cu.business_id = td.business_id AND cu.id = td.party_id
+    LEFT JOIN public.suppliers su ON su.business_id = td.business_id AND su.id = td.party_id
     LEFT JOIN public.trade_document_totals t ON t.business_id = td.business_id AND t.document_id = td.document_id
     WHERE td.business_id = :business_id AND td.document_id = :document_id
 """)
@@ -76,13 +78,13 @@ _ROUNDING = text("""
 _BALANCES = text("""
     SELECT CAST(invoice_document_id AS text) AS invoice_id, CAST(party_id AS text) AS party_id, document_date,
            reference, due_date, total, fees, applied, balance_due, early_discount_rate, early_discount_days,
-           late_fee_rate
-    FROM public.invoice_balances(:business_id, CAST(:ids AS uuid[]), CAST(:party_id AS uuid))
+           late_fee_rate, is_closed
+    FROM public.invoice_balances(:business_id, CAST(:ids AS uuid[]), CAST(:party_id AS uuid), :type_key)
     ORDER BY document_date, invoice_document_id
 """)
 _BALANCE_TOTAL = text("""
     SELECT COALESCE(sum(balance_due), 0)
-    FROM public.invoice_balances(:business_id, NULL, CAST(:party_id AS uuid))
+    FROM public.invoice_balances(:business_id, NULL, CAST(:party_id AS uuid), :type_key)
 """)
 _APPLICATIONS = text("""
     SELECT CAST(document_id AS text) AS document_id, document_type, document_date AS date, reference, amount,
@@ -127,8 +129,8 @@ _LINES_REPORT_FILTER = """
     WHERE x.business_id = :business_id
 """
 _LINES_REPORT = text("""
-    SELECT CAST(d.id AS text) AS document_id, d.document_date AS date, d.reference, cu.name AS customer_name,
-           i.name AS item_name, a.name AS account_name, x.description, x.qty, x.unit_price,
+    SELECT CAST(d.id AS text) AS document_id, d.document_date AS date, d.reference,
+           COALESCE(cu.name, su.name) AS party_name, i.name AS item_name, a.name AS account_name, x.description, x.qty, x.unit_price,
            COALESCE(m.net, 0) AS net, COALESCE(m.tax, 0) AS tax
     FROM public.trade_document_lines x
     JOIN public.documents d ON d.business_id = x.business_id AND d.id = x.document_id
@@ -136,6 +138,7 @@ _LINES_REPORT = text("""
     JOIN public.document_statuses s ON s.id = d.status_id AND s.key = 'posted'
     JOIN public.trade_documents td ON td.business_id = x.business_id AND td.document_id = x.document_id
     LEFT JOIN public.customers cu ON cu.business_id = td.business_id AND cu.id = td.party_id
+    LEFT JOIN public.suppliers su ON su.business_id = td.business_id AND su.id = td.party_id
     LEFT JOIN public.items i ON i.business_id = x.business_id AND i.id = x.item_id
     LEFT JOIN public.coa_accounts a ON a.business_id = x.business_id AND a.id = x.account_id
     LEFT JOIN public.trade_document_line_amounts m ON m.business_id = x.business_id AND m.line_id = x.id
@@ -160,13 +163,18 @@ _CUSTOMER_SUMMARIES = text("""
     SELECT CAST(party_id AS text) AS party_id, ar_balance, has_history, uninvoiced
     FROM public.customer_summaries(:business_id)
 """)
+_SUPPLIER_SUMMARIES = text("""
+    SELECT CAST(party_id AS text) AS party_id, ap_balance, has_history
+    FROM public.supplier_summaries(:business_id)
+""")
+# Documents that moved one party's control account (AR for customers, AP for suppliers).
 _CUSTOMER_TX_FILTER = """
     FROM public.journal_lines l
     JOIN public.journal_entries e ON e.business_id = l.business_id AND e.id = l.journal_entry_id
     JOIN public.documents d ON d.business_id = e.business_id AND d.id = e.document_id
     JOIN public.document_types t ON t.id = d.document_type_id
     JOIN public.coa_accounts a ON a.business_id = l.business_id AND a.id = l.account_id
-    JOIN public.system_account_types st ON st.id = a.system_account_type_id AND st.code = 'accounts_receivable'
+    JOIN public.system_account_types st ON st.id = a.system_account_type_id AND st.code = :control
     WHERE l.business_id = :business_id AND l.party_id = :party_id
     GROUP BY d.id, t.key, d.document_date, d.reference, d.description
     HAVING sum(l.debit - l.credit) <> 0
@@ -252,14 +260,14 @@ class SalesRepository:
     async def rounding(self, method: str, gross: Decimal) -> Decimal:
         return (await self.session.execute(_ROUNDING, {"method": method, "gross": gross})).scalar_one()
 
-    async def balances(self, business_id: str, ids: list[str] | None = None,
-                       party_id: str | None = None) -> list[Row]:
-        return list((await self.session.execute(
-            _BALANCES, {"business_id": business_id, "ids": ids, "party_id": party_id})).all())
+    async def balances(self, business_id: str, ids: list[str] | None = None, party_id: str | None = None,
+                       type_key: str = "sales_invoice") -> list[Row]:
+        return list((await self.session.execute(_BALANCES, {
+            "business_id": business_id, "ids": ids, "party_id": party_id, "type_key": type_key})).all())
 
-    async def balance_total(self, business_id: str, party_id: str | None) -> Decimal:
-        return (await self.session.execute(
-            _BALANCE_TOTAL, {"business_id": business_id, "party_id": party_id})).scalar_one()
+    async def balance_total(self, business_id: str, party_id: str | None, type_key: str = "sales_invoice") -> Decimal:
+        return (await self.session.execute(_BALANCE_TOTAL, {
+            "business_id": business_id, "party_id": party_id, "type_key": type_key})).scalar_one()
 
     async def applications(self, business_id: str, invoice_id: str) -> list[Row]:
         return list((await self.session.execute(
@@ -301,9 +309,13 @@ class SalesRepository:
         rows = await self.session.execute(_CUSTOMER_SUMMARIES, {"business_id": business_id})
         return {r.party_id: r for r in rows}
 
-    async def customer_transactions(self, business_id: str, party_id: str, offset: int,
-                                    limit: int) -> tuple[list[Row], int]:
-        args = {"business_id": business_id, "party_id": party_id}
+    async def supplier_summaries(self, business_id: str) -> dict[str, Row]:
+        rows = await self.session.execute(_SUPPLIER_SUMMARIES, {"business_id": business_id})
+        return {r.party_id: r for r in rows}
+
+    async def party_transactions(self, business_id: str, party_id: str, control: str, offset: int,
+                                 limit: int) -> tuple[list[Row], int]:
+        args = {"business_id": business_id, "party_id": party_id, "control": control}
         total = (await self.session.execute(_CUSTOMER_TX_COUNT, args)).scalar_one()
         rows = (await self.session.execute(_CUSTOMER_TX, {**args, "offset": offset, "limit": limit})).all()
         return list(rows), total

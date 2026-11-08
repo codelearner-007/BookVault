@@ -31,7 +31,7 @@ class GoldenRun:
     parties: dict[str, str] = field(default_factory=dict)  # fixture party key -> party id
     tax_codes: dict[str, str] = field(default_factory=dict)  # fixture tax code key -> tax code id
     items: dict[str, str] = field(default_factory=dict)  # fixture item key -> item id
-    invoices: dict[str, str] = field(default_factory=dict)  # fixture id -> sales invoice document id
+    invoices: dict[str, str] = field(default_factory=dict)  # fixture id -> sales / purchase invoice document id
 
     def account_key(self, account_id: str) -> str:
         return next(k for k, v in self.accounts.items() if v == account_id)
@@ -308,6 +308,55 @@ async def late_payment_fee(run: GoldenRun, fixture: dict) -> Outcome:
     return await _with_journal(run, response)
 
 
+def _purchase_body(run: GoldenRun, doc: dict) -> dict:
+    """PR-38: due Net N days; the party is the supplier."""
+    fields = doc.get("fields", {})
+    body = {"date": doc["date"], "supplier_id": run.parties[fields["party"]], "post": True,
+            "description": fields.get("description"), "amounts_include_tax": fields.get("amounts_include_tax", False),
+            "lines": _trade_lines(run, doc["lines"]), "is_starting_balance": fields.get("is_starting_balance", False)}
+    if fields.get("due", {}).get("kind") == "net_days":
+        body["due_date"] = (date.fromisoformat(doc["date"]) + timedelta(days=fields["due"]["days"])).isoformat()
+    return body
+
+
+async def _purchase_actions(run: GoldenRun, fixture: dict, invoice_id: str) -> list[dict]:
+    """T79: tick 'Closed invoice' on the edit form (no ledger effect, PR-41c)."""
+    results, path = [], f"/purchase-invoices/{invoice_id}"
+    for action in fixture["document"].get("actions", []):
+        current = (await run.client.get(biz(run.business_id, path), headers=run.owner.headers)).json()
+        body = {k: current[k] for k in ("version", "date", "reference", "supplier_id", "description",
+                                        "amounts_include_tax", "due_date")}
+        body.update(is_closed=action["fields"].get("closed_invoice", False), lines=[
+            {k: x[k] for k in ("item_id", "account_id", "description", "qty", "unit_price", "tax_code_id")}
+            for x in current["lines"]])
+        response = await run.client.put(biz(run.business_id, path), json=body, headers=run.owner.headers)
+        results.append({"seq": action["seq"], "status_code": response.status_code})
+    return results
+
+
+async def purchase_invoice(run: GoldenRun, fixture: dict) -> Outcome:
+    response = await run.client.post(biz(run.business_id, "/purchase-invoices"), headers=run.owner.headers,
+                                     json=_purchase_body(run, fixture["document"]))
+    outcome = await _with_journal(run, response)
+    if outcome.status_code == 201:
+        run.invoices[fixture["id"]] = outcome.body["id"]
+        outcome.actions = await _purchase_actions(run, fixture, outcome.body["id"])
+        outcome.entries = (await journal(run.client, run.owner, run.business_id, outcome.body["id"]))["entries"]
+    return outcome
+
+
+async def debit_note(run: GoldenRun, fixture: dict) -> Outcome:
+    """PR-42 linked / PR-43 unlinked (oldest open purchase invoice first)."""
+    doc = fixture["document"]
+    fields = doc.get("fields", {})
+    linked = fields.get("linked", {}).get("purchase_invoice")
+    response = await run.client.post(biz(run.business_id, "/debit-notes"), headers=run.owner.headers, json={
+        "date": doc["date"], "supplier_id": run.parties[fields["party"]], "post": True,
+        "description": fields.get("description"), "invoice_id": run.invoices.get(linked),
+        "lines": _trade_lines(run, doc["lines"])})
+    return await _with_journal(run, response)
+
+
 async def invoice_starting_balance(run: GoldenRun, fixture: dict) -> Outcome:
     """T68: paid before the start = an allocation from the invoice's opening document (PR-61, D-36)."""
     fields = fixture["document"]["fields"]
@@ -333,18 +382,25 @@ ADAPTERS: dict[str, Adapter] = {
     "sales_invoice": sales_invoice,
     "credit_note": credit_note,
     "late_payment_fee": late_payment_fee,
+    "purchase_invoice": purchase_invoice,
+    "debit_note": debit_note,
 }
 # Starting-balance kinds with an adapter (purchase invoices: B5, items: B6).
 STARTING_BALANCE_KINDS = {"balance_sheet_account", "bank_account", "sales_invoice"}
 # Setup record kinds the runner can create; a fixture needing another kind waits for its phase
 # (T86 divisions: B15).
 SUPPORTED_SETUP = {"accounts", "settings", "account_groups", "bank_accounts", "parties", "tax_codes", "items"}
-# Party kinds the runner can create (suppliers B5, employees B10, special accounts B11).
-SUPPORTED_PARTY_KINDS = {"capital_account", "customer"}
+# Party kinds the runner can create (employees B10, special accounts B11).
+SUPPORTED_PARTY_KINDS = {"capital_account", "customer", "supplier"}
 # Item kinds the runner can create (inventory items and kits: B6).
 SUPPORTED_ITEM_KINDS = {"non_inventory"}
 # Tax code types the runner can create (multi-rate and reverse charge: B7).
 SUPPORTED_TAX_CODES = {"single_rate"}
+# Settings the runner can apply; others belong to later phases (stock B6, WHT B7, currencies B8,
+# billable expenses B12).
+SUPPORTED_SETTINGS = {"books_start_date", "lock_date", "credit_limit_policy"}
+# Receipts and payments without a bank or cash account (Suspense, T102/T103) are not B5's.
+CASH_TYPES = {"receipt", "payment"}
 # Base-currency bank accounts only until B8; withholding tax arrives in B7.
 FOREIGN_FIELDS = {"currency", "exchange_rate", "currency_amount", "debit_currency_amount", "withholding_tax"}
 
@@ -355,6 +411,8 @@ def adapter_for(document_type: str) -> Adapter | None:
 
 def _kind_supported(document: dict) -> bool:
     if set(document.get("fields", {})) & FOREIGN_FIELDS:
+        return False
+    if document["type"] in CASH_TYPES and "bank_account" not in document.get("fields", {}):
         return False
     if document["type"] != "starting_balance":
         return True
@@ -377,5 +435,6 @@ def runner_supports(fixture: dict) -> bool:
         and adapter_for(fixture["document"]["type"]) is not None
         and _kind_supported(fixture["document"])
         and set(fixture.get("setup", {})) <= SUPPORTED_SETUP
+        and {s["key"] for s in fixture.get("setup", {}).get("settings", [])} <= SUPPORTED_SETTINGS
         and _parties_supported(fixture)
     )

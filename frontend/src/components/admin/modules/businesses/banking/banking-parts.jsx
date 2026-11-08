@@ -34,6 +34,11 @@ const DOCUMENT_TABS = {
   credit_note: 'credit-notes',
   delivery_note: 'delivery-notes',
   late_payment_fee: 'late-payment-fees',
+  purchase_quote: 'purchase-quotes',
+  purchase_order: 'purchase-orders',
+  purchase_invoice: 'purchase-invoices',
+  debit_note: 'debit-notes',
+  goods_receipt: 'goods-receipts',
 };
 export const DOCUMENT_TYPE_LABELS = {
   receipt: 'Receipt',
@@ -47,6 +52,11 @@ export const DOCUMENT_TYPE_LABELS = {
   credit_note: 'Credit Note',
   delivery_note: 'Delivery Note',
   late_payment_fee: 'Late Payment Fee',
+  purchase_quote: 'Purchase Quote',
+  purchase_order: 'Purchase Order',
+  purchase_invoice: 'Purchase Invoice',
+  debit_note: 'Debit Note',
+  goods_receipt: 'Goods Receipt',
 };
 const STARTING_BALANCES_HREF = '?tab=settings&page=starting-balances';
 

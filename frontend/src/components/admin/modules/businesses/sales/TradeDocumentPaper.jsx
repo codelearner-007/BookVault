@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatMoney } from '@/lib/utils/money';
@@ -8,10 +9,10 @@ import { cn } from '@/lib/utils';
 import { isZeroAmount } from '../coa/coa-tree';
 import { accountLabel } from '../ledger/ledger-parts';
 import { DOCUMENT_TYPE_LABELS, documentHref } from '../banking/banking-parts';
-import { DOC_TYPES, LATE_FEE_TYPE, ORDER_DELIVERY_STATUS, ORDER_INVOICE_STATUS, plainNumber } from './sales-documents';
+import { DOC_TYPES, LATE_FEE_TYPE, ORDER_DELIVERY_STATUS, ORDER_INVOICE_STATUS, ROLES, plainNumber } from './sales-documents';
 import { Field, STICKY_CELL, StatusPill } from './sales-parts';
 
-// Applied receipts / credit notes reduce what the invoice is owed: shown with a minus like Manager. Text only.
+// Applied receipts / payments / notes reduce what the invoice is owed: shown with a minus like Manager. Text only.
 function asReduction(value) {
   const text = String(value);
   return text.startsWith('-') ? formatMoney(text) : `-${formatMoney(text)}`;
@@ -61,7 +62,7 @@ function SummaryRow({ span, label, value, strong, children }) {
 }
 
 // Totals under the lines; invoices add what was applied to them, late fees and the balance due.
-function TotalsRows({ doc, span }) {
+function TotalsRows({ doc, config, span }) {
   const breakdown = doc.tax_breakdown ?? [];
   const showSubtotal = breakdown.length > 0;
   return (
@@ -72,7 +73,7 @@ function TotalsRows({ doc, span }) {
       ))}
       {!isZeroAmount(doc.rounding) && <SummaryRow span={span} label="Rounding" value={formatMoney(doc.rounding)} />}
       <SummaryRow span={span} label="Total" value={formatMoney(doc.total)} strong />
-      {doc.document_type === DOC_TYPES.invoice && (
+      {config.role === ROLES.invoice && (
         <>
           {(doc.applied ?? []).map((entry) => (
             <SummaryRow key={`a-${entry.document_id}`} span={span} value={asReduction(entry.amount)}>
@@ -121,7 +122,7 @@ function LinesTable({ doc, config }) {
       </TableBody>
       {config.priced && (
         <TableFooter>
-          <TotalsRows doc={doc} span={columns.length - 1} />
+          <TotalsRows doc={doc} config={config} span={columns.length - 1} />
         </TableFooter>
       )}
     </Table>
@@ -130,13 +131,14 @@ function LinesTable({ doc, config }) {
 
 function HeaderFields({ doc, config }) {
   const isType = (type) => config.type === type;
+  const isRole = (role) => config.role === role;
   return (
     <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
       <Field label={config.dateLabel}><span className="tabular-nums">{doc.date}</span></Field>
       {isType(DOC_TYPES.quote) && doc.expiry_date && <Field label="Expiry date"><span className="tabular-nums">{doc.expiry_date}</span></Field>}
-      {isType(DOC_TYPES.invoice) && <Field label="Due date"><span className="tabular-nums">{doc.due_date}</span></Field>}
-      <Field label={isType(DOC_TYPES.invoice) ? 'Invoice number' : 'Reference'}>{doc.reference}</Field>
-      {isType(DOC_TYPES.creditNote) && <Field label="Sales invoice">{doc.invoice_reference ?? 'Automatic'}</Field>}
+      {isRole(ROLES.invoice) && <Field label="Due date"><span className="tabular-nums">{doc.due_date}</span></Field>}
+      <Field label={isRole(ROLES.invoice) ? 'Invoice number' : 'Reference'}>{doc.reference}</Field>
+      {isRole(ROLES.note) && <Field label={config.side.invoiceLabel}>{doc.invoice_reference ?? 'Automatic'}</Field>}
       {isType(DOC_TYPES.order) && (
         <Field label="Status">
           <span className="flex flex-wrap gap-2">
@@ -163,7 +165,7 @@ function Links({ links }) {
   );
 }
 
-// Manager's document layout: title and status, customer and address, dates, lines, totals, applied amounts.
+// Manager's document layout: title and status, customer / supplier and address, dates, lines, totals, applied amounts.
 export default function TradeDocumentPaper({ doc, config, businessName }) {
   const address = config.type === DOC_TYPES.deliveryNote ? doc.delivery_address : doc.billing_address;
   return (
@@ -172,12 +174,13 @@ export default function TradeDocumentPaper({ doc, config, businessName }) {
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-bold">{doc.is_starting_balance ? 'Starting-balance invoice' : config.paperTitle}</h2>
           <StatusPill statuses={config.statuses} status={doc.display_status} />
+          {doc.is_closed && <Badge variant="neutral">Closed</Badge>}
         </div>
         <p className="font-semibold">{businessName}</p>
       </div>
       <div className="mt-6 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <div>
-          <p className="font-semibold">{doc.customer_name}</p>
+          <p className="font-semibold">{doc[config.side.partyNameField]}</p>
           {address && <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{address}</p>}
         </div>
         <HeaderFields doc={doc} config={config} />
@@ -192,7 +195,10 @@ export default function TradeDocumentPaper({ doc, config, businessName }) {
           Early payment discount of {formatMoney(doc.early_discount.amount)} if paid by {doc.early_discount.until}.
         </p>
       )}
-      {doc.document_type === DOC_TYPES.creditNote && doc.applied?.length > 0 && (
+      {doc.acts_as_stock_movement && config.stockMovementLabel && (
+        <p className="mt-4 text-sm text-muted-foreground">{config.stockMovementLabel}.</p>
+      )}
+      {config.role === ROLES.note && doc.applied?.length > 0 && (
         <ul className="mt-4 space-y-1 text-sm text-muted-foreground">
           {doc.applied.map((entry) => (
             <li key={entry.document_id}>

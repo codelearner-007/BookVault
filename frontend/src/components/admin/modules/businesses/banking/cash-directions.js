@@ -1,12 +1,15 @@
 import { PARTY_KINDS } from '@/lib/services/parties.service';
 import { paymentsService } from '@/lib/services/payments.service';
 import { receiptsService } from '@/lib/services/receipts.service';
+import { TRADE_SIDES } from '../sales/sales-documents';
 import { BANKING_TABS } from './banking-parts';
 
 // Control accounts whose lines need a sub-ledger party (system_account_code -> party kind).
 const CAPITAL_PARTY = { capital_control: PARTY_KINDS.capitalAccount };
-// Receipts also take Accounts receivable lines: a customer, and optionally the invoice the line pays.
+// Receipts also take Accounts receivable lines (a customer), payments Accounts payable lines (a supplier);
+// either may name the invoice the line pays. `side` is the trade side whose invoices the lines settle.
 const RECEIPT_PARTIES = { ...CAPITAL_PARTY, accounts_receivable: PARTY_KINDS.customer };
+const PAYMENT_PARTIES = { ...CAPITAL_PARTY, accounts_payable: PARTY_KINDS.supplier };
 
 // Receipts and payments are one set of components; a direction names the words and the service.
 export const CASH_DIRECTIONS = {
@@ -19,7 +22,7 @@ export const CASH_DIRECTIONS = {
     bankLabel: 'Received in',
     counterpartyLabel: 'Paid by',
     partyAccounts: RECEIPT_PARTIES,
-    allocatesInvoices: true,
+    side: TRADE_SIDES.sales,
   },
   payment: {
     tab: BANKING_TABS.payments,
@@ -29,8 +32,8 @@ export const CASH_DIRECTIONS = {
     noun: 'payment',
     bankLabel: 'Paid from',
     counterpartyLabel: 'Payee',
-    partyAccounts: CAPITAL_PARTY,
-    allocatesInvoices: false,
+    partyAccounts: PAYMENT_PARTIES,
+    side: TRADE_SIDES.purchases,
   },
 };
 
@@ -44,7 +47,9 @@ export const COUNTERPARTY_OPTIONS = [
   { value: COUNTERPARTY.other, label: 'Other' },
 ];
 
-export const PARTY_LABELS = { [PARTY_KINDS.capitalAccount]: 'capital account', [PARTY_KINDS.customer]: 'customer' };
+export const PARTY_LABELS = {
+  [PARTY_KINDS.capitalAccount]: 'capital account', [PARTY_KINDS.customer]: 'customer', [PARTY_KINDS.supplier]: 'supplier',
+};
 // Lines never post to the bank control account directly: the bank account is the document's other side.
 export const BANK_CONTROL_ACCOUNT = 'cash_control';
 
@@ -71,8 +76,8 @@ export function lineAccountsFromTree(tree, savedLines = []) {
 export const CASH_ERRORS = {
   account_required: 'Choose an account on every line.',
   bank_account_required: 'Choose the bank or cash account.',
-  party_required: 'Choose a capital account or customer on every line whose account needs one.',
-  party_not_allowed: 'Only lines on Capital accounts or Accounts receivable take a party.',
+  party_required: 'Choose a capital account, customer or supplier on every line whose account needs one.',
+  party_not_allowed: 'Only lines on Capital accounts, Accounts receivable or Accounts payable take a party.',
   account_not_supported: 'One of the line accounts cannot be used here.',
   cleared_not_allowed: 'This bank account cannot have pending transactions.',
   total_not_positive: 'The total must be more than zero.',

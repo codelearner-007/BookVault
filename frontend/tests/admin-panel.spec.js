@@ -4,23 +4,14 @@
 import { test, expect } from '@playwright/test';
 import { createHmac } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { PASSWORD, trackAccounts, uniqueEmail } from './support/accounts';
 
-const PASSWORD = 'correct horse battery staple';
 const DB_CONTAINER = process.env.TEST_DB_CONTAINER || 'supabase_db_BookVault';
 const TOTP_STEP_SECONDS = 30;
 const WORKSPACE_ITEMS = ['Dashboard', 'Businesses', 'Audit logs', 'Account'];
 
-function envLocal(name) {
-  const line = readFileSync(new URL('../.env.local', import.meta.url), 'utf8')
-    .split(/\r?\n/)
-    .find((l) => l.startsWith(`${name}=`));
-  return line?.slice(name.length + 1).trim();
-}
-
-function uniqueEmail(prefix) {
-  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@e2e.bookvault.dev`;
-}
+const accounts = trackAccounts();
+test.afterEach(({ request, baseURL }) => accounts.cleanup(request, baseURL));
 
 function base32Decode(secret) {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -37,16 +28,6 @@ function totp(secret) {
   const hmac = createHmac('sha1', base32Decode(secret)).update(counter).digest();
   const offset = hmac[hmac.length - 1] & 0xf;
   return String((hmac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, '0');
-}
-
-async function createConfirmedUser(request, email) {
-  const key = envLocal('PRIVATE_SUPABASE_SERVICE_KEY');
-  const response = await request.post(`${envLocal('NEXT_PUBLIC_SUPABASE_URL')}/auth/v1/admin/users`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}` },
-    data: { email, password: PASSWORD, email_confirm: true },
-  });
-  expect(response.ok()).toBeTruthy();
-  return (await response.json()).id;
 }
 
 // Test setup only: the platform has no UI that creates a super admin.
@@ -87,7 +68,7 @@ async function expectWorkspaceItems(page) {
 
 test('an admin sees no Admin Panel and is sent away from /admin/panel', async ({ page }) => {
   const email = uniqueEmail('admin');
-  await createConfirmedUser(page.request, email);
+  await accounts.createUser(page.request, email);
   await loginUi(page, email);
   await expect(page).toHaveURL(/\/admin$/);
 
@@ -103,9 +84,9 @@ test('an admin sees no Admin Panel and is sent away from /admin/panel', async ({
 test('the super admin gets the same sidebar plus Admin Panel, which lists admins', async ({ page }) => {
   test.setTimeout(120_000);
   const adminEmail = uniqueEmail('listed-admin');
-  await createConfirmedUser(page.request, adminEmail);
+  await accounts.createUser(page.request, adminEmail);
   const email = uniqueEmail('super');
-  promoteToSuperAdmin(await createConfirmedUser(page.request, email));
+  promoteToSuperAdmin(await accounts.createUser(page.request, email));
   await loginWithTotp(page, email);
 
   await page.goto('/admin');

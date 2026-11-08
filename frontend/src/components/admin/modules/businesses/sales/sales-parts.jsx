@@ -4,11 +4,11 @@ import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PARTY_KINDS } from '@/lib/services/parties.service';
 import { formatMoney } from '@/lib/utils/money';
 import PartyPicker from '../banking/PartyPicker';
+import { TRADE_SIDES } from './sales-documents';
 
-/* Small pieces shared by the sales tabs: customers, the five trade documents and late payment fees. */
+/* Small pieces shared by the sales and purchase tabs: customers / suppliers, the trade documents, late payment fees. */
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -53,19 +53,20 @@ export function Field({ label, children, className }) {
   );
 }
 
-// The picker button carries the accessible name (aria-label); the visible label is for sighted users.
-export function CustomerPicker({ businessId, value, onChange, disabled, label = 'Customer' }) {
+// The customer or supplier of a document. The picker button carries the accessible name (aria-label); the
+// visible label is for sighted users.
+export function TradePartyPicker({ businessId, side = TRADE_SIDES.sales, value, onChange, disabled }) {
   return (
     <div className="grid gap-2">
-      <Label asChild><span aria-hidden="true">{label}</span></Label>
+      <Label asChild><span aria-hidden="true">{side.partyLabel}</span></Label>
       <PartyPicker
         businessId={businessId}
-        kind={PARTY_KINDS.customer}
+        kind={side.partyKind}
         value={value}
         onChange={onChange}
         disabled={disabled}
-        label={label}
-        placeholder="Select customer"
+        label={side.partyLabel}
+        placeholder={`Select ${side.partyNoun}`}
       />
     </div>
   );

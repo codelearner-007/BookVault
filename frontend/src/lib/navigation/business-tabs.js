@@ -135,7 +135,12 @@ export const NEW_ACTIONS = [
   { tab: 'credit-notes', label: 'Credit Note', href: '?tab=credit-notes&new=1', icon: FileMinus },
   { tab: 'late-payment-fees', label: 'Late Payment Fee', href: '?tab=late-payment-fees&new=1', icon: AlarmClock },
   { tab: 'delivery-notes', label: 'Delivery Note', href: '?tab=delivery-notes&new=1', icon: PackageCheck },
-  { tab: 'suppliers', label: 'Supplier', href: '?tab=suppliers&page=create', icon: Truck },
+  { tab: 'suppliers', label: 'Supplier', href: '?tab=suppliers&new=1', icon: Truck },
+  { tab: 'purchase-quotes', label: 'Purchase Quote', href: '?tab=purchase-quotes&new=1', icon: FileSearch },
+  { tab: 'purchase-orders', label: 'Purchase Order', href: '?tab=purchase-orders&new=1', icon: ShoppingCart },
+  { tab: 'purchase-invoices', label: 'Purchase Invoice', href: '?tab=purchase-invoices&new=1', icon: FileInput },
+  { tab: 'debit-notes', label: 'Debit Note', href: '?tab=debit-notes&new=1', icon: FilePlus },
+  { tab: 'goods-receipts', label: 'Goods Receipt', href: '?tab=goods-receipts&new=1', icon: PackageOpen },
   { tab: 'journal-entries', label: 'Journal Entry', href: '?tab=journal-entries&new=1', icon: BookOpen },
 ];
 

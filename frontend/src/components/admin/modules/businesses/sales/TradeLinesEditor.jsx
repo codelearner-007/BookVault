@@ -45,14 +45,16 @@ function CatalogCell({ label, number, value, options, onChange, disabled, allowN
   );
 }
 
-// Picking an item fills the line from it: description, sales price, income account and tax code.
+// Picking an item fills the line from it: description, the side's price and account (sales: sales price and
+// income account; purchases: purchase price and expense account) and tax code.
 function itemPatch(item, config) {
   if (!item) return { item_id: '' };
+  const { itemPrice, itemAccount } = config.side;
   return {
     item_id: item.id,
     description: item.description ?? item.name,
-    ...(config.priced ? { unit_price: toInputAmount(item.sales_unit_price), tax_code_id: item.tax_code_id ?? '' } : {}),
-    ...(config.accounts ? { account_id: item.income_account_id } : {}),
+    ...(config.priced ? { unit_price: toInputAmount(item[itemPrice]), tax_code_id: item.tax_code_id ?? '' } : {}),
+    ...(config.accounts ? { account_id: item[itemAccount] ?? '' } : {}),
   };
 }
 
@@ -113,9 +115,9 @@ function LineRow({ line, number, visible, config, catalogs, total, disabled, can
 }
 
 /*
-  The line grid of a trade document: Item, Account (invoices, credit notes), Description, Qty, Unit price,
-  Discount (when a discount type is set), Tax code and the server-computed line total. Delivery notes keep
-  Item, Description and Qty. Columns on md+, stacked cards on phones (the totals bar sits under the grid).
+  The line grid of a trade document: Item, Account (invoices, notes), Description, Qty, Unit price,
+  Discount (when a discount type is set), Tax code and the server-computed line total. Delivery notes and goods
+  receipts keep Item, Description and Qty. Columns on md+, stacked cards on phones (the totals bar sits under the grid).
 */
 export default function TradeLinesEditor({ config, lines, setLines, discountType, catalogs, lineTotals, disabled }) {
   const visible = [

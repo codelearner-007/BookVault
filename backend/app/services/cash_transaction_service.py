@@ -81,7 +81,7 @@ class CashTransactionService:
         self.banks = BankAccountRepository(session)
         self.coa = CoaRepository(session)
         self.posting = PostingService(session)
-        self.settlement = ReceiptSettlement(session)
+        self.settlement = ReceiptSettlement(session, direction)
         self.audit = AuditService(session)
 
     # ---------------------------------------------------------------- reads
@@ -184,7 +184,7 @@ class CashTransactionService:
         return after
 
     async def _post_settled(self, ctx: BusinessContext, document: Document, on, prepared: Prepared) -> None:
-        """Post the receipt with its AR lines split by the invoices they settle (PR-02, PR-22)."""
+        """Post with the AR (receipt) / AP (payment) lines split by the invoices they settle (PR-02, PR-22)."""
         ledger, allocations = await self.settlement.settle(ctx, document, on, prepared.lines, prepared.amounts,
                                                            prepared.ledger)
         await self.posting.post_lines(ctx, document, ledger)
@@ -209,13 +209,14 @@ class CashTransactionService:
             raise LedgerValidationError("Contact not found in this business", "counterparty_invalid")
 
     async def _check_invoices(self, business_id: str, lines: list) -> None:
-        """An invoice may be named only on a receipt's Accounts receivable line with its customer."""
+        """An invoice may be named only on a receipt's Accounts receivable line with its customer, or a
+        payment's Accounts payable line with its supplier."""
         if not any(x.invoice_id for x in lines):
             return
-        ar = await self.settlement.receivable_account(business_id)
-        if self.direction != RECEIPT or any(x.invoice_id and (x.account_id != ar or not x.party_id) for x in lines):
-            raise LedgerValidationError("Only a receipt's Accounts receivable line with a customer can name an invoice",
-                                        "invoice_not_allowed")
+        control = await self.settlement.control_account(business_id)
+        if any(x.invoice_id and (x.account_id != control or not x.party_id) for x in lines):
+            raise LedgerValidationError("Only an Accounts receivable (receipt) or Accounts payable (payment) line "
+                                        "with its party can name an invoice", "invoice_not_allowed")
 
     async def _prepare(self, business_id: str, body: CashTransactionFields, *,
                        require_postable: bool) -> Prepared:
@@ -329,13 +330,13 @@ class CashTransactionService:
                                                           "early_discount": round_money(r.early_discount, dp)})
                        for r in await self.repo.allocations(business_id, document.id)]
         status = await self.posting.status_of(document)
-        ar = await self.settlement.receivable_account(business_id)
-        receivable = sum((x.amount for x in lines if x.account_id == ar), ZERO)
-        credit = receivable - sum((a.amount for a in allocations), ZERO)
+        control = await self.settlement.control_account(business_id)
+        settling = sum((x.amount for x in lines if x.account_id == control), ZERO)
+        credit = settling - sum((a.amount for a in allocations), ZERO)
         return CashTransactionResponse(
             allocations=allocations,
             early_discount_total=round_money(sum((a.early_discount for a in allocations), ZERO), dp),
-            unallocated_credit=round_money(credit if self.direction == RECEIPT and status == POSTED else ZERO, dp),
+            unallocated_credit=round_money(credit if status == POSTED else ZERO, dp),
             id=document.id, direction=self.direction, reference=document.reference, date=document.document_date,
             status=status, version=document.version,
             is_locked=await self.posting.is_locked(document),

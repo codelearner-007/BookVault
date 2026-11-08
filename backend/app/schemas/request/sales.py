@@ -108,10 +108,11 @@ class TradeLineIn(RequestModel):
     tax_code_id: Optional[IdStr] = None
 
 
-class TradeFields(RequestModel):
+class TradeBodyFields(RequestModel):
+    """Fields of every priced trade document; the party field is added per side (B4 / B5)."""
+
     date: dt.date
     reference: OptionalCode = None
-    customer_id: IdStr
     billing_address: OptionalText = None
     description: OptionalText = None
     amounts_include_tax: bool = False
@@ -119,10 +120,14 @@ class TradeFields(RequestModel):
     lines: list[TradeLineIn] = Field(min_length=1, max_length=LIST_MAX)
 
     @model_validator(mode="after")
-    def _percentages(self) -> "TradeFields":
+    def _percentages(self) -> "TradeBodyFields":
         if self.discount_type == "percentage" and any((x.discount or 0) > 100 for x in self.lines):
             raise ValueError("A percentage discount cannot exceed 100")
         return self
+
+
+class TradeFields(TradeBodyFields):
+    customer_id: IdStr
 
 
 class QuoteFields(TradeFields):
@@ -169,12 +174,12 @@ class DeliveryNoteFields(RequestModel):
     lines: list[DeliveryLineIn] = Field(min_length=1, max_length=LIST_MAX)
 
 
-class _Create(RequestModel):
+class CreateFlags(RequestModel):
     post: bool = False
     source_document_id: Optional[IdStr] = None
 
 
-class CreateOrderRequest(TradeFields, _Create):
+class CreateOrderRequest(TradeFields, CreateFlags):
     pass
 
 
@@ -182,7 +187,7 @@ class UpdateOrderRequest(VersionedRequest, TradeFields):
     pass
 
 
-class CreateQuoteRequest(QuoteFields, _Create):
+class CreateQuoteRequest(QuoteFields, CreateFlags):
     pass
 
 
@@ -190,7 +195,7 @@ class UpdateQuoteRequest(VersionedRequest, QuoteFields):
     pass
 
 
-class CreateInvoiceRequest(InvoiceFields, _Create):
+class CreateInvoiceRequest(InvoiceFields, CreateFlags):
     pass
 
 
@@ -198,7 +203,7 @@ class UpdateInvoiceRequest(VersionedRequest, InvoiceFields):
     pass
 
 
-class CreateCreditNoteRequest(CreditNoteFields, _Create):
+class CreateCreditNoteRequest(CreditNoteFields, CreateFlags):
     pass
 
 
@@ -206,7 +211,7 @@ class UpdateCreditNoteRequest(VersionedRequest, CreditNoteFields):
     pass
 
 
-class CreateDeliveryNoteRequest(DeliveryNoteFields, _Create):
+class CreateDeliveryNoteRequest(DeliveryNoteFields, CreateFlags):
     pass
 
 

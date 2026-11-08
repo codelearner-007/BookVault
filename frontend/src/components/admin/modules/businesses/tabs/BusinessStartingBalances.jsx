@@ -15,6 +15,7 @@ import { formatMoney } from '@/lib/utils/money';
 import { MONEY_INPUT, SIDES, SIDE_SHORT, isZeroAmount, normalSide, toInputAmount } from '../coa/coa-tree';
 import { ErrorAlert } from '../ledger/ledger-parts';
 import StartingBalanceInvoices from '../sales/StartingBalanceInvoices';
+import { TRADE_SIDES } from '../sales/sales-documents';
 
 // Skeleton rows of the two sections: bank and cash accounts, then balance sheet accounts.
 const SKELETON_SECTIONS = [2, 5];
@@ -195,7 +196,8 @@ export default function BusinessStartingBalances({ business }) {
               />
             ))}
           </Section>
-          <StartingBalanceInvoices businessId={business.id} />
+          <StartingBalanceInvoices businessId={business.id} side={TRADE_SIDES.sales} />
+          <StartingBalanceInvoices businessId={business.id} side={TRADE_SIDES.purchases} />
         </div>
       )}
     </>

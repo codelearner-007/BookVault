@@ -14,20 +14,36 @@ import { DOC_TYPES, ORDER_DELIVERY_STATUS, ORDER_INVOICE_STATUS } from './sales-
 import { STICKY_KEY, StatusPill, useUrlSearch } from './sales-parts';
 
 const MONEY_COLUMNS = new Set(['total', 'balanceDue']);
+const hasReference = (config) => config.columns.some(([key]) => key === 'reference');
 
-// One list cell per column key (config.columns), with the card-layout hints used on phones.
+function OpenLink({ onOpen, children }) {
+  return (
+    <Button variant="link" className="text-inherit hover:text-link" onClick={(event) => { event.stopPropagation(); onOpen(); }}>
+      {children}
+    </Button>
+  );
+}
+
+// One list cell per column key (config.columns), with the card-layout hints used on phones. The reference
+// opens the document; types listed without a reference (debit notes, goods receipts) open from the party.
 function cell([key, label], row, config, onOpen) {
+  const open = () => onOpen(row.id);
+  const partyName = row[config.side.partyNameField];
   switch (key) {
     case 'date': return <TableCell key={key} className="num whitespace-nowrap" data-label={label}>{row.date}</TableCell>;
     case 'reference':
       return (
         <TableCell key={key} data-card="title" className={STICKY_KEY}>
-          <Button variant="link" className="text-foreground hover:text-link" onClick={(event) => { event.stopPropagation(); onOpen(row.id); }}>
-            {row.reference || config.title}
-          </Button>
+          <OpenLink onOpen={open}>{row.reference || config.title}</OpenLink>
         </TableCell>
       );
-    case 'customer': return <TableCell key={key} data-label="Customer">{row.customer_name}</TableCell>;
+    case 'party':
+      if (hasReference(config)) return <TableCell key={key} data-label={label}>{partyName}</TableCell>;
+      return (
+        <TableCell key={key} data-card="title" className={STICKY_KEY}>
+          <OpenLink onOpen={open}>{partyName || config.title}</OpenLink>
+        </TableCell>
+      );
     case 'source': return <TableCell key={key} className="text-muted-foreground" data-label={label}>{row.source_reference}</TableCell>;
     case 'invoice': return <TableCell key={key} className="text-muted-foreground" data-label={label}>{row.invoice_reference}</TableCell>;
     case 'description': return <TableCell key={key} className="max-w-md truncate text-muted-foreground" data-label="Description">{row.description}</TableCell>;
@@ -64,13 +80,14 @@ function DocumentsTable({ config, data, onOpen }) {
       <TableHeader>
         <TableRow className="hover:bg-transparent">
           {columns.map(([key, label]) => (
-            <TableHead key={key} className={cn(MONEY_COLUMNS.has(key) && 'text-end', key === 'reference' && STICKY_KEY)}>{label}</TableHead>
+            <TableHead key={key} className={cn(MONEY_COLUMNS.has(key) && 'text-end', key === (hasReference(config) ? 'reference' : 'party') && STICKY_KEY)}>{label}</TableHead>
           ))}
         </TableRow>
       </TableHeader>
       <TableBody>
         {data.items.map((row) => (
-          <TableRow key={row.id} className="cursor-pointer" onClick={() => onOpen(row.id)}>
+          // Closed purchase invoices stay listed (sorted last by the server), muted.
+          <TableRow key={row.id} className={cn('cursor-pointer', row.is_closed && 'text-muted-foreground')} onClick={() => onOpen(row.id)}>
             {columns.map((column) => cell(column, row, config, onOpen))}
           </TableRow>
         ))}

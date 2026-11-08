@@ -16,7 +16,6 @@ import BusinessDetails from './tabs/BusinessDetails';
 import BusinessChartOfAccounts from './tabs/BusinessChartOfAccounts';
 import BusinessStartingBalances from './tabs/BusinessStartingBalances';
 import BusinessBankAndCashAccounts from './tabs/BusinessBankAndCashAccounts';
-import BusinessSuppliers from './tabs/BusinessSuppliers';
 import BusinessHistory from './tabs/BusinessHistory';
 import BusinessReceipts from './tabs/BusinessReceipts';
 import BusinessPayments from './tabs/BusinessPayments';
@@ -28,6 +27,10 @@ import {
   BusinessCreditNotes, BusinessCustomers, BusinessDeliveryNotes, BusinessLatePaymentFees, BusinessSalesInvoices,
   BusinessSalesOrders, BusinessSalesQuotes,
 } from './tabs/BusinessSalesTabs';
+import {
+  BusinessDebitNotes, BusinessGoodsReceipts, BusinessPurchaseInvoices, BusinessPurchaseOrders, BusinessPurchaseQuotes,
+  BusinessSuppliers,
+} from './tabs/BusinessPurchaseTabs';
 import NonInventoryItemsPage from './sales/NonInventoryItemsPage';
 import SalesSettingsPage from './sales/SalesSettingsPage';
 import TaxCodesPage from './sales/TaxCodesPage';
@@ -45,6 +48,11 @@ const TAB_COMPONENTS = {
   'late-payment-fees': BusinessLatePaymentFees,
   'delivery-notes': BusinessDeliveryNotes,
   suppliers: BusinessSuppliers,
+  'purchase-quotes': BusinessPurchaseQuotes,
+  'purchase-orders': BusinessPurchaseOrders,
+  'purchase-invoices': BusinessPurchaseInvoices,
+  'debit-notes': BusinessDebitNotes,
+  'goods-receipts': BusinessGoodsReceipts,
   receipts: BusinessReceipts,
   payments: BusinessPayments,
   'inter-account-transfers': BusinessInterAccountTransfers,
