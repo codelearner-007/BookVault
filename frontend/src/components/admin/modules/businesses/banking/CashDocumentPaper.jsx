@@ -104,32 +104,23 @@ function LinesTable({ lines, invoiceType }) {
   );
 }
 
-function DocumentHeader({ doc, direction, businessName }) {
+// Status badges only (draft / void / pending); the page title already names the document.
+function DocumentStatus({ doc }) {
+  if (doc.status === JE_STATUS.posted && !doc.is_pending) return null;
   return (
-    <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-border pb-5">
-      <div>
-        <p className="text-sm font-medium text-muted-foreground">{businessName}</p>
-        <h2 className="mt-1 text-xl font-semibold tracking-tight text-balance">
-          {direction.title}
-          {doc.reference && <span className="ms-2 font-normal text-muted-foreground tabular-nums">{doc.reference}</span>}
-        </h2>
-      </div>
-      {(doc.status !== JE_STATUS.posted || doc.is_pending) && (
-        <div className="flex items-center gap-2">
-          {doc.status !== JE_STATUS.posted && <StatusBadge status={doc.status} />}
-          {doc.is_pending && <PendingBadge />}
-        </div>
-      )}
-    </header>
+    <div className="flex items-center gap-2 pb-2">
+      {doc.status !== JE_STATUS.posted && <StatusBadge status={doc.status} />}
+      {doc.is_pending && <PendingBadge />}
+    </div>
   );
 }
 
 // A receipt / payment laid out like the printed slip: header, meta grid, lines, total.
-export default function CashDocumentPaper({ doc, direction, businessName }) {
+export default function CashDocumentPaper({ doc, direction }) {
   return (
     <Card className="p-card">
-      <DocumentHeader doc={doc} direction={direction} businessName={businessName} />
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-5 py-6 lg:grid-cols-4 lg:gap-x-8">
+      <DocumentStatus doc={doc} />
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-5 pb-6 lg:grid-cols-4 lg:gap-x-8">
         <Field label="Date"><FormattedDate value={doc.date} className="tabular-nums" /></Field>
         <Field label={direction.bankLabel}>{doc.bank_account_name ?? NO_BANK_LABEL}</Field>
         <Field label={direction.counterpartyLabel}>{doc.counterparty && <Counterparty doc={doc} />}</Field>

@@ -31,7 +31,7 @@ export default function CashTransactionView({ business, direction, docId, rights
       voidCall={(version, key) => service.void(business.id, doc.id, version, key)}
       onChanged={reload}
     >
-      <CashDocumentPaper doc={doc} direction={direction} businessName={business.name} />
+      <CashDocumentPaper doc={doc} direction={direction} />
       <ReceiptAllocations doc={doc} side={direction.side} />
       <AttachmentsPanel businessId={business.id} documentId={doc.id} canEdit={rights.edit && !doc.is_locked} />
     </DocumentViewFrame>
