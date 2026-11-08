@@ -87,6 +87,8 @@ export const TRADE_SIDES = {
     itemAccount: 'income_account_id',
     ledgerEffect: 'revenue',
     balance: { field: 'ar_balance', total: 'total_ar_balance', label: 'Accounts receivable' },
+    // Plain sums of posted documents (list rows and the list envelope use the same keys).
+    sums: { billed: { field: 'total_invoiced', label: 'Total invoiced' }, settled: { field: 'total_received', label: 'Total received' } },
     parties: {
       list: listCustomers, get: getCustomer, create: createCustomer, update: updateCustomer, remove: deleteCustomer,
       transactions: listCustomerTransactions, openInvoices: listOpenInvoices,
@@ -109,6 +111,7 @@ export const TRADE_SIDES = {
     itemAccount: 'expense_account_id',
     ledgerEffect: 'expense',
     balance: { field: 'ap_balance', total: 'total_ap_balance', label: 'Accounts payable' },
+    sums: { billed: { field: 'total_billed', label: 'Total billed' }, settled: { field: 'total_paid', label: 'Total paid' } },
     parties: {
       list: listSuppliers, get: getSupplier, create: createSupplier, update: updateSupplier, remove: deleteSupplier,
       transactions: listSupplierTransactions, openInvoices: listSupplierOpenInvoices,

@@ -20,14 +20,16 @@ function partyColumns(side) {
     render: (party) => <RecordTitle text={party.name}>{party.is_inactive && <InactiveBadge />}</RecordTitle>,
   };
   const balance = { key: 'balance', label: side.balance.label, kind: COLUMN_KIND.money, card: 'end', value: (party) => party[side.balance.field] };
+  const sums = Object.values(side.sums).map(({ field, label }) => ({ key: field, label, kind: COLUMN_KIND.money, zero: 'muted' }));
   const status = { key: 'status', label: 'Status', render: (party) => <StatusPill statuses={PARTY_STATUS} status={party.status} /> };
   if (side.key === 'purchases') {
-    return [name, { key: 'qty_to_receive', label: 'Qty to receive', kind: COLUMN_KIND.qty }, balance, status];
+    return [name, { key: 'qty_to_receive', label: 'Qty to receive', kind: COLUMN_KIND.qty }, ...sums, balance, status];
   }
   return [
     name,
     { key: 'qty_to_deliver', label: 'Qty to deliver', kind: COLUMN_KIND.qty },
     { key: 'uninvoiced', label: 'Uninvoiced', kind: COLUMN_KIND.money, zero: 'muted' },
+    ...sums,
     balance,
     status,
     { key: 'available_credit', label: 'Available credit', kind: COLUMN_KIND.money },
@@ -72,7 +74,10 @@ export default function PartiesList({ businessId, side, page, search, active, ca
           <ListTable
             columns={columns}
             rows={items}
-            totals={{ balance: data[side.balance.total] }}
+            totals={{
+              balance: data[side.balance.total],
+              ...Object.fromEntries(Object.values(side.sums).map(({ field }) => [field, data[field]])),
+            }}
             onView={(party) => navigate({ q: search, view: party.id })}
             onEdit={canEdit ? (party) => navigate({ q: search, edit: party.id }) : null}
           />

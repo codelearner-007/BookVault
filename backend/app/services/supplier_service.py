@@ -6,6 +6,7 @@ business owes, credit when the supplier owes, paid once settled (T07). A supplie
 transactions cannot be deleted (409; make it inactive instead).
 """
 
+from datetime import date
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,9 +26,10 @@ from app.schemas.response.purchases import (
     SupplierListResponse,
     SupplierResponse,
 )
-from app.schemas.response.sales import CustomerTransaction, CustomerTransactionsResponse
+from app.schemas.response.sales import CustomerTransactionsResponse
 from app.services.access_service import BusinessContext
 from app.services.audit_service import AuditService
+from app.services.party_activity_service import PartyActivityService, PartyTotals
 from app.services.posting import PostingService
 from app.services.sales_rules import customer_status
 from app.services.trade_types import PURCHASES
@@ -44,6 +46,7 @@ class SupplierService:
         self.parties = PartyRepository(session)
         self.posting = PostingService(session)
         self.audit = AuditService(session)
+        self.activity = PartyActivityService(session)
 
     async def _supplier(self, business_id: str, supplier_id: str) -> Supplier:
         supplier = await self.repo.get(business_id, supplier_id) if is_uuid(supplier_id) else None
@@ -52,7 +55,7 @@ class SupplierService:
         return supplier
 
     @staticmethod
-    def _response(supplier: Supplier, summary, dp: int) -> SupplierResponse:
+    def _response(supplier: Supplier, summary, totals: PartyTotals | None, dp: int) -> SupplierResponse:
         ap = round_money(summary.ap_balance if summary else ZERO, dp)
         limit = supplier.credit_limit
         return SupplierResponse.model_validate({
@@ -60,6 +63,8 @@ class SupplierService:
             "ap_balance": ap,
             "available_credit": round_money(limit - ap, dp) if limit is not None else None,
             "qty_to_receive": summary.qty_to_receive if summary else ZERO,
+            "total_billed": totals.billed if totals else ZERO,
+            "total_paid": totals.settled if totals else ZERO,
             "status": customer_status(ap, bool(summary and summary.has_history)),
         })
 
@@ -67,15 +72,20 @@ class SupplierService:
         rows, total = await self.repo.list_page(business_id, search, params.offset, params.page_size)
         summaries = await self.sales.supplier_summaries(business_id)
         dp = await self.posting.decimals(business_id)
-        items = [self._response(s, summaries.get(s.id), dp) for s in rows]
+        totals = await self.activity.totals(business_id, PURCHASES, dp)
+        items = [self._response(s, summaries.get(s.id), totals.get(s.id), dp) for s in rows]
         ap_total = sum((s.ap_balance for s in summaries.values()), ZERO)
         return SupplierListResponse.build(items, total, params.page, params.page_size,
-                                          total_ap_balance=round_money(ap_total, dp))
+                                          total_ap_balance=round_money(ap_total, dp),
+                                          total_billed=round_money(sum((t.billed for t in totals.values()), ZERO), dp),
+                                          total_paid=round_money(sum((t.settled for t in totals.values()), ZERO), dp))
 
     async def get(self, business_id: str, supplier_id: str) -> SupplierResponse:
         supplier = await self._supplier(business_id, supplier_id)
         summaries = await self.sales.supplier_summaries(business_id)
-        return self._response(supplier, summaries.get(supplier.id), await self.posting.decimals(business_id))
+        dp = await self.posting.decimals(business_id)
+        totals = await self.activity.totals(business_id, PURCHASES, dp)
+        return self._response(supplier, summaries.get(supplier.id), totals.get(supplier.id), dp)
 
     async def create(self, ctx: BusinessContext, body: CreateSupplierRequest) -> SupplierResponse:
         supplier = Supplier(business_id=ctx.business_id, **body.model_dump())
@@ -102,16 +112,11 @@ class SupplierService:
         await self.repo.delete(supplier)
         await self.audit.record(ctx.user_id, "delete", ENTITY, supplier_id, ctx.business_id, before=before)
 
-    async def transactions(self, business_id: str, supplier_id: str,
-                           params: PageParams) -> CustomerTransactionsResponse:
-        """Documents that moved the supplier's Accounts payable (signed, credit positive)."""
+    async def transactions(self, business_id: str, supplier_id: str, date_from: date | None,
+                           date_to: date | None, params: PageParams) -> CustomerTransactionsResponse:
         supplier = await self._supplier(business_id, supplier_id)
-        rows, total = await self.sales.party_transactions(business_id, supplier.id, PURCHASES.control,
-                                                          params.offset, params.page_size)
-        dp = await self.posting.decimals(business_id)
-        items = [CustomerTransaction.model_validate({**r._mapping, "amount": round_money(-r.amount, dp)})
-                 for r in rows]
-        return CustomerTransactionsResponse.build(items, total, params.page, params.page_size)
+        return await self.activity.transactions(business_id, supplier.id, PURCHASES,
+                                                await self.posting.decimals(business_id), date_from, date_to, params)
 
     async def open_invoices(self, business_id: str, supplier_id: str,
                             params: PageParams) -> OpenPurchaseInvoicesResponse:

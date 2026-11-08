@@ -191,26 +191,6 @@ _SUPPLIER_SUMMARIES = text("""
     SELECT CAST(party_id AS text) AS party_id, ap_balance, has_history, qty_to_receive
     FROM public.supplier_summaries(:business_id)
 """)
-# Documents that moved one party's control account (AR for customers, AP for suppliers).
-_CUSTOMER_TX_FILTER = """
-    FROM public.journal_lines l
-    JOIN public.journal_entries e ON e.business_id = l.business_id AND e.id = l.journal_entry_id
-    JOIN public.documents d ON d.business_id = e.business_id AND d.id = e.document_id
-    JOIN public.document_types t ON t.id = d.document_type_id
-    JOIN public.coa_accounts a ON a.business_id = l.business_id AND a.id = l.account_id
-    JOIN public.system_account_types st ON st.id = a.system_account_type_id AND st.code = :control
-    WHERE l.business_id = :business_id AND l.party_id = :party_id
-    GROUP BY d.id, t.key, d.document_date, d.reference, d.description
-    HAVING sum(l.debit - l.credit) <> 0
-"""
-_CUSTOMER_TX = text(f"""
-    SELECT CAST(d.id AS text) AS document_id, t.key AS document_type, d.document_date AS date, d.reference,
-           d.description, sum(l.debit - l.credit) AS amount
-    {_CUSTOMER_TX_FILTER}
-    ORDER BY d.document_date DESC, d.id DESC
-    OFFSET :offset LIMIT :limit
-""")
-_CUSTOMER_TX_COUNT = text(f"SELECT count(*) FROM (SELECT d.id {_CUSTOMER_TX_FILTER}) x")
 
 
 class SalesRepository:
@@ -367,13 +347,6 @@ class SalesRepository:
     async def supplier_summaries(self, business_id: str) -> dict[str, Row]:
         rows = await self.session.execute(_SUPPLIER_SUMMARIES, {"business_id": business_id})
         return {r.party_id: r for r in rows}
-
-    async def party_transactions(self, business_id: str, party_id: str, control: str, offset: int,
-                                 limit: int) -> tuple[list[Row], int]:
-        args = {"business_id": business_id, "party_id": party_id, "control": control}
-        total = (await self.session.execute(_CUSTOMER_TX_COUNT, args)).scalar_one()
-        rows = (await self.session.execute(_CUSTOMER_TX, {**args, "offset": offset, "limit": limit})).all()
-        return list(rows), total
 
     async def customer_names(self, business_id: str) -> dict[str, str]:
         rows = await self.session.execute(_CUSTOMER_NAMES, {"business_id": business_id})

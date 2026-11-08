@@ -68,6 +68,21 @@ export function lineAccountsFromTree(tree, savedLines = []) {
   return accounts;
 }
 
+// Paid by / Payee names a customer (supplier): lines without an account, or on that control account for
+// another party, default to Accounts receivable (payable) for it with no invoice, so money received
+// without an invoice still moves the party's balance (a credit the next invoice absorbs).
+// Lines the user put on another account are left alone.
+export function linesForCounterparty(lines, accounts, partyAccounts, counterparty) {
+  const code = Object.keys(partyAccounts).find((key) => key !== 'capital_control' && partyAccounts[key] === counterparty.kind);
+  const control = code && accounts.find((account) => account.system_account_code === code);
+  if (!control || !counterparty.party) return lines;
+  return lines.map((line) => {
+    const onControl = line.account_id === control.id;
+    if (line.account_id && !(onControl && line.party?.id !== counterparty.party.id)) return line;
+    return { ...line, account_id: control.id, party: counterparty.party, invoice: null };
+  });
+}
+
 // Friendly text for the 422 codes of a cash transaction; other errors show the API message.
 export const CASH_ERRORS = {
   account_required: 'Choose an account on every line.',

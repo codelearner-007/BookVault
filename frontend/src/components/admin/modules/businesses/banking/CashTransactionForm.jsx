@@ -17,7 +17,7 @@ import {
   BankAccountSelect, ClearedField, FormSkeleton, useLoad, withCurrentAccount,
 } from './banking-parts';
 import {
-  BANK_CONTROL_ACCOUNT, CASH_ERRORS, COUNTERPARTY, COUNTERPARTY_OPTIONS, lineAccountsFromTree,
+  BANK_CONTROL_ACCOUNT, CASH_ERRORS, COUNTERPARTY, COUNTERPARTY_OPTIONS, lineAccountsFromTree, linesForCounterparty,
 } from './cash-directions';
 import CashLinesEditor, { emptyCashLine, isInvalidLine, optionalNumber } from './CashLinesEditor';
 import CounterpartyField from './CounterpartyField';
@@ -154,7 +154,7 @@ function useFormData(businessId, direction, docId, cloneId, invoiceId) {
   }, [businessId, direction.tab, docId, cloneId, invoiceId]);
 }
 
-function HeaderFields({ businessId, direction, form, setField, banks, bankHeadGroup, disabled }) {
+function HeaderFields({ businessId, direction, form, setField, onCounterparty, banks, bankHeadGroup, disabled }) {
   const bank = banks.find((b) => b.id === form.bankAccountId);
   return (
     <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
@@ -196,7 +196,7 @@ function HeaderFields({ businessId, direction, form, setField, banks, bankHeadGr
           businessId={businessId}
           label={direction.counterpartyLabel}
           value={form.counterparty}
-          onChange={(value) => setField('counterparty', value)}
+          onChange={onCounterparty}
           disabled={disabled}
         />
       </div>
@@ -242,6 +242,10 @@ export default function CashTransactionForm({ businessId, direction, docId, clon
   const banks = withCurrentAccount(data.data.banks, doc?.bank_account_id, doc?.bank_account_name);
   const canHavePending = banks.find((b) => b.id === form.bankAccountId)?.can_have_pending ?? false;
   const setField = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
+  const accounts = lineAccountsFromTree(data.data.tree, doc?.lines);
+  const setCounterparty = (counterparty) => setForm((prev) => ({
+    ...prev, counterparty, lines: linesForCounterparty(prev.lines, accounts, direction.partyAccounts, counterparty),
+  }));
 
   async function submit(action) {
     const { body, error: invalid } = buildBody(form, canHavePending);
@@ -272,6 +276,7 @@ export default function CashTransactionForm({ businessId, direction, docId, clon
           direction={direction}
           form={form}
           setField={setField}
+          onCounterparty={setCounterparty}
           banks={banks}
           bankHeadGroup={headGroupOf(data.data.tree, BANK_CONTROL_ACCOUNT)}
           disabled={saving}
@@ -283,7 +288,7 @@ export default function CashTransactionForm({ businessId, direction, docId, clon
           setLines={(update) => setForm((prev) => ({ ...prev, lines: update(prev.lines) }))}
           columns={form.columns}
           setColumns={(update) => setForm((prev) => ({ ...prev, columns: update(prev.columns) }))}
-          accounts={lineAccountsFromTree(data.data.tree, doc?.lines)}
+          accounts={accounts}
           partyAccounts={direction.partyAccounts}
           allocation={{ date: form.date }}
           initialTotals={doc ? { lines: doc.lines.map((l) => ({ amount: l.amount })), total: doc.total } : null}

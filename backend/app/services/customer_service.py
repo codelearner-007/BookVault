@@ -22,7 +22,6 @@ from app.schemas.request.sales import CreateCustomerRequest, UpdateCustomerReque
 from app.schemas.response.sales import (
     CustomerListResponse,
     CustomerResponse,
-    CustomerTransaction,
     CustomerTransactionsResponse,
     EarlyDiscountItem,
     EarlyDiscountListResponse,
@@ -32,8 +31,10 @@ from app.schemas.response.sales import (
 )
 from app.services.access_service import BusinessContext
 from app.services.audit_service import AuditService
+from app.services.party_activity_service import PartyActivityService, PartyTotals
 from app.services.posting import PostingService
 from app.services.sales_rules import customer_status, early_discount
+from app.services.trade_types import SALES
 from app.services.versioning import apply_versioned_update, check_version
 
 ENTITY = "Customer"
@@ -47,6 +48,7 @@ class CustomerService:
         self.parties = PartyRepository(session)
         self.posting = PostingService(session)
         self.audit = AuditService(session)
+        self.activity = PartyActivityService(session)
 
     async def _customer(self, business_id: str, customer_id: str) -> Customer:
         customer = await self.repo.get(business_id, customer_id) if is_uuid(customer_id) else None
@@ -55,7 +57,7 @@ class CustomerService:
         return customer
 
     @staticmethod
-    def _response(customer: Customer, summary, dp: int) -> CustomerResponse:
+    def _response(customer: Customer, summary, totals: PartyTotals | None, dp: int) -> CustomerResponse:
         ar = round_money(summary.ar_balance if summary else ZERO, dp)
         limit = customer.credit_limit
         return CustomerResponse.model_validate({
@@ -64,6 +66,8 @@ class CustomerService:
             "available_credit": round_money(limit - ar, dp) if limit is not None else None,
             "uninvoiced": round_money(summary.uninvoiced if summary else ZERO, dp),
             "qty_to_deliver": summary.qty_to_deliver if summary else ZERO,
+            "total_invoiced": totals.billed if totals else ZERO,
+            "total_received": totals.settled if totals else ZERO,
             "status": customer_status(ar, bool(summary and summary.has_history)),
         })
 
@@ -71,15 +75,20 @@ class CustomerService:
         rows, total = await self.repo.list_page(business_id, search, params.offset, params.page_size)
         summaries = await self.sales.customer_summaries(business_id)
         dp = await self.posting.decimals(business_id)
-        items = [self._response(c, summaries.get(c.id), dp) for c in rows]
+        totals = await self.activity.totals(business_id, SALES, dp)
+        items = [self._response(c, summaries.get(c.id), totals.get(c.id), dp) for c in rows]
         ar_total = sum((s.ar_balance for s in summaries.values()), ZERO)
         return CustomerListResponse.build(items, total, params.page, params.page_size,
-                                          total_ar_balance=round_money(ar_total, dp))
+                                          total_ar_balance=round_money(ar_total, dp),
+                                          total_invoiced=round_money(sum((t.billed for t in totals.values()), ZERO), dp),
+                                          total_received=round_money(sum((t.settled for t in totals.values()), ZERO), dp))
 
     async def get(self, business_id: str, customer_id: str) -> CustomerResponse:
         customer = await self._customer(business_id, customer_id)
         summaries = await self.sales.customer_summaries(business_id)
-        return self._response(customer, summaries.get(customer.id), await self.posting.decimals(business_id))
+        dp = await self.posting.decimals(business_id)
+        totals = await self.activity.totals(business_id, SALES, dp)
+        return self._response(customer, summaries.get(customer.id), totals.get(customer.id), dp)
 
     async def create(self, ctx: BusinessContext, body: CreateCustomerRequest) -> CustomerResponse:
         customer = Customer(business_id=ctx.business_id, **body.model_dump())
@@ -106,15 +115,11 @@ class CustomerService:
         await self.repo.delete(customer)
         await self.audit.record(ctx.user_id, "delete", ENTITY, customer_id, ctx.business_id, before=before)
 
-    async def transactions(self, business_id: str, customer_id: str,
-                           params: PageParams) -> CustomerTransactionsResponse:
+    async def transactions(self, business_id: str, customer_id: str, date_from: date | None,
+                           date_to: date | None, params: PageParams) -> CustomerTransactionsResponse:
         customer = await self._customer(business_id, customer_id)
-        rows, total = await self.sales.party_transactions(business_id, customer.id, "accounts_receivable", params.offset,
-                                                             params.page_size)
-        dp = await self.posting.decimals(business_id)
-        items = [CustomerTransaction.model_validate({**r._mapping, "amount": round_money(r.amount, dp)})
-                 for r in rows]
-        return CustomerTransactionsResponse.build(items, total, params.page, params.page_size)
+        return await self.activity.transactions(business_id, customer.id, SALES,
+                                                await self.posting.decimals(business_id), date_from, date_to, params)
 
     async def open_invoices(self, business_id: str, customer_id: str, on: date,
                             params: PageParams) -> OpenInvoicesResponse:

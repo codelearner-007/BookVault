@@ -58,12 +58,14 @@ async def get_customer(
 @router.get("/{contact_id}/transactions", response_model=CustomerTransactionsResponse)
 async def list_customer_transactions(
     contact_id: str,
+    date_from: Optional[dt.date] = Query(None),
+    date_to: Optional[dt.date] = Query(None),
     params: PageParams = Depends(page_params),
     ctx: BusinessContext = Depends(view),
     db: AsyncSession = Depends(get_db, scope="function"),
 ) -> CustomerTransactionsResponse:
-    """Documents that moved the customer's Accounts receivable (signed amount)."""
-    return await CustomerService(db).transactions(ctx.business_id, contact_id, params)
+    """Every posted document with the customer: money in / out and the running AR balance."""
+    return await CustomerService(db).transactions(ctx.business_id, contact_id, date_from, date_to, params)
 
 
 @router.get("/{contact_id}/open-invoices", response_model=OpenInvoicesResponse)

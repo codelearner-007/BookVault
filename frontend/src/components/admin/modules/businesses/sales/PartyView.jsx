@@ -6,9 +6,10 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DateRangePicker } from '@/components/common/date-range-picker';
 import { COLUMN_KIND, ListTable } from '@/components/common/list-table';
 import { Money } from '@/components/common/money';
-import { EmptyState, ListCard, MoreMenu, PageHeader } from '@/components/common/page';
+import { EmptyState, ListCard, ListToolbar, MoreMenu, PageHeader } from '@/components/common/page';
 import { ConfirmDialog, ListPagination } from '@/components/super-admin/platform-parts';
 import { BackButton, ErrorAlert, useTabNavigate } from '../ledger/ledger-parts';
 import {
@@ -20,13 +21,24 @@ import { Field, StatusPill } from './sales-parts';
 const CONTACT_IN_USE = 'contact_in_use';
 const SKELETON_ROWS = 3;
 
+// A negative balance is money the party paid ahead (customer credit) or we paid ahead (supplier advance).
+function creditNote(side) {
+  return side.key === TRADE_SIDES.sales.key ? 'in credit (paid in advance)' : 'advance paid to supplier';
+}
+
 // Customers add Uninvoiced, the default due date and the delivery address; suppliers keep one address.
 function Details({ side, party }) {
   const isCustomer = side === TRADE_SIDES.sales;
   return (
     <Card className="p-card">
       <dl className="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label={side.balance.label}><Money value={party[side.balance.field]} tone="balance" /></Field>
+        <Field label={side.balance.label}>
+          <Money value={party[side.balance.field]} tone="balance" />
+          {Number(party[side.balance.field]) < 0 && <span className="ms-2 text-sm text-muted-foreground">{creditNote(side)}</span>}
+        </Field>
+        {Object.values(side.sums).map(({ field, label }) => (
+          <Field key={field} label={label}><Money value={party[field]} zero="muted" /></Field>
+        ))}
         <Field label="Available credit"><Money value={party.available_credit} /></Field>
         {isCustomer && <Field label="Uninvoiced"><Money value={party.uninvoiced} zero="muted" /></Field>}
         <Field label="Status"><StatusPill statuses={PARTY_STATUS} status={party.status} /></Field>
@@ -41,34 +53,49 @@ function Details({ side, party }) {
   );
 }
 
+const EMPTY = '—';
 const TRANSACTION_COLUMNS = [
   { key: 'date', label: 'Date', kind: COLUMN_KIND.date },
-  {
-    key: 'transaction',
-    label: 'Transaction',
-    card: 'title',
-    value: (row) => [DOCUMENT_TYPE_LABELS[row.document_type] ?? row.document_type, row.reference].filter(Boolean).join(' '),
-  },
+  { key: 'type', label: 'Type', muted: true, value: (row) => DOCUMENT_TYPE_LABELS[row.document_type] ?? row.document_type },
+  { key: 'reference', label: 'Reference', card: 'title', value: (row) => row.reference || EMPTY },
   { key: 'description', label: 'Description', muted: true, truncate: true },
-  { key: 'amount', label: 'Amount', kind: COLUMN_KIND.money, card: 'end' },
+  { key: 'amount_in', label: 'Amount in', kind: COLUMN_KIND.money, tone: 'in', zero: 'blank', card: 'end' },
+  { key: 'amount_out', label: 'Amount out', kind: COLUMN_KIND.money, tone: 'out', zero: 'blank', card: 'end' },
+  { key: 'balance', label: 'Balance', kind: COLUMN_KIND.money, tone: 'balance' },
 ];
 
-// Documents that moved the party's balance (signed effect on the receivable / payable).
-function Transactions({ businessId, side, partyId, page, onPage }) {
+// URL params of the transactions state (?from=&to=&p=), so the period and page survive a reload.
+function transactionParams({ range, page }) {
+  return { from: range?.from ?? null, to: range?.to ?? null, p: page > 1 ? page : null };
+}
+
+// Every posted document with the party, newest first; Balance is the AR / AP balance after each one.
+function Transactions({ businessId, side, partyId, page, range, onChange }) {
   const router = useRouter();
   const canEdit = useDocumentEditRight();
-  const { data, error } = useLoad(() => side.parties.transactions(businessId, partyId, page), [businessId, side.key, partyId, page]);
+  const { data, error } = useLoad(
+    () => side.parties.transactions(businessId, partyId, page, range),
+    [businessId, side.key, partyId, page, range.from, range.to],
+  );
   return (
     <section aria-labelledby="party-transactions" className="mt-10">
-      <h2 id="party-transactions" className="mb-3 text-md font-semibold">Transactions</h2>
+      <ListToolbar>
+        <h2 id="party-transactions" className="me-auto text-md font-semibold">Transactions</h2>
+        <DateRangePicker
+          id="party-transactions-range"
+          value={range}
+          onChange={(next) => onChange({ range: next, page: 1 })}
+          className="md:w-72"
+        />
+      </ListToolbar>
       {error && <ErrorAlert>{error}</ErrorAlert>}
-      <ListCard footer={data?.total > 0 && <ListPagination page={page} totalPages={Math.max(1, data.total_pages)} total={data.total} onPage={onPage} />}>
+      <ListCard footer={data?.total > 0 && <ListPagination page={page} totalPages={Math.max(1, data.total_pages)} total={data.total} onPage={(next) => onChange({ range, page: next })} />}>
         {!data && !error && (
           <div aria-busy="true">
             {Array.from({ length: SKELETON_ROWS }, (_, i) => <Skeleton key={i} className="mt-1 h-row w-full rounded-control" />)}
           </div>
         )}
-        {data && data.items.length === 0 && <EmptyState title="No transactions yet" />}
+        {data && data.items.length === 0 && <EmptyState title={range.from || range.to ? 'No transactions in this period' : 'No transactions yet'} />}
         {data?.items.length > 0 && (
           <ListTable
             columns={TRANSACTION_COLUMNS}
@@ -84,8 +111,8 @@ function Transactions({ businessId, side, partyId, page, onPage }) {
   );
 }
 
-// ?tab=customers|suppliers&view=<id>[&p=N]: details, balance, available credit and transactions.
-export default function PartyView({ businessId, side, partyId, page, rights }) {
+// ?tab=customers|suppliers&view=<id>[&from=&to=&p=N]: details, balance, totals and transactions.
+export default function PartyView({ businessId, side, partyId, page, range, rights }) {
   const navigate = useTabNavigate(side.tab);
   const { data: party, error, reload } = useLoad(() => side.parties.get(businessId, partyId), [businessId, side.key, partyId]);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -139,7 +166,14 @@ export default function PartyView({ businessId, side, partyId, page, rights }) {
       />
       {actionError && <ErrorAlert>{actionError}</ErrorAlert>}
       <Details side={side} party={party} />
-      <Transactions businessId={businessId} side={side} partyId={party.id} page={page} onPage={(next) => navigate({ view: party.id, p: next > 1 ? next : null })} />
+      <Transactions
+        businessId={businessId}
+        side={side}
+        partyId={party.id}
+        page={page}
+        range={range}
+        onChange={(next) => navigate({ view: party.id, ...transactionParams(next) })}
+      />
     </div>
   );
 }

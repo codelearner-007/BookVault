@@ -26,9 +26,11 @@ export async function deleteSupplier(businessId, supplierId, version) {
   return apiClient.delete(`${base(businessId)}/${supplierId}?version=${version}`);
 }
 
-// Documents that moved the supplier's payable; amount is the signed effect on it (credit positive).
-export async function listSupplierTransactions(businessId, supplierId, page = 1) {
-  return apiClient.get(`${base(businessId)}/${supplierId}/transactions?${queryString({ page, page_size: PAGE_SIZE_DEFAULT })}`);
+// Every posted document with the supplier, newest first: amount_in / amount_out and the running balance
+// (AR / AP) after it; range = { from, to } ISO dates, either may be null.
+export async function listSupplierTransactions(businessId, supplierId, page = 1, range = {}) {
+  const query = queryString({ page, page_size: PAGE_SIZE_DEFAULT, date_from: range.from, date_to: range.to });
+  return apiClient.get(`${base(businessId)}/${supplierId}/transactions?${query}`);
 }
 
 // Open purchase invoices, oldest first (closed invoices left out). Not dated: the API has no as_of here.

@@ -25,6 +25,8 @@ class CustomerResponse(BaseModel):
     available_credit: MoneyOut | None
     uninvoiced: MoneyOut
     qty_to_deliver: MoneyOut
+    total_invoiced: MoneyOut  # posted sales invoices - credit notes
+    total_received: MoneyOut  # posted receipts from the customer, any line account
     status: str | None
     version: int
     created_at: datetime
@@ -33,6 +35,8 @@ class CustomerResponse(BaseModel):
 
 class CustomerListResponse(PaginatedResponse[CustomerResponse]):
     total_ar_balance: MoneyOut
+    total_invoiced: MoneyOut
+    total_received: MoneyOut
 
 
 class CustomerTransaction(BaseModel):
@@ -41,7 +45,9 @@ class CustomerTransaction(BaseModel):
     date: date
     reference: str | None
     description: str | None
-    amount: MoneyOut
+    amount_in: MoneyOut
+    amount_out: MoneyOut
+    balance: MoneyOut  # AR (customers) / AP (suppliers, credit positive) after the document
 
 
 class CustomerTransactionsResponse(PaginatedResponse[CustomerTransaction]):

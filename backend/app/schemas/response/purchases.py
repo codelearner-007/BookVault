@@ -26,6 +26,8 @@ class SupplierResponse(BaseModel):
     ap_balance: MoneyOut  # credit-positive: what the business owes the supplier
     available_credit: MoneyOut | None
     qty_to_receive: MoneyOut
+    total_billed: MoneyOut  # posted purchase invoices - debit notes
+    total_paid: MoneyOut  # posted payments to the supplier, any line account
     status: str | None
     version: int
     created_at: datetime
@@ -34,6 +36,8 @@ class SupplierResponse(BaseModel):
 
 class SupplierListResponse(PaginatedResponse[SupplierResponse]):
     total_ap_balance: MoneyOut
+    total_billed: MoneyOut
+    total_paid: MoneyOut
 
 
 class OpenPurchaseInvoice(BaseModel):

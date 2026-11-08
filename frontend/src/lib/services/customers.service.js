@@ -26,9 +26,11 @@ export async function deleteCustomer(businessId, customerId, version) {
   return apiClient.delete(`${base(businessId)}/${customerId}?version=${version}`);
 }
 
-// Documents that moved the customer's receivable; amount is the signed effect on it.
-export async function listCustomerTransactions(businessId, customerId, page = 1) {
-  return apiClient.get(`${base(businessId)}/${customerId}/transactions?${queryString({ page, page_size: PAGE_SIZE_DEFAULT })}`);
+// Every posted document with the customer, newest first: amount_in / amount_out and the running balance
+// (AR / AP) after it; range = { from, to } ISO dates, either may be null.
+export async function listCustomerTransactions(businessId, customerId, page = 1, range = {}) {
+  const query = queryString({ page, page_size: PAGE_SIZE_DEFAULT, date_from: range.from, date_to: range.to });
+  return apiClient.get(`${base(businessId)}/${customerId}/transactions?${query}`);
 }
 
 // Open invoices as at a date, oldest first, with any early payment discount still available.

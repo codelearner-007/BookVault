@@ -1,5 +1,6 @@
 """Suppliers endpoints (B5: AP balance, credit, transactions, open purchase invoices)."""
 
+import datetime as dt
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, status
@@ -53,12 +54,14 @@ async def get_supplier(
 @router.get("/{contact_id}/transactions", response_model=CustomerTransactionsResponse)
 async def list_supplier_transactions(
     contact_id: str,
+    date_from: Optional[dt.date] = Query(None),
+    date_to: Optional[dt.date] = Query(None),
     params: PageParams = Depends(page_params),
     ctx: BusinessContext = Depends(view),
     db: AsyncSession = Depends(get_db, scope="function"),
 ) -> CustomerTransactionsResponse:
-    """Documents that moved the supplier's Accounts payable (signed, credit positive)."""
-    return await SupplierService(db).transactions(ctx.business_id, contact_id, params)
+    """Every posted document with the supplier: money in / out and the running AP balance."""
+    return await SupplierService(db).transactions(ctx.business_id, contact_id, date_from, date_to, params)
 
 
 @router.get("/{contact_id}/open-invoices", response_model=OpenPurchaseInvoicesResponse)
