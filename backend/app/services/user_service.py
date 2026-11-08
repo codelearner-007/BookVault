@@ -49,6 +49,9 @@ class UserService:
         state = await self.user_repo.my_account_state()
         return bool(state and state[1])
 
+    async def get_verified_email(self, user_id: str) -> str | None:
+        return await self.user_repo.get_verified_email(user_id)
+
     async def get_access_summary(self, user_id: str) -> UserAccessSummaryResponse:
         """Live platform role and owned-business count of a user (CS-04, CS-10)."""
         return UserAccessSummaryResponse(

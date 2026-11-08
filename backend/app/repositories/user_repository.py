@@ -40,6 +40,16 @@ class UserRepository:
         ).first()
         return (bool(row[0]), bool(row[1])) if row else None
 
+    async def get_verified_email(self, user_id: str) -> str | None:
+        """The account's email if it is confirmed, else None."""
+        return (
+            await self.session.execute(
+                text("SELECT email FROM private.accounts"
+                     " WHERE id = CAST(:u AS uuid) AND email_confirmed_at IS NOT NULL"),
+                {"u": user_id},
+            )
+        ).scalar_one_or_none()
+
     async def get_stats(self) -> Dict[str, int]:
         result = await self.session.execute(
             text("""

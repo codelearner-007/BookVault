@@ -77,6 +77,8 @@ App-side values that go with them (Next.js and FastAPI env, not GoTrue):
 | `AUTH_RATE_LIMIT_<ACTION>_PER_IP` / `_PER_ACCOUNT`, `AUTH_RATE_LIMIT_WINDOW_SECONDS` | frontend | Next.js limits (in memory, one process: put a shared store behind several instances) |
 | `REAUTH_MAX_AGE_SECONDS` | frontend + backend | Recent sign-in for 2FA enroll, recovery codes, purge |
 | `MFA_RECOVERY_CODE_COUNT`, `MFA_RECOVERY_ACCOUNT_RATE_LIMIT` | backend | Recovery codes (D-23) |
+| `MFA_RECOVERY_CODES_EMAIL` | backend | Emails a copy of new recovery codes to the verified address. **Must stay `false` in production** (emailing codes weakens 2FA: the inbox becomes a second factor) unless the owner deliberately enables it. `true` only in local dev (`.env.example`) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_TLS` (`none`/`starttls`/`ssl`) | backend | Mail sent by the API (`app/services/mail_service.py`). Locally Mailpit `127.0.0.1:55345`, no auth, `none` |
 | `AUTH_AUDIT_INGEST_INTERVAL_SECONDS`, `AUTH_AUDIT_INGEST_BATCH` | backend | GoTrue audit ingest job |
 | `BOOTSTRAP_SUPER_ADMIN_EMAIL` | backend | D-29; unset means nobody becomes super admin by signing up |
 

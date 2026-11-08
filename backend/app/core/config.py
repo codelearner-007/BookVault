@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import List
+from typing import List, Literal
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -72,6 +72,18 @@ class Settings(BaseSettings):
     MFA_RECOVERY_CODE_COUNT: int = 10
     MFA_RECOVERY_ACCOUNT_RATE_LIMIT: str = "5 per 15 minutes"
     MFA_RECOVERY_CODES_GENERATE_RATE_LIMIT: str = "10/hour"
+    # Email a copy of new recovery codes to the user's verified address. Dev aid only:
+    # keep false in production (emailing codes weakens 2FA), see docs/runbooks/auth-config.md.
+    MFA_RECOVERY_CODES_EMAIL: bool = False
+
+    # Outgoing mail (app/services/mail_service.py). Defaults = local Mailpit, no auth.
+    SMTP_HOST: str = "127.0.0.1"
+    SMTP_PORT: int = 55345
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_FROM: str = "BookVault <no-reply@bookvault.local>"
+    SMTP_TLS: Literal["none", "starttls", "ssl"] = "none"
+    SMTP_TIMEOUT_SECONDS: int = 10
     AUTH_EVENT_RATE_LIMIT: str = "30/minute"
 
     # GoTrue audit ingest into audit_logs (B0.7, H1); interval 0 turns the job off
