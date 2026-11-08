@@ -10,12 +10,13 @@ from sqlalchemy import text
 from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Sub-ledger columns of a line (alias l): bank or cash account, party, invoice and tax code (B4).
+# Sub-ledger columns of a line (alias l): bank or cash account, party, invoice, tax code (B4), item (B6).
 _DIMENSIONS = """
            CAST(l.bank_account_id AS text) AS bank_account_id, ba.name AS bank_account_name,
            CAST(l.party_id AS text) AS party_id, COALESCE(cu.name, su.name, ca.name) AS party_name,
            CAST(l.invoice_document_id AS text) AS invoice_document_id, inv.reference AS invoice_reference,
-           CAST(l.tax_code_id AS text) AS tax_code_id, tc.name AS tax_code_name
+           CAST(l.tax_code_id AS text) AS tax_code_id, tc.name AS tax_code_name,
+           CAST(l.item_id AS text) AS item_id, it.name AS item_name
 """
 _DIMENSION_JOINS = """
     LEFT JOIN public.bank_accounts ba ON ba.business_id = l.business_id AND ba.id = l.bank_account_id
@@ -24,6 +25,7 @@ _DIMENSION_JOINS = """
     LEFT JOIN public.capital_accounts ca ON ca.business_id = l.business_id AND ca.party_id = l.party_id
     LEFT JOIN public.documents inv ON inv.business_id = l.business_id AND inv.id = l.invoice_document_id
     LEFT JOIN public.tax_codes tc ON tc.business_id = l.business_id AND tc.id = l.tax_code_id
+    LEFT JOIN public.items it ON it.business_id = l.business_id AND it.id = l.item_id
 """
 
 _JE_LIST = text("""

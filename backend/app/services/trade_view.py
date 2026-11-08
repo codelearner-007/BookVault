@@ -134,6 +134,7 @@ class TradeView:
             billing_address=extension.billing_address, delivery_address=extension.delivery_address,
             description=document.description, amounts_include_tax=extension.amounts_include_tax,
             discount_type=extension.discount_type_key, acts_as_stock_movement=extension.acts_as_stock_movement,
+            location_id=extension.location_id,
             lines=lines, subtotal=round_money(detail.subtotal, dp), tax_total=round_money(detail.tax_total, dp),
             rounding=round_money(detail.rounding, dp), total=round_money(detail.total, dp),
             tax_breakdown=tax_breakdown(rows, dp), links=self._links(links, document.id),

@@ -25,6 +25,8 @@ class LedgerLineResponse(BaseModel):
     invoice_reference: str | None = None
     tax_code_id: str | None = None
     tax_code_name: str | None = None
+    item_id: str | None = None
+    item_name: str | None = None
 
 
 class JournalEntryLineResponse(LedgerLineResponse):

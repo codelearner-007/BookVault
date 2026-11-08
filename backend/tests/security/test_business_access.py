@@ -133,6 +133,29 @@ for _path, _area, _id in (("bank-accounts", "bank_cash_accounts", "bank_account_
         f"DELETE /{_path}/{{{_id}}}": [(_area, D)],
     })
 
+# B6: inventory items, kits, locations, stock documents, cost corrections, inventory starting balances
+for _path, _area, _id in (("inventory-items", "inventory_items", "item_id"),
+                          ("inventory-kits", "inventory_kits", "item_id"),
+                          ("inventory-locations", "inventory_locations", "location_id")):
+    ROUTE_MAP.update({
+        f"GET /{_path}": [(_area, V)], f"POST /{_path}": [(_area, C)],
+        f"GET /{_path}/{{{_id}}}": [(_area, V)], f"PUT /{_path}/{{{_id}}}": [(_area, E)],
+        f"DELETE /{_path}/{{{_id}}}": [(_area, D)],
+    })
+for _path, _area in (("inventory-transfers", "inventory_transfers"), ("inventory-write-offs", "inventory_write_offs"),
+                     ("production-orders", "production_orders")):
+    ROUTE_MAP.update({
+        f"GET /{_path}": [(_area, V)], f"POST /{_path}": [(_area, C)],
+        f"GET /{_path}/{{document_id}}": [(_area, V)], f"PUT /{_path}/{{document_id}}": [(_area, E)],
+        f"POST /{_path}/{{document_id}}/post": [(_area, E)], f"POST /{_path}/{{document_id}}/void": [(_area, D)],
+    })
+ROUTE_MAP.update({
+    "GET /inventory-items/{item_id}/movements": [("inventory_items", V)],
+    "GET /inventory/cost-corrections": [("inventory_items", V)],
+    "GET /starting-balances/inventory-items": [("settings.starting_balances", V)],
+    "PUT /starting-balances/inventory-items/{item_id}": [("settings.starting_balances", E)],
+})
+
 ROUTES = business_routes()
 PAIR_CASES = [
     (route, pair) for route in ROUTES if guard_kind(route.route) == "pairs"

@@ -36,5 +36,5 @@ def fixtures_of_kind(kind: str) -> list[dict]:
 
 
 def bookvault_setup_records(records: list[dict]) -> list[dict]:
-    """Setup records the BookVault runner applies: `manager_only` ones are skipped."""
-    return [r for r in records if not r.get("manager_only", False)]
+    """Setup records the BookVault runner applies: `manager_only` ones are skipped (runner.dated_records)."""
+    return [r for r in records if not r.get("manager_only", False) and r.get("applies_to") != "manager_only"]

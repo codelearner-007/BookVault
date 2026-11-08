@@ -31,6 +31,11 @@ import {
   BusinessDebitNotes, BusinessGoodsReceipts, BusinessPurchaseInvoices, BusinessPurchaseOrders, BusinessPurchaseQuotes,
   BusinessSuppliers,
 } from './tabs/BusinessPurchaseTabs';
+import {
+  BusinessInventoryItems, BusinessInventoryTransfers, BusinessInventoryWriteOffs, BusinessProductionOrders,
+} from './tabs/BusinessInventoryTabs';
+import InventoryKitsPage from './inventory/InventoryKitsPage';
+import InventoryLocationsPage from './inventory/InventoryLocationsPage';
 import NonInventoryItemsPage from './sales/NonInventoryItemsPage';
 import SalesSettingsPage from './sales/SalesSettingsPage';
 import TaxCodesPage from './sales/TaxCodesPage';
@@ -53,6 +58,10 @@ const TAB_COMPONENTS = {
   'purchase-invoices': BusinessPurchaseInvoices,
   'debit-notes': BusinessDebitNotes,
   'goods-receipts': BusinessGoodsReceipts,
+  'inventory-items': BusinessInventoryItems,
+  'inventory-transfers': BusinessInventoryTransfers,
+  'inventory-write-offs': BusinessInventoryWriteOffs,
+  'production-orders': BusinessProductionOrders,
   receipts: BusinessReceipts,
   payments: BusinessPayments,
   'inter-account-transfers': BusinessInterAccountTransfers,
@@ -70,6 +79,8 @@ const SETTINGS_PAGE_COMPONENTS = {
   'starting-balances': BusinessStartingBalances,
   'tax-codes': TaxCodesPage,
   'non-inventory-items': NonInventoryItemsPage,
+  'inventory-locations': InventoryLocationsPage,
+  'inventory-kits': InventoryKitsPage,
   sales: SalesSettingsPage,
 };
 

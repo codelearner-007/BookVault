@@ -33,13 +33,13 @@ from app.repositories.ledger_repository import LedgerRepository
 from app.services.access_service import BusinessContext
 
 DRAFT, POSTED, VOID = "draft", "posted", "void"
-SOURCE_DOCUMENT, SOURCE_REVERSAL, SOURCE_OPENING = "document", "reversal", "opening"
+SOURCE_DOCUMENT, SOURCE_REVERSAL, SOURCE_OPENING, SOURCE_COGS = "document", "reversal", "opening", "cogs"
 OPENING_BALANCE = "opening_balance"
 MIN_POSTED_LINES = 2
 
 # Sub-ledger kinds (system_account_types.subledger_kind) and the party kind each control account
 # takes; control accounts of later phases (assets: B9, employees: B10, ...) are not postable yet.
-SUBLEDGER_NONE, SUBLEDGER_BANK, SUBLEDGER_PARTY = "none", "bank_account", "party"
+SUBLEDGER_NONE, SUBLEDGER_BANK, SUBLEDGER_PARTY, SUBLEDGER_ITEM = "none", "bank_account", "party", "item"
 PARTY_KIND_OF_CONTROL = {"capital_control": "capital_account", "accounts_receivable": "customer",
                          "accounts_payable": "supplier"}
 
@@ -150,6 +150,9 @@ class PostingService:
         if banks and await self.repo.live_bank_account_ids(business_id, banks) != banks:
             raise _invalid("Bank or cash account not found in this business", "bank_account_required")
         parties = await self.repo.party_kinds(business_id, {x.party_id for x in lines if x.party_id})
+        stocked = {x.item_id for x in lines if x.item_id and kinds[x.account_id][1] == SUBLEDGER_ITEM}
+        if stocked and await self.repo.inventory_item_ids(business_id, stocked) != stocked:
+            raise _invalid("Inventory on hand lines need an inventory item of this business", "item_required")
         for line in lines:
             self._check_line_dimensions(line, *kinds[line.account_id], parties)
 
@@ -163,6 +166,12 @@ class PostingService:
             return
         if line.bank_account_id:
             raise _invalid("Only Cash & cash equivalents lines take a bank or cash account", "bank_account_not_allowed")
+        if subledger == SUBLEDGER_ITEM:
+            if not line.item_id:
+                raise _invalid("An Inventory on hand line needs its inventory item", "item_required")
+            if line.party_id:
+                raise _invalid("This account takes no party", "party_not_allowed")
+            return
         if subledger == SUBLEDGER_NONE:
             if line.party_id:
                 raise _invalid("This account takes no party", "party_not_allowed")
@@ -315,11 +324,13 @@ class PostingService:
             for x in lines
         ])
 
-    async def post_lines(self, ctx: BusinessContext, document: Document, lines: list[LineInput]) -> JournalEntry:
-        """Post computed lines of a typed document (receipt, invoice, transfer, ...) as one entry."""
+    async def post_lines(self, ctx: BusinessContext, document: Document, lines: list[LineInput],
+                         source: str = SOURCE_DOCUMENT) -> JournalEntry:
+        """Post computed lines of a typed document (receipt, invoice, transfer, ...) as one entry; a sales
+        document's cost of sales is its own entry (source cogs, BV-01)."""
         self._assert_balanced(lines)
         await self.assert_lines(ctx.business_id, lines)
-        return await self._add_entry(ctx, document, SOURCE_DOCUMENT, [
+        return await self._add_entry(ctx, document, source, [
             JournalLine(
                 business_id=ctx.business_id, line_no=no, account_id=x.account_id, debit=x.debit,
                 credit=x.credit, description=x.description, **x.dimensions(),
@@ -327,9 +338,9 @@ class PostingService:
             for no, x in enumerate(lines, start=1)
         ])
 
-    async def live_lines(self, document: Document) -> list[LineInput]:
+    async def live_lines(self, document: Document, *, cogs: bool = False) -> list[LineInput]:
         """The lines of the document's current posting (empty for drafts and void documents)."""
-        entry = await self.repo.live_entry(document.business_id, document.id)
+        entry = await self.repo.live_entry(document.business_id, document.id, cogs=cogs)
         if entry is None:
             return []
         return [
@@ -359,19 +370,20 @@ class PostingService:
         ])
         return reversal
 
-    async def reverse_live_entry(self, ctx: BusinessContext, document: Document) -> JournalEntry | None:
-        entry = await self.repo.live_entry(ctx.business_id, document.id)
+    async def reverse_live_entry(self, ctx: BusinessContext, document: Document, *,
+                                 cogs: bool = False) -> JournalEntry | None:
+        entry = await self.repo.live_entry(ctx.business_id, document.id, cogs=cogs)
         return await self.reverse(ctx, entry) if entry else None
 
     async def link_opening_balance(self, ctx: BusinessContext, document: Document, kind_key: str,
                                    account_id: str | None = None, bank_account_id: str | None = None,
                                    invoice_document_id: str | None = None,
-                                   paid_before_start: Decimal | None = None) -> None:
+                                   paid_before_start: Decimal | None = None, item_id: str | None = None) -> None:
         """Name the opening document's source record (one live row per record, DB trigger)."""
         await self.repo.add_opening_balance(OpeningBalance(
             document_id=document.id, business_id=ctx.business_id, kind_key=kind_key,
             account_id=account_id, bank_account_id=bank_account_id,
-            invoice_document_id=invoice_document_id, paid_before_start=paid_before_start,
+            invoice_document_id=invoice_document_id, paid_before_start=paid_before_start, item_id=item_id,
         ))
 
     # ---------------------------------------------------------------- allocations and links
@@ -385,6 +397,19 @@ class PostingService:
                               early_discount=a.early_discount)
             for a in allocations if a.amount > 0
         ])
+
+    async def apply_credits(self, ctx: BusinessContext, invoice: Document,
+                            credits: list[tuple[str, Decimal]]) -> None:
+        """A party's unapplied credit (settling document, amount) absorbed by a new invoice (PR-03, T58)."""
+        await self.repo.add_allocations([
+            PaymentAllocation(business_id=ctx.business_id, settling_document_id=settling_id,
+                              invoice_document_id=invoice.id, amount=amount)
+            for settling_id, amount in credits if amount > 0
+        ])
+
+    async def release_credits(self, ctx: BusinessContext, invoice: Document, settling_ids: list[str]) -> None:
+        """Undo credit applications to an invoice (its void or repost); the credit is free again."""
+        await self.repo.delete_invoice_allocations(ctx.business_id, invoice.id, settling_ids)
 
     async def allocations_of(self, document: Document) -> list[PaymentAllocation]:
         return await self.repo.allocations(document.business_id, document.id)
@@ -409,5 +434,6 @@ class PostingService:
         """Posted: reversal + status void; what it settled is released. Draft: status void only."""
         await self.assert_open(ctx.business_id, document.document_date)
         await self.reverse_live_entry(ctx, document)
+        await self.reverse_live_entry(ctx, document, cogs=True)
         await self.repo.delete_allocations(ctx.business_id, document.id)
         await self.set_status(ctx, document, VOID)

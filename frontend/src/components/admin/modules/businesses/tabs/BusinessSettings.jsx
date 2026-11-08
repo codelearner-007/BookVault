@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Building2, BookOpen, ChevronRight, Package, Percent, Receipt, Scale, UserCog } from 'lucide-react';
+import { Building2, BookOpen, ChevronRight, Combine, MapPin, Package, Percent, Receipt, Scale, UserCog } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/common/page';
 import { useBusinessWorkspace } from '@/components/shell/ShellContext';
@@ -27,7 +27,7 @@ const SETTING_PAGES = [
     key: 'starting-balances',
     href: '?tab=settings&page=starting-balances',
     label: 'Starting Balances',
-    description: 'Opening balances of balance sheet accounts and unpaid sales invoices.',
+    description: 'Opening balances of accounts, unpaid invoices and inventory on hand.',
     icon: Scale,
   },
   {
@@ -43,6 +43,20 @@ const SETTING_PAGES = [
     label: 'Non-inventory Items',
     description: 'Services and goods that fill sales lines.',
     icon: Package,
+  },
+  {
+    key: 'inventory-kits',
+    href: '?tab=settings&page=inventory-kits',
+    label: 'Inventory Kits',
+    description: 'Inventory items sold together as one line.',
+    icon: Combine,
+  },
+  {
+    key: 'inventory-locations',
+    href: '?tab=settings&page=inventory-locations',
+    label: 'Inventory Locations',
+    description: 'Places where inventory items are kept.',
+    icon: MapPin,
   },
   {
     key: 'sales',

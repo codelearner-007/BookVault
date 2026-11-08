@@ -80,6 +80,7 @@ function TotalsRows({ doc, config, span }) {
         <>
           {(doc.applied ?? []).map((entry) => (
             <SummaryRow key={`a-${entry.document_id}`} span={span} value={<Money value={asReduction(entry.amount)} />}>
+              {entry.is_credit_application && 'Credit applied · '}
               <DocLink entry={entry}><DocumentLabel entry={entry} /></DocLink>
               {entry.early_discount && !isZeroAmount(entry.early_discount) && (
                 <span className="text-muted-foreground"> (early payment discount <Money value={entry.early_discount} />)</span>
@@ -132,7 +133,7 @@ function LinesTable({ doc, config }) {
   );
 }
 
-function HeaderFields({ doc, config }) {
+function HeaderFields({ doc, config, locationName }) {
   const isType = (type) => config.type === type;
   const isRole = (role) => config.role === role;
   return (
@@ -142,6 +143,7 @@ function HeaderFields({ doc, config }) {
       {isRole(ROLES.invoice) && <Field label="Due date"><FormattedDate value={doc.due_date} className="tabular-nums" /></Field>}
       <Field label={isRole(ROLES.invoice) ? 'Invoice number' : 'Reference'}>{doc.reference}</Field>
       {isRole(ROLES.note) && <Field label={config.side.invoiceLabel}>{doc.invoice_reference ?? 'Automatic'}</Field>}
+      {locationName && <Field label="Inventory location">{locationName}</Field>}
       {isType(DOC_TYPES.order) && (
         <Field label="Status">
           <span className="flex flex-wrap gap-2">
@@ -169,7 +171,7 @@ function Links({ links }) {
 }
 
 // Manager's document layout: title and status, customer / supplier and address, dates, lines, totals, applied amounts.
-export default function TradeDocumentPaper({ doc, config, businessName }) {
+export default function TradeDocumentPaper({ doc, config, businessName, locationName = null }) {
   const address = config.type === DOC_TYPES.deliveryNote ? doc.delivery_address : doc.billing_address;
   return (
     <Card className="p-card">
@@ -186,7 +188,7 @@ export default function TradeDocumentPaper({ doc, config, businessName }) {
           <p className="font-semibold">{doc[config.side.partyNameField]}</p>
           {address && <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{address}</p>}
         </div>
-        <HeaderFields doc={doc} config={config} />
+        <HeaderFields doc={doc} config={config} locationName={locationName} />
       </div>
       {doc.description && <p className="mt-6 font-semibold whitespace-pre-wrap">{doc.description}</p>}
       <LinesTable doc={doc} config={config} />

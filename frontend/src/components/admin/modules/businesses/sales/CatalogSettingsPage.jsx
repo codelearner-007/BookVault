@@ -47,8 +47,11 @@ function listColumns(columns) {
   columns: [{ key, label, numeric | kind, render(record) | value(record) }]; the first column is the record's name;
     a 'money' column with value() is formatted by the shared <Money>.
   renderDialog({ record, onClose, onSaved }): the New (record null) / Edit dialog.
+  canDelete(record): false hides Delete for a record the server never deletes (the default inventory location).
 */
-export default function CatalogSettingsPage({ businessId, title, noun, area, service, columns, inUseCode, inUseMessage, icon, renderDialog }) {
+export default function CatalogSettingsPage({
+  businessId, title, noun, area, service, columns, inUseCode, inUseMessage, icon, renderDialog, canDelete = () => true,
+}) {
   const { access } = useBusinessWorkspace();
   const rights = { create: can(access, area, RIGHT_CREATE), edit: can(access, area, RIGHT_EDIT), delete: can(access, area, RIGHT_DELETE) };
   const { data, error, reload } = useLoad(() => service.listAll(businessId), [businessId]);
@@ -101,7 +104,7 @@ export default function CatalogSettingsPage({ businessId, title, noun, area, ser
             columns={listColumns(columns)}
             rows={items}
             onEdit={rights.edit ? (record) => setEditing({ record }) : null}
-            menu={rights.delete ? (record) => (
+            menu={rights.delete ? (record) => canDelete(record) && (
               <MoreMenu
                 label={`Actions for ${record.name}`}
                 items={[{ label: 'Delete', icon: Trash2, destructive: true, onSelect: () => setDeleting(record) }]}

@@ -52,7 +52,8 @@ class PurchaseFields(TradeBodyFields):
 class PurchaseInvoiceFields(PurchaseFields):
     due_date: Optional[dt.date] = None  # null = the issue date
     rounding: RoundingMethod = "none"
-    acts_as_stock_movement: bool = False  # "Also acts as goods receipt" (stock effect: B6)
+    acts_as_stock_movement: bool = False  # "Also acts as goods receipt"
+    location_id: Optional[IdStr] = None  # received into (null = the default location)
     is_starting_balance: bool = False
     paid_before_start: Optional[NonNegativeMoney] = None
 
@@ -68,6 +69,7 @@ class PurchaseInvoiceFields(PurchaseFields):
 class DebitNoteFields(PurchaseFields):
     invoice_id: Optional[IdStr] = None  # null = Automatic (oldest open purchase invoice, PR-43)
     acts_as_stock_movement: bool = False
+    location_id: Optional[IdStr] = None
 
 
 class GoodsReceiptFields(RequestModel):
@@ -75,6 +77,7 @@ class GoodsReceiptFields(RequestModel):
     reference: OptionalCode = None
     supplier_id: IdStr
     description: OptionalText = None
+    location_id: Optional[IdStr] = None  # received into (null = the default location)
     lines: list[DeliveryLineIn] = Field(min_length=1, max_length=LIST_MAX)
 
 

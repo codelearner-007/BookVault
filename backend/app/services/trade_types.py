@@ -73,6 +73,11 @@ TRADE_TYPES = {t.key: t for t in (
               False, priced=False),
 )}
 SALES_TYPES = [k for k, t in TRADE_TYPES.items() if t.side is SALES]
+
+
+def moves_inbound(kind: TradeType) -> bool:
+    """Stock comes in on purchases (invoices, goods receipts) and on sales returns (credit notes)."""
+    return (kind.side is PURCHASES) != (kind.role == ROLE_NOTE)
 PURCHASE_TYPES = [k for k, t in TRADE_TYPES.items() if t.side is PURCHASES]
 NOTE_LINKS = {SALES.note_link, PURCHASES.note_link}
 ORDER_LINKS = {  # order -> (invoice link, stock link)

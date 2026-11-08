@@ -7,6 +7,8 @@ through the audited path (runner.settings_lifetime).
 
 from decimal import Decimal
 
+import httpx
+
 import pytest
 
 from tests.golden.adapters import GoldenRun, adapter_for, runner_supports
@@ -49,13 +51,14 @@ def test_golden_fixture_counts_match_schedule():
 
 
 def test_manager_only_setup_records_are_skipped():
-    records = [{"kind": "inventory_unit_cost", "manager_only": True}, {"kind": "price"}]
+    records = [{"kind": "inventory_unit_cost", "manager_only": True}, {"kind": "price"},
+               {"kind": "inventory_unit_cost", "applies_to": "manager_only"}]
     assert bookvault_setup_records(records) == [{"kind": "price"}]
 
 
-def test_b1_to_b5_schedule_is_runnable():
+def test_b1_to_b6_schedule_is_runnable():
     assert {f["id"] for f in RUNNABLE} == (B1_FIXTURES | B2_FIXTURES | B3_FIXTURES | B4_FIXTURES | B5_FIXTURES
-                                          | B7_EARLY | BOOKVAULT_ONLY)
+                                          | B6_FIXTURES | B7_EARLY | BOOKVAULT_ONLY)
 
 
 def test_golden_support_report(capsys):
@@ -67,16 +70,31 @@ def test_golden_support_report(capsys):
         )
 
 
+def _stock_items(fixture: dict) -> set[str]:
+    """Inventory items a fixture moves (a kit moves its components)."""
+    specs = load_golden_file()["master_data"]["items"]
+    keys = set(fixture.get("setup", {}).get("items", []))
+    keys |= {c["item"] for k in keys for c in specs[k].get("bill_of_materials", [])}
+    return {k for k in keys if specs[k]["kind"] == "inventory"}
+
+
 def _closure(fixture: dict) -> list[dict]:
-    """The fixture and every fixture it depends on (transitively), in file order."""
+    """The fixture and every fixture it depends on (transitively), in file order. Stock is an implicit
+    dependency (BV-01): the moving average and the stock a fixture sees come from every earlier fixture
+    that moved the same items, so those run first too (T73's 'Widget after T49')."""
     everything = load_golden_file()["fixtures"]
     by_id = {f["id"]: f for f in everything}
+    position = {f["id"]: i for i, f in enumerate(everything)}
     wanted, stack = set(), [fixture["id"]]
     while stack:
         fid = stack.pop()
-        if fid not in wanted:
-            wanted.add(fid)
-            stack.extend(by_id[fid].get("depends_on", []))
+        if fid in wanted:
+            continue
+        wanted.add(fid)
+        stack.extend(by_id[fid].get("depends_on", []))
+        if items := _stock_items(by_id[fid]):
+            stack.extend(f["id"] for f in everything[:position[fid]]
+                         if f["kind"] == DOCUMENT_KIND and _stock_items(f) & items)
     return [f for f in everything if f["id"] in wanted]
 
 
@@ -126,7 +144,7 @@ async def _setup_accounts(run: GoldenRun, fixture: dict) -> None:
     """Seeded system accounts are looked up by their system type; others are created."""
     accounts = load_golden_file()["accounts"]
     for key in fixture.get("setup", {}).get("accounts", []):
-        if key in run.accounts:
+        if key in run.accounts or accounts[key].get("manager_only"):
             continue
         spec = accounts[key]
         if spec.get("system_account_type"):
@@ -183,18 +201,50 @@ async def _setup_tax_codes(run: GoldenRun, fixture: dict) -> None:
         run.tax_codes[key] = response.json()["id"]
 
 
+async def _create_item(run: GoldenRun, spec: dict) -> httpx.Response:
+    """Non-inventory items name their income account; inventory items and kits default to Inventory - sales."""
+    if spec["kind"] == "inventory":
+        return await run.client.post(biz(run.business_id, "/inventory-items"), headers=run.owner.headers,
+                                     json={"name": spec["name"], "code": spec.get("code")})
+    if spec["kind"] == "kit":
+        await _setup_items(run, {"setup": {"items": [c["item"] for c in spec["bill_of_materials"]]}})
+        return await run.client.post(biz(run.business_id, "/inventory-kits"), headers=run.owner.headers, json={
+            "name": spec["name"], "code": spec.get("code"),
+            "components": [{"item_id": run.items[c["item"]], "qty": c["qty"]} for c in spec["bill_of_materials"]]})
+    if spec["income_account"] not in run.accounts:
+        await _setup_accounts(run, {"setup": {"accounts": [spec["income_account"]]}})
+    return await run.client.post(biz(run.business_id, "/non-inventory-items"), headers=run.owner.headers,
+                                 json={"name": spec["name"], "income_account_id": run.accounts[spec["income_account"]]})
+
+
 async def _setup_items(run: GoldenRun, fixture: dict) -> None:
     specs = load_golden_file()["master_data"]["items"]
     for key in fixture.get("setup", {}).get("items", []):
         if key in run.items:
             continue
-        spec = specs[key]
-        if spec["income_account"] not in run.accounts:
-            await _setup_accounts(run, {"setup": {"accounts": [spec["income_account"]]}})
-        response = await run.client.post(biz(run.business_id, "/non-inventory-items"), headers=run.owner.headers,
-                                         json={"name": spec["name"], "income_account_id": run.accounts[spec["income_account"]]})
+        response = await _create_item(run, specs[key])
         assert response.status_code == 201, response.text
         run.items[key] = response.json()["id"]
+        # Inventory items post COGS and stock to the system accounts (dimension matching needs their keys).
+        if specs[key]["kind"] != "non_inventory":
+            await _setup_accounts(run, {"setup": {"accounts": ["inventory_on_hand", "inventory_cost",
+                                                               "inventory_sales"]}})
+
+
+async def _setup_locations(run: GoldenRun, fixture: dict) -> None:
+    """The default location exists with the business; others are created."""
+    specs = load_golden_file()["master_data"]["inventory_locations"]
+    for key in fixture.get("setup", {}).get("inventory_locations", []):
+        if key in run.locations:
+            continue
+        listed = (await run.client.get(biz(run.business_id, "/inventory-locations"), headers=run.owner.headers)).json()
+        found = next((x["id"] for x in listed["items"] if x["name"] == specs[key]["name"]), None)
+        if found is None:
+            response = await run.client.post(biz(run.business_id, "/inventory-locations"), headers=run.owner.headers,
+                                             json={"name": specs[key]["name"]})
+            assert response.status_code == 201, response.text
+            found = response.json()["id"]
+        run.locations[key] = found
 
 
 async def _apply_settings(run: GoldenRun, fixture: dict) -> None:
@@ -214,7 +264,8 @@ def _lock_setting(fixture: dict) -> dict | None:
 
 
 DOCUMENT_LISTS = ("/journal-entries", "/receipts", "/payments", "/inter-account-transfers", "/sales-invoices",
-                  "/credit-notes", "/late-payment-fees", "/purchase-invoices", "/debit-notes")
+                  "/credit-notes", "/late-payment-fees", "/purchase-invoices", "/debit-notes", "/inventory-write-offs",
+                  "/production-orders")
 
 
 async def _document_count(run: GoldenRun) -> int:
@@ -249,6 +300,7 @@ async def _run_fixture(run: GoldenRun, fixture: dict) -> None:
     await _setup_parties(run, fixture)
     await _setup_tax_codes(run, fixture)
     await _setup_items(run, fixture)
+    await _setup_locations(run, fixture)
     await _apply_settings(run, fixture)
     lock = _lock_setting(fixture)
     if lock and lock["value"]["enabled"]:
@@ -286,6 +338,8 @@ B3_FIXTURES = {"T01", "T02", "T03", "T08", "T31", "T41", "T64", "T65", "T67", "T
 B4_FIXTURES = {"T04", "T05", "T09", "T37", "T42a", "T42b", "T43", "T47", "T56", "T62", "T68a", "T68", "T97", "T98",
                "T99", "T100", "T101"}
 B5_FIXTURES = {"T06", "T07", "T63", "T79"}
+B6_FIXTURES = {"T10", "T11", "T12", "T13", "T14", "T15", "T16", "T17", "T18", "T19", "T20", "T28", "T29", "T32",
+               "T33", "T46", "T48", "T49", "T58", "T69", "T70", "T73a", "T73", "T76"}
 # Scheduled for B7 but already runnable on the single-rate engine (inclusive tax T53, per-line rounding T82);
 # B7 re-asserts them with the full tax engine.
 B7_EARLY = {"T53", "T82"}
@@ -331,8 +385,8 @@ RUNNABLE_CHECKPOINTS = [c for c in CHECKPOINTS if _checkpoint_runnable(c)]
 NOT_YET_CHECKPOINTS = [c for c in CHECKPOINTS if not _checkpoint_runnable(c)]
 
 
-def test_b5_checkpoint_is_runnable():
-    assert [c["id"] for c in RUNNABLE_CHECKPOINTS] == ["CP-T09"]
+def test_b6_checkpoints_are_runnable():
+    assert [c["id"] for c in RUNNABLE_CHECKPOINTS] == ["CP-T09", "CP-T20"]
 
 
 async def _stored_debits(run: GoldenRun, date_from: str, date_to: str) -> Decimal:

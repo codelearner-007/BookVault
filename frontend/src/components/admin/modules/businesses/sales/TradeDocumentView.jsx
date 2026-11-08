@@ -8,12 +8,14 @@ import { useBusinessWorkspace } from '@/components/shell/ShellContext';
 import { RIGHT_CREATE } from '@/lib/constants/access-rights';
 import { can } from '@/lib/navigation/access';
 import { tabArea } from '@/lib/navigation/business-tabs';
+import { inventoryLocationsService } from '@/lib/services/inventory.service';
 import TransactionJournal from '../ledger/TransactionJournal';
 import { ErrorAlert, JE_STATUS, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from '../banking/AttachmentsPanel';
 import { DocumentSkeleton, useLoad } from '../banking/banking-parts';
 import DocumentViewFrame from '../banking/DocumentViewFrame';
-import { CREDIT_LIMIT_WARNING, TRADE_DOCUMENTS, TRADE_ERRORS } from './sales-documents';
+import { INVENTORY_AREAS } from '../inventory/inventory-documents';
+import { CREDIT_LIMIT_WARNING, TRADE_DOCUMENTS, TRADE_ERRORS, movesStock } from './sales-documents';
 import { creditLimitConfirm } from './sales-parts';
 import { useMoneyFormatter } from '@/components/common/money';
 import TradeDocumentPaper from './TradeDocumentPaper';
@@ -54,19 +56,26 @@ function Warnings({ warnings }) {
 */
 export default function TradeDocumentView({ business, config, docId, rights }) {
   const navigate = useTabNavigate(config.tab);
+  const { access } = useBusinessWorkspace();
   const { service } = config;
+  const listsLocations = movesStock(config) && can(access, INVENTORY_AREAS.locations);
   const { data, error, reload } = useLoad(
-    () => service.get(business.id, docId),
-    [business.id, config.type, docId],
+    () => Promise.all([
+      service.get(business.id, docId),
+      listsLocations ? inventoryLocationsService.listAll(business.id) : null,
+    ]),
+    [business.id, config.type, docId, listsLocations],
   );
   const [creditPrompt, setCreditPrompt] = useState(null);
   const money = useMoneyFormatter();
   const [overriding, setOverriding] = useState(false);
   const [postError, setPostError] = useState(null);
-  const doc = data;
+  const [doc, locations] = data ?? [];
   const copyItems = useCopyItems(config, doc);
 
   if (!data) return error ? <ErrorAlert>{error}</ErrorAlert> : <DocumentSkeleton />;
+  // Shown only when the document names a location (none = the default one).
+  const locationName = doc.location_id ? locations?.items.find((location) => location.id === doc.location_id)?.name : null;
 
   async function postCall(version, key) {
     try {
@@ -114,7 +123,7 @@ export default function TradeDocumentView({ business, config, docId, rights }) {
       />
       {postError && <ErrorAlert>{postError}</ErrorAlert>}
       <Warnings warnings={doc.warnings} />
-      <TradeDocumentPaper doc={doc} config={config} businessName={business.name} />
+      <TradeDocumentPaper doc={doc} config={config} businessName={business.name} locationName={locationName} />
       {config.posts && <TransactionJournal businessId={business.id} documentId={doc.id} version={doc.version} />}
       <AttachmentsPanel businessId={business.id} documentId={doc.id} canEdit={rights.edit && !doc.is_locked} />
     </DocumentViewFrame>

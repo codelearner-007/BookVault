@@ -69,6 +69,7 @@ export function tradeForm(source, party, { sourceId = null, startingBalance = fa
     isStartingBalance: src.is_starting_balance ?? startingBalance,
     paidBeforeStart: textOf(src.paid_before_start),
     actsAsStockMovement: src.acts_as_stock_movement ?? false,
+    locationId: src.location_id ?? '',
     isClosed: src.is_closed ?? false,
     sourceId,
   };
@@ -131,24 +132,27 @@ function invoiceFields(form, config, { creditLimitOverride, isEdit }) {
     due_date: dueDate,
     rounding: form.rounding,
     ...(config.type === DOC_TYPES.invoice ? salesTerms(form, creditLimitOverride) : {}),
-    ...(config.stockMovementLabel ? { acts_as_stock_movement: form.actsAsStockMovement } : {}),
+    ...stockFields(form, config),
     // The API takes is_closed on update only (no ledger effect).
     ...(config.closable && isEdit ? { is_closed: form.isClosed } : {}),
     ...(form.isStartingBalance ? { is_starting_balance: true, paid_before_start: optionalNumber(form.paidBeforeStart) ?? '0' } : {}),
   };
 }
 
+// Where stock moves (null = the default location): stock documents always; invoices and notes only while they
+// also act as a stock document.
+function stockFields(form, config) {
+  if (config.role === ROLES.stock) return { location_id: form.locationId || null };
+  if (!config.stockMovementLabel) return {};
+  return { acts_as_stock_movement: form.actsAsStockMovement, location_id: form.actsAsStockMovement ? form.locationId || null : null };
+}
+
 function typeFields(form, config, options) {
   if (config.type === DOC_TYPES.quote) return { expiry_date: form.expiryDate || null };
   if (config.role === ROLES.invoice) return invoiceFields(form, config, options);
-  if (config.role === ROLES.note) {
-    return {
-      invoice_id: form.invoiceId || null,
-      ...(config.stockMovementLabel ? { acts_as_stock_movement: form.actsAsStockMovement } : {}),
-    };
-  }
-  if (config.type === DOC_TYPES.deliveryNote) return { delivery_address: form.deliveryAddress.trim() || null };
-  return {};
+  if (config.role === ROLES.note) return { invoice_id: form.invoiceId || null, ...stockFields(form, config) };
+  if (config.type === DOC_TYPES.deliveryNote) return { delivery_address: form.deliveryAddress.trim() || null, ...stockFields(form, config) };
+  return stockFields(form, config);
 }
 
 function validate(form, lines, config) {

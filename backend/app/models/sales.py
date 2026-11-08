@@ -78,6 +78,7 @@ class TradeDocument(Base):
     discount_type_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     acts_as_stock_movement: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    location_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)  # NULL = default (B6)
 
 
 class TradeDocumentLine(Base):

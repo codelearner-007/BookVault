@@ -4,16 +4,22 @@ import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/common/page';
+import { useBusinessWorkspace } from '@/components/shell/ShellContext';
 import { ConfirmDialog } from '@/components/super-admin/platform-parts';
+import { can } from '@/lib/navigation/access';
 import { isVersionConflict } from '@/lib/services/api-client';
 import { getCoaTree } from '@/lib/services/coa.service';
+import { inventoryItemsService, inventoryKitsService, inventoryLocationsService } from '@/lib/services/inventory.service';
 import { nonInventoryItemsService, taxCodesService } from '@/lib/services/settings-catalog.service';
 import { listStartingBalanceInvoices } from '@/lib/services/starting-balances.service';
 import { BackButton, ErrorAlert, JE_STATUS, todayIso, useTabNavigate } from '../ledger/ledger-parts';
 import { FormSkeleton, useLoad } from '../banking/banking-parts';
 import { lineAccountsFromTree } from '../banking/cash-directions';
 import { BlockedForm, DocumentFormActions, blockedReason, useDocumentSave } from '../banking/document-form';
-import { CREDIT_LIMIT_WARNING, DOC_TYPES, ROLES, TRADE_DOCUMENTS, TRADE_ERRORS } from './sales-documents';
+import { INVENTORY_AREAS } from '../inventory/inventory-documents';
+import {
+  CREDIT_LIMIT_WARNING, DOC_TYPES, ITEM_KINDS, ROLES, TRADE_DOCUMENTS, TRADE_ERRORS, TRADE_SIDES, movesStock,
+} from './sales-documents';
 import { StartingBalanceFields, TradeHeaderFields, TradeOptions } from './TradeDocumentFields';
 import { creditLimitConfirm } from './sales-parts';
 import { useMoneyFormatter } from '@/components/common/money';
@@ -22,7 +28,7 @@ import { TradeTotalsPanel, totalsOfDoc, useTradeTotals } from './TradeTotals';
 import { DUE_MODES, buildTradeBody, totalsRequest, tradeForm } from './trade-form-model';
 
 const STARTING_BALANCES_HREF = '?tab=settings&page=starting-balances';
-const NO_INVOICES = { items: [] };
+const NO_RECORDS = { items: [] };
 
 // Active catalog records plus any a saved document's lines still use (so its picker shows them).
 function withSaved(records, savedLines, idKey, nameKey) {
@@ -36,12 +42,30 @@ function withSaved(records, savedLines, idKey, nameKey) {
   return active;
 }
 
+const tagged = (kind) => (record) => ({ ...record, kind });
+
+/*
+  What a line can pick: non-inventory items, inventory items (with their qty on hand) and, on sales, kits (a kit
+  can only be sold). Inventory lists the member may not view are left out; the server enforces every right.
+*/
+async function listLineItems(businessId, side, mayView) {
+  const [plain, stocked, kits] = await Promise.all([
+    nonInventoryItemsService.listAll(businessId),
+    mayView(INVENTORY_AREAS.items) ? inventoryItemsService.listAll(businessId) : NO_RECORDS,
+    side === TRADE_SIDES.sales && mayView(INVENTORY_AREAS.kits) ? inventoryKitsService.listAll(businessId) : NO_RECORDS,
+  ]);
+  return [...plain.items, ...stocked.items.map(tagged(ITEM_KINDS.inventory)), ...kits.items.map(tagged(ITEM_KINDS.kit))];
+}
+
 function useTradeFormData(businessId, config, docId, copyFrom, startingBalance) {
+  const { access } = useBusinessWorkspace();
+  const mayView = (area) => can(access, area);
   return useLoad(async () => {
-    const [tree, items, taxCodes, doc, copy, starting] = await Promise.all([
+    const [tree, items, taxCodes, locations, doc, copy, starting] = await Promise.all([
       config.accounts ? getCoaTree(businessId, todayIso()) : null,
-      nonInventoryItemsService.listAll(businessId),
+      listLineItems(businessId, config.side, mayView),
       config.priced ? taxCodesService.listAll(businessId) : null,
+      movesStock(config) && mayView(INVENTORY_AREAS.locations) ? inventoryLocationsService.listAll(businessId) : null,
       docId ? config.service.get(businessId, docId) : null,
       copyFrom ? TRADE_DOCUMENTS[copyFrom.type].service.copyTo(businessId, copyFrom.id, config.type) : null,
       startingBalance ? listStartingBalanceInvoices(businessId, config.side.invoicesResource) : null,
@@ -55,8 +79,9 @@ function useTradeFormData(businessId, config, docId, copyFrom, startingBalance) 
       prefill,
       party,
       starting,
+      locations: locations?.items ?? null,
       catalogs: {
-        items: withSaved(items.items, savedLines, 'item_id', 'item_name'),
+        items: withSaved(items, savedLines, 'item_id', 'item_name'),
         taxCodes: taxCodes ? withSaved(taxCodes.items, savedLines, 'tax_code_id', 'tax_code_name') : [],
         accounts: tree ? lineAccountsFromTree(tree, savedLines.filter((line) => line.account_id)) : [],
       },
@@ -112,7 +137,7 @@ export default function TradeDocumentForm({ businessId, config, docId, allowed, 
   const date = form?.date ?? null;
   const isNote = config.role === ROLES.note;
   const invoices = useLoad(
-    () => (isNote && partyId && date ? config.side.parties.openInvoices(businessId, partyId, date) : Promise.resolve(NO_INVOICES)),
+    () => (isNote && partyId && date ? config.side.parties.openInvoices(businessId, partyId, date) : Promise.resolve(NO_RECORDS)),
     [businessId, config.type, partyId, date],
   );
   const doc = data.data?.doc;
@@ -184,6 +209,7 @@ export default function TradeDocumentForm({ businessId, config, docId, allowed, 
           onParty={pickParty}
           openInvoices={invoices.data?.items ?? []}
           currentInvoice={doc?.invoice_id ? { id: doc.invoice_id, reference: doc.invoice_reference } : null}
+          locations={data.data.locations}
           disabled={saving}
         />
         {isStarting && (
@@ -199,7 +225,7 @@ export default function TradeDocumentForm({ businessId, config, docId, allowed, 
           disabled={saving}
         />
         {config.priced && <TradeTotalsPanel totals={totals.totals} invalid={totals.invalid} />}
-        <TradeOptions config={config} form={form} setField={setField} isEdit={!!docId} disabled={saving} />
+        <TradeOptions config={config} form={form} setField={setField} isEdit={!!docId} locations={data.data.locations} disabled={saving} />
         <DocumentFormActions isPosted={doc?.status === JE_STATUS.posted} saving={saving} onSubmit={(action) => submit(action)} onCancel={back} />
       </div>
     </div>

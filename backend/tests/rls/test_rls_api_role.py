@@ -107,7 +107,8 @@ async def test_rls_helpers_are_security_definer_with_empty_search_path(db_conn):
 # B3: typed document extensions, allocations and attachments are voided / soft-deleted the same way.
 APPEND_ONLY = {"audit_logs", "documents", "journal_entries", "journal_lines", "opening_balances",
                "cash_transactions", "inter_account_transfers", "payment_allocations", "attachments",
-               "attachment_contents", "trade_documents", "invoice_terms", "late_payment_fees"}
+               "attachment_contents", "trade_documents", "invoice_terms", "late_payment_fees",
+               "stock_documents", "production_orders", "inventory_cost_corrections"}
 # One row per business, inserted by a trigger and removed by the FK cascade (B0.7).
 # business_currencies (creation trigger) and document_sequences (next_document_reference())
 # are written by SECURITY DEFINER functions only (B1).

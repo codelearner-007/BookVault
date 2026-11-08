@@ -10,6 +10,8 @@ import { AccountPicker } from '@/components/common/account-picker';
 import { Money } from '@/components/common/money';
 import { toInputAmount } from '../coa/coa-tree';
 import { FieldLabel, NumberCell } from '../banking/CashLinesEditor';
+import { inventoryItemLabel } from '../inventory/inventory-documents';
+import { ITEM_KINDS, TRADE_SIDES } from './sales-documents';
 import { NONE } from './sales-parts';
 import { DISCOUNT_TYPES, emptyTradeLine } from './trade-form-model';
 
@@ -24,8 +26,20 @@ const HEAD_LABELS = {
 };
 const TEXT_COLUMNS = ['item', 'account', 'description', 'tax'];
 
+// Inventory items show their qty on hand; other records "code · name".
 function optionLabel(record) {
+  if (record.kind === ITEM_KINDS.inventory) return inventoryItemLabel(record);
   return record.code ? `${record.code} · ${record.name}` : record.name;
+}
+
+const STOCKED = new Set([ITEM_KINDS.inventory, ITEM_KINDS.kit]);
+
+// The account the server posts an inventory item or kit line to (the field is locked): bought into Inventory on
+// hand; sold to the item's custom income account, else Inventory - sales. Null for other lines.
+function stockedAccount(item, side) {
+  if (!STOCKED.has(item?.kind)) return null;
+  if (side !== TRADE_SIDES.sales) return 'Inventory on hand';
+  return item.income_account_name ?? 'Inventory - sales';
 }
 
 // A Select over a small catalog with a "None" entry (items, tax codes) or without one (accounts).
@@ -47,7 +61,8 @@ function CatalogCell({ label, number, value, options, onChange, disabled, allowN
 }
 
 // Picking an item fills the line from it: description, the side's price and account (sales: sales price and
-// income account; purchases: purchase price and expense account) and tax code.
+// income account; purchases: purchase price and expense account) and tax code. Inventory items and kits leave
+// the account to the server.
 function itemPatch(item, config) {
   if (!item) return { item_id: '' };
   const { itemPrice, itemAccount } = config.side;
@@ -55,12 +70,13 @@ function itemPatch(item, config) {
     item_id: item.id,
     description: item.description ?? item.name,
     ...(config.priced ? { unit_price: toInputAmount(item[itemPrice]), tax_code_id: item.tax_code_id ?? '' } : {}),
-    ...(config.accounts ? { account_id: item[itemAccount] ?? '' } : {}),
+    ...(config.accounts ? { account_id: STOCKED.has(item.kind) ? '' : item[itemAccount] ?? '' } : {}),
   };
 }
 
 function LineRow({ line, number, visible, config, catalogs, total, disabled, canRemove, onChange, onRemove, gridStyle }) {
   const change = (patch) => onChange(line.key, patch);
+  const lockedAccount = stockedAccount(catalogs.items.find((item) => item.id === line.item_id), config.side);
   const cells = {
     item: (
       <CatalogCell
@@ -73,8 +89,8 @@ function LineRow({ line, number, visible, config, catalogs, total, disabled, can
       <div className="col-span-2 grid gap-1.5 md:col-span-1 md:block">
         <FieldLabel>Account</FieldLabel>
         <AccountPicker
-          value={line.account_id} accounts={catalogs.accounts} label={`Account, line ${number}`}
-          onChange={(id) => change({ account_id: id })} disabled={disabled} className="w-full"
+          value={line.account_id} accounts={catalogs.accounts} label={`Account, line ${number}`} placeholder={lockedAccount ?? undefined}
+          onChange={(id) => change({ account_id: id })} disabled={disabled || !!lockedAccount} className="w-full"
         />
       </div>
     ),

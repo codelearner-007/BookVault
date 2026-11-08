@@ -7,7 +7,9 @@ import { FormattedDate } from '@/components/common/business-format';
 import { DatePicker } from '@/components/common/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { DOC_TYPES, ROLES } from './sales-documents';
+import { DEFAULT_LOCATION_LABEL } from '../inventory/inventory-documents';
+import { RecordSelect } from './catalog-dialog';
+import { DOC_TYPES, ROLES, TRADE_SIDES } from './sales-documents';
 import { InvoiceSelect, TradePartyPicker } from './sales-parts';
 import { DISCOUNT_TYPES, DUE_MODES, ROUNDING } from './trade-form-model';
 
@@ -71,9 +73,22 @@ function DueDateField({ form, setField, disabled }) {
   );
 }
 
-export function TradeHeaderFields({ businessId, config, form, setField, onParty, openInvoices, currentInvoice, disabled }) {
+// Where the document moves stock; blank is the default location. locations: null when the user cannot list them.
+function LocationSelect({ form, setField, locations, disabled }) {
+  return (
+    <RecordSelect
+      id="trade-location" label="Inventory location" value={form.locationId} options={locations} noneLabel={DEFAULT_LOCATION_LABEL}
+      onChange={(id) => setField('locationId', id)} disabled={disabled}
+    />
+  );
+}
+
+export function TradeHeaderFields({ businessId, config, form, setField, onParty, openInvoices, currentInvoice, locations, disabled }) {
   const isType = (type) => config.type === type;
   const isRole = (role) => config.role === role;
+  // Manager: a delivery note moves stock From the location To the customer; a goods receipt From the supplier.
+  const location = isRole(ROLES.stock) && locations && <LocationSelect form={form} setField={setField} locations={locations} disabled={disabled} />;
+  const isSales = config.side === TRADE_SIDES.sales;
   return (
     <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
       <DateField id="trade-date" label={config.dateLabel} value={form.date} onChange={(v) => setField('date', v)} disabled={disabled} />
@@ -82,7 +97,9 @@ export function TradeHeaderFields({ businessId, config, form, setField, onParty,
       )}
       {isRole(ROLES.invoice) && !form.isStartingBalance && <DueDateField form={form} setField={setField} disabled={disabled} />}
       <TextField id="trade-reference" label="Reference" placeholder="Automatic" value={form.reference} onChange={(v) => setField('reference', v)} disabled={disabled} />
+      {isSales && location}
       <TradePartyPicker businessId={businessId} side={config.side} value={form.party} onChange={onParty} disabled={disabled} />
+      {!isSales && location}
       {isRole(ROLES.note) && (
         <InvoiceSelect
           id="trade-invoice" label={config.side.invoiceLabel} invoices={openInvoices} current={currentInvoice} value={form.invoiceId}
@@ -140,8 +157,9 @@ function SelectOption({ id, label, value, options, onChange, disabled }) {
 const DISCOUNT_OPTIONS = [[DISCOUNT_TYPES.none, 'None'], [DISCOUNT_TYPES.percentage, 'Percentage'], [DISCOUNT_TYPES.amount, 'Exact amount']];
 const ROUNDING_OPTIONS = [[ROUNDING.none, 'None'], [ROUNDING.nearest, 'To nearest'], [ROUNDING.down, 'Round down']];
 
-// The options under the lines: tax inclusive, discount column, the invoice terms and the purchase checkboxes.
-export function TradeOptions({ config, form, setField, isEdit, disabled }) {
+// The options under the lines: tax inclusive, discount column, the invoice terms and the "Also acts as" checkbox
+// (with its inventory location, like Manager).
+export function TradeOptions({ config, form, setField, isEdit, locations, disabled }) {
   if (!config.priced) return null;
   const check = (field) => ({ checked: form[field], onChange: (on) => setField(field, on), disabled });
   return (
@@ -151,7 +169,11 @@ export function TradeOptions({ config, form, setField, isEdit, disabled }) {
       {config.role === ROLES.invoice && (
         <SelectOption id="trade-rounding" label="Rounding" value={form.rounding} options={ROUNDING_OPTIONS} onChange={(v) => setField('rounding', v)} disabled={disabled} />
       )}
-      {config.stockMovementLabel && <CheckOption id="trade-stock-movement" label={config.stockMovementLabel} {...check('actsAsStockMovement')} />}
+      {config.stockMovementLabel && (
+        <CheckOption id="trade-stock-movement" label={config.stockMovementLabel} {...check('actsAsStockMovement')}>
+          {locations && <div className="w-64"><LocationSelect form={form} setField={setField} locations={locations} disabled={disabled} /></div>}
+        </CheckOption>
+      )}
       {config.closable && isEdit && <CheckOption id="trade-closed" label="Closed invoice" {...check('isClosed')} />}
       {config.type === DOC_TYPES.invoice && (
         <>

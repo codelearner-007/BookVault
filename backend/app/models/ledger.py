@@ -138,6 +138,7 @@ class OpeningBalance(Base):
     bank_account_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     invoice_document_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     paid_before_start: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    item_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

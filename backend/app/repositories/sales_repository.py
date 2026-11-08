@@ -88,7 +88,7 @@ _BALANCE_TOTAL = text("""
 """)
 _APPLICATIONS = text("""
     SELECT CAST(document_id AS text) AS document_id, document_type, document_date AS date, reference, amount,
-           early_discount
+           early_discount, is_credit_application
     FROM public.invoice_applications(:business_id, :invoice_id)
 """)
 _SETTLED = text("""
@@ -151,6 +151,10 @@ _PARTY_KIND = text("""
     SELECT p.kind_key FROM public.parties p WHERE p.business_id = :business_id AND p.id = :party_id
 """)
 _HAS_RIGHT = text("SELECT public.has_area_access(:business_id, :area_key, :right_key)")
+_PARTY_CREDITS = text("""
+    SELECT CAST(settling_document_id AS text) AS settling_document_id, document_date, available
+    FROM public.party_credits(:business_id, :party_id, :control)
+""")
 _AR_BALANCE = text("""
     SELECT COALESCE(sum(l.debit - l.credit), 0)
     FROM public.journal_lines l
@@ -160,11 +164,11 @@ _AR_BALANCE = text("""
 """)
 _CUSTOMER_NAMES = text("SELECT CAST(id AS text) AS id, name FROM public.customers WHERE business_id = :business_id")
 _CUSTOMER_SUMMARIES = text("""
-    SELECT CAST(party_id AS text) AS party_id, ar_balance, has_history, uninvoiced
+    SELECT CAST(party_id AS text) AS party_id, ar_balance, has_history, uninvoiced, qty_to_deliver
     FROM public.customer_summaries(:business_id)
 """)
 _SUPPLIER_SUMMARIES = text("""
-    SELECT CAST(party_id AS text) AS party_id, ap_balance, has_history
+    SELECT CAST(party_id AS text) AS party_id, ap_balance, has_history, qty_to_receive
     FROM public.supplier_summaries(:business_id)
 """)
 # Documents that moved one party's control account (AR for customers, AP for suppliers).
@@ -299,6 +303,10 @@ class SalesRepository:
     async def has_right(self, business_id: str, area_key: str, right_key: str) -> bool:
         return bool((await self.session.execute(
             _HAS_RIGHT, {"business_id": business_id, "area_key": area_key, "right_key": right_key})).scalar())
+
+    async def party_credits(self, business_id: str, party_id: str, control: str) -> list[Row]:
+        return list((await self.session.execute(
+            _PARTY_CREDITS, {"business_id": business_id, "party_id": party_id, "control": control})).all())
 
     async def ar_balance(self, business_id: str, party_id: str) -> Decimal:
         return (await self.session.execute(

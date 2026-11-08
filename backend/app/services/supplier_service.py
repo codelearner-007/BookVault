@@ -59,6 +59,7 @@ class SupplierService:
             **{k: getattr(supplier, k) for k in SupplierResponse.model_fields if hasattr(supplier, k)},
             "ap_balance": ap,
             "available_credit": round_money(limit - ap, dp) if limit is not None else None,
+            "qty_to_receive": summary.qty_to_receive if summary else ZERO,
             "status": customer_status(ap, bool(summary and summary.has_history)),
         })
 

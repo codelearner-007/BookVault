@@ -2,6 +2,7 @@
 
 from app.services.posting.service import (
     DRAFT,
+    SOURCE_COGS,
     SOURCE_DOCUMENT,
     OPENING_BALANCE,
     POSTED,
@@ -14,4 +15,4 @@ from app.services.posting.service import (
     totals,
 )
 
-__all__ = ["Allocation", "SOURCE_DOCUMENT", "DRAFT", "OPENING_BALANCE", "POSTED", "SOURCE_OPENING", "VOID", "DocumentHeader", "LineInput", "PostingService", "totals"]
+__all__ = ["Allocation", "SOURCE_COGS", "SOURCE_DOCUMENT", "DRAFT", "OPENING_BALANCE", "POSTED", "SOURCE_OPENING", "VOID", "DocumentHeader", "LineInput", "PostingService", "totals"]

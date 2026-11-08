@@ -423,3 +423,47 @@ async def test_payable_equals_sum_of_suppliers(client, books, db_conn, seed):
     assert all(Decimal(x["balance_due"]) >= 0 for x in invoices)
     assert len(closed) == 1 and closed[0]["balance_due"] == closed[0]["total"]
     assert invoices[-1]["is_closed"]  # sorted to the bottom of the list (PR-41c)
+
+
+async def _random_stock(client, owner, bid, items, supplier, customer, rng) -> None:
+    """Purchases (some back-dated), sales, write-offs and voids of inventory items (B6); a sale or write-off
+    that would take stock below zero is rejected (409) and changes nothing."""
+    posted = []
+    for _ in range(14):
+        item, day = rng.choice(items), f"2026-05-{rng.randint(1, 28):02}"
+        qty, kind = str(rng.randint(1, 6)), rng.choice(["purchase-invoices", "sales-invoices", "inventory-write-offs"])
+        line = {"item_id": item, "qty": qty}
+        if kind == "purchase-invoices":
+            body = {"date": day, "supplier_id": supplier, "lines": [{**line, "unit_price": str(rng.randint(5, 90))}]}
+        elif kind == "sales-invoices":
+            body = {"date": day, "customer_id": customer, "lines": [{**line, "unit_price": "100"}]}
+        else:
+            body = {"date": day, "lines": [line]}
+        response = await client.post(biz(bid, f"/{kind}"), json={**body, "post": True}, headers=owner.headers)
+        assert response.status_code in (201, 409), response.text
+        if response.status_code == 201:
+            posted.append((kind, response.json()))
+    for kind, doc in rng.sample(posted, min(2, len(posted))):
+        response = await client.post(biz(bid, f"/{kind}/{doc['id']}/void"), json={"version": doc["version"]},
+                                     headers=owner.headers)
+        assert response.status_code in (200, 409), response.text
+
+
+@pytest.mark.parametrize("seed", [2, 11, 29])
+async def test_inventory_gl_equals_stock_valuation(client, books, db_conn, seed):
+    """INV-4: Inventory on hand per item in the GL = Σ stock movement values; owned qty never negative."""
+    owner, bid, _ = books
+    items = [(await client.post(biz(bid, "/inventory-items"), json={"name": f"Item {i}"},
+                                headers=owner.headers)).json()["id"] for i in range(2)]
+    supplier = (await client.post(biz(bid, "/suppliers"), json={"name": "S"}, headers=owner.headers)).json()["id"]
+    customer = (await client.post(biz(bid, "/customers"), json={"name": "C"}, headers=owner.headers)).json()["id"]
+    await _random_stock(client, owner, bid, items, supplier, customer, random.Random(seed))
+    on_hand = await system_account_id(client, owner, bid, "inventory_on_hand")
+    for item in items:
+        gl = await _scalar(db_conn, "SELECT COALESCE(sum(debit - credit), 0) FROM public.journal_lines"
+                           " WHERE business_id = CAST(:b AS uuid) AND account_id = CAST(:a AS uuid)"
+                           " AND item_id = CAST(:i AS uuid)", b=bid, a=on_hand, i=item)
+        value, qty = (await db_conn.execute(text(
+            "SELECT COALESCE(sum(amount), 0), COALESCE(sum(qty_owned), 0) FROM public.stock_movements"
+            " WHERE business_id = CAST(:b AS uuid) AND item_id = CAST(:i AS uuid)"), {"b": bid, "i": item})).one()
+        assert (gl, qty >= 0, value >= 0) == (value, True, True)

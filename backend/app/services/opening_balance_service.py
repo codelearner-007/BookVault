@@ -28,6 +28,7 @@ from app.schemas.response.coa import (
 from app.services.access_service import BusinessContext
 from app.services.audit_service import AuditService
 from app.services.coa_tree import root_key_of
+from app.services.inventory_opening_service import KIND_INVENTORY_ITEM, InventoryOpeningService
 from app.services.invoice_opening_service import InvoiceOpeningService
 from app.services.opening_balance_rules import can_have_opening_balance, opening_side
 from app.services.posting import OPENING_BALANCE, POSTED, SOURCE_OPENING, DocumentHeader, LineInput, PostingService
@@ -175,9 +176,11 @@ class OpeningBalanceService:
             raise LedgerValidationError(
                 "Documents are dated before the new books start date", "documents_before_books_start"
             )
-        live = [r for r in await self.openings.live_documents(ctx.business_id) if r.kind_key not in INVOICE_KINDS]
+        live = [r for r in await self.openings.live_documents(ctx.business_id)
+                if r.kind_key not in INVOICE_KINDS | {KIND_INVENTORY_ITEM}]
         plug = await self.coa.system_account_id(ctx.business_id, RETAINED_EARNINGS)
         await InvoiceOpeningService(self.session).redate(ctx, new_start)
+        await InventoryOpeningService(self.session).redate(ctx, new_start)
         for row in live:
             document = await self._void(ctx, row.document_id)
             lines = [x for x in await self.posting.document_lines(document) if x.account_id != plug]

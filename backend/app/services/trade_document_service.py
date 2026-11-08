@@ -7,6 +7,11 @@ reversal + new entry (PR-73) unless its ledger inputs are unchanged; void = reve
 Lines snapshot the tax rate and account (BUG-08). Starting-balance invoices (PR-61, D-36) post
 no revenue / expense line, only their own opening balance. A closed purchase invoice (PR-41c)
 has no ledger effect; it is only left out of allocation.
+
+Inventory (B6): a posted invoice, note, delivery note or goods receipt moves stock through the
+stock ledger (owned qty for invoices and notes, on-hand qty for stock documents and documents that
+act as one; kits move their components); sales documents get a separate COGS entry at moving
+average. A new invoice absorbs its party's unapplied credit, oldest first (T58).
 """
 
 from datetime import date
@@ -43,12 +48,14 @@ from app.services.audit_service import AuditService
 from app.services.invoice_opening_service import InvoiceOpeningService
 from app.services.posting import DRAFT, POSTED, VOID, DocumentHeader, PostingService
 from app.services.trade_ledger import TradeLedger
+from app.services.trade_stock import TradeStock
 from app.services.trade_types import ROLE_INVOICE, ROLE_NOTE, ROLE_STOCK, SALES, TRADE_TYPES, TradeType
 from app.services.trade_view import TradeView, linked_invoice, tax_breakdown
 from app.services.versioning import check_version
 
 STARTING_BALANCES_AREA = "settings.starting_balances"
 PARTY_MODELS = {"customer": Customer, "supplier": Supplier}
+ZERO = Decimal(0)
 
 
 class TradeDocumentService:
@@ -62,6 +69,7 @@ class TradeDocumentService:
         self.settings = BusinessSettingsRepository(session)
         self.openings = InvoiceOpeningService(session, kind.side)
         self.ledger = TradeLedger(self.repo, self.posting, self.coa)
+        self.stock = TradeStock(session, kind)
         self.view = TradeView(self.repo, self.posting)
         self.audit = AuditService(session)
         self.session = session
@@ -137,6 +145,7 @@ class TradeDocumentService:
         party = await self._party(ctx.business_id, _party_id(self.kind, body))
         starting = await self._check_starting_balance(ctx, body)
         lines = await self._lines(ctx.business_id, body)
+        await self.stock.check_location(ctx.business_id, body)
         document = await self.posting.create_header(ctx, self.kind.key, self.kind.area, _header(body),
                                                     POSTED if body.post else DRAFT, starting_balance=starting)
         await self.repo.add(self._extension(document, body, party.id))
@@ -164,6 +173,7 @@ class TradeDocumentService:
             return await self._audited_update(ctx, document, before, [])
         starting = await self._check_starting_balance(ctx, body, before)
         lines = await self._lines(ctx.business_id, body)
+        await self.stock.check_location(ctx.business_id, body)
         await self.posting.update_header(ctx, document, _header(body), starting_balance=starting)
         await self._apply_extension(document, body, party.id)
         await self._store_lines(document, lines)
@@ -174,6 +184,8 @@ class TradeDocumentService:
             await self.posting.reverse_live_entry(ctx, document)
             warnings = await self._post(ctx, document, body)
             await self._assert_not_below_applied(document)
+        elif posted:
+            await self.stock.apply(ctx, document)  # location or "acts as" changed, ledger image unchanged
         return await self._audited_update(ctx, document, before, warnings)
 
     async def _ledger_unchanged(self, document: Document, starting: bool) -> bool:
@@ -214,13 +226,18 @@ class TradeDocumentService:
         document = await self._writable(ctx, document_id, version)
         before = await self.view.response(self.kind, document)
         if self.kind.role == ROLE_INVOICE:
-            settled = [a for a in before.applied if a.document_type != "opening_balance"]
+            settled = [a for a in before.applied
+                       if a.document_type != "opening_balance" and not a.is_credit_application]
             if settled or before.late_fees:
                 raise ConflictError("Void the payments, notes and late fees applied to this invoice first",
                                     "invoice_has_payments")
             if before.is_starting_balance:
                 await self.openings.void_opening(ctx, document.id)
+            await self._release_credits(ctx, document, before.applied)
+        was_posted = before.status == POSTED
         await self.posting.void(ctx, document)
+        if was_posted:
+            await self.stock.remove(ctx, document)
         after = await self.view.response(self.kind, document)
         await self.audit.record(ctx.user_id, "void", self.kind.entity, document.id, ctx.business_id,
                                 before=before, after=after)
@@ -246,8 +263,11 @@ class TradeDocumentService:
                 policy = (await self.settings.get(ctx.business_id)).credit_limit_policy_key
                 warnings = await self.ledger.check_credit_limit(customer, document, policy,
                                                                 body.credit_limit_override, dp)
+            await self._release_credits(ctx, document, (await self.view.response(self.kind, document)).applied)
             await self.posting.post_lines(ctx, document,
                                           await self.ledger.invoice_lines(self.side, document, extension.party_id))
+            await self._apply_credits(ctx, document, extension.party_id)
+            await self.stock.apply(ctx, document)
             return warnings
         if self.kind.role == ROLE_NOTE:
             await self.posting.replace_allocations(ctx, document, [])
@@ -256,7 +276,25 @@ class TradeDocumentService:
                                                         link.from_id if link else None, dp)
             await self.posting.post_lines(ctx, document, lines)
             await self.posting.replace_allocations(ctx, document, allocations)
+        await self.stock.apply(ctx, document)
         return []
+
+    # ---------------------------------------------------------------- party credit (PR-03, T58)
+    async def _apply_credits(self, ctx: BusinessContext, document: Document, party_id: str) -> None:
+        """The party's unapplied credit (overpayments, note remainders) settles the new invoice, oldest first."""
+        balance = next(iter(await self.repo.balances(ctx.business_id, [document.id], type_key=self.kind.key)), None)
+        due = balance.balance_due if balance else ZERO
+        picks = []
+        for credit in await self.repo.party_credits(ctx.business_id, party_id, self.side.control):
+            if due <= 0:
+                break
+            take = min(credit.available, due)
+            picks.append((credit.settling_document_id, take))
+            due -= take
+        await self.posting.apply_credits(ctx, document, picks)
+
+    async def _release_credits(self, ctx: BusinessContext, document: Document, applied: list) -> None:
+        await self.posting.release_credits(ctx, document, [a.document_id for a in applied if a.is_credit_application])
 
     # ---------------------------------------------------------------- validation
     async def _party(self, business_id: str, party_id: str):
@@ -297,7 +335,7 @@ class TradeDocumentService:
         rates = await self._tax_rows(business_id, {x.tax_code_id for x in body.lines if x.tax_code_id})
         lines = []
         for no, x in enumerate(body.lines, start=1):
-            account_id = x.account_id or (getattr(items[x.item_id], self.side.line_account) if x.item_id else None)
+            account_id = await self.stock.line_account(business_id, x, items.get(x.item_id))
             if self.kind.needs_accounts and account_id is None:
                 raise LedgerValidationError("Every line needs an account", "account_required")
             tax = rates.get(x.tax_code_id) if x.tax_code_id else None
@@ -413,6 +451,7 @@ def _apply(extension: TradeDocument, body) -> None:
     extension.discount_type_key = getattr(body, "discount_type", None)
     extension.expiry_date = getattr(body, "expiry_date", None)
     extension.acts_as_stock_movement = getattr(body, "acts_as_stock_movement", False)
+    extension.location_id = getattr(body, "location_id", None)
 
 
 def _terms(body) -> dict:

@@ -16,7 +16,8 @@ import { tradeDocumentsService } from '@/lib/services/trade-documents.service';
     accounts  every line needs an account (invoices, notes)
     posts     the document hits the ledger: Transaction Journal on the view
     voidCopy  void is "Cancel" (quotes, orders): nothing to reverse
-    stockMovementLabel  purchase invoices and debit notes: the "Also acts as ..." checkbox
+    stockMovementLabel  invoices and notes: the "Also acts as ..." checkbox and, while checked, its inventory location
+                        (delivery notes and goods receipts always name a location)
     closable  purchase invoices: the edit form's "Closed invoice" checkbox
   Sales-only terms (expiry date, early payment discount, late fees, credit limit, delivery address) key on the
   sales DOC_TYPES themselves.
@@ -201,6 +202,7 @@ export const TRADE_DOCUMENTS = {
     priced: true,
     accounts: true,
     posts: true,
+    stockMovementLabel: 'Also acts as delivery note',
     statuses: INVOICE_STATUS,
     copyTargets: [DOC_TYPES.creditNote],
     columns: [
@@ -222,6 +224,7 @@ export const TRADE_DOCUMENTS = {
     priced: true,
     accounts: true,
     posts: true,
+    stockMovementLabel: 'Also acts as delivery note',
     statuses: NOTE_STATUS,
     copyTargets: [],
     columns: [
@@ -354,6 +357,15 @@ export const TRADE_DOCUMENTS = {
     columns: [['date', 'Date'], ['party', 'Supplier'], ['description', 'Description']],
   },
 };
+
+// Whether a type moves stock at an inventory location: stock documents always, invoices and notes when they
+// also act as one.
+export function movesStock(config) {
+  return config.role === ROLES.stock || !!config.stockMovementLabel;
+}
+
+// What a line's item is, beyond a non-inventory item: inventory items and kits post to inventory accounts.
+export const ITEM_KINDS = { inventory: 'inventory', kit: 'kit' };
 
 export function documentConfigByTab(tab) {
   return Object.values(TRADE_DOCUMENTS).find((config) => config.tab === tab);

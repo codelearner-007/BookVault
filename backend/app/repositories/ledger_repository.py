@@ -38,6 +38,10 @@ _PARTY_KINDS = text("""
     SELECT CAST(id AS text) AS id, kind_key FROM public.parties
     WHERE business_id = :business_id AND id = ANY(CAST(:ids AS uuid[]))
 """)
+_INVENTORY_ITEMS = text("""
+    SELECT CAST(item_id AS text) FROM public.inventory_items
+    WHERE business_id = :business_id AND item_id = ANY(CAST(:ids AS uuid[]))
+""")
 _BASE_DECIMALS = text(
     "SELECT c.decimal_places FROM public.business_currencies bc"
     " JOIN public.currencies c ON c.id = bc.currency_id"
@@ -167,11 +171,13 @@ class LedgerRepository:
         self.session.add_all(lines)
         await self.session.flush()
 
-    async def live_entry(self, business_id: str, document_id: str) -> JournalEntry | None:
-        """The document's current posting: not a reversal and not reversed yet."""
+    async def live_entry(self, business_id: str, document_id: str, *, cogs: bool = False) -> JournalEntry | None:
+        """The document's current posting: not a reversal and not reversed yet. A sales document's cost of
+        sales is a separate entry (source cogs, BV-01): `cogs` picks it instead of the document entry."""
         reversal = select(JournalEntry.reverses_entry_id).where(
             JournalEntry.business_id == business_id, JournalEntry.reverses_entry_id.is_not(None)
         )
+        cogs_source = select(JournalEntrySource.id).where(JournalEntrySource.key == "cogs").scalar_subquery()
         result = await self.session.execute(
             select(JournalEntry)
             .where(
@@ -179,6 +185,7 @@ class LedgerRepository:
                 JournalEntry.document_id == document_id,
                 JournalEntry.reverses_entry_id.is_(None),
                 JournalEntry.id.not_in(reversal),
+                (JournalEntry.source_id == cogs_source) if cogs else (JournalEntry.source_id != cogs_source),
             )
             .order_by(JournalEntry.posted_at.desc(), JournalEntry.id.desc())
             .limit(1)
@@ -198,6 +205,19 @@ class LedgerRepository:
     async def add_allocations(self, rows: list[PaymentAllocation]) -> None:
         self.session.add_all(rows)
         await self.session.flush()
+
+    async def delete_invoice_allocations(self, business_id: str, invoice_document_id: str,
+                                         settling_ids: list[str]) -> None:
+        if settling_ids:
+            await self.session.execute(delete(PaymentAllocation).where(
+                PaymentAllocation.business_id == business_id,
+                PaymentAllocation.invoice_document_id == invoice_document_id,
+                PaymentAllocation.settling_document_id.in_(settling_ids),
+            ))
+
+    async def inventory_item_ids(self, business_id: str, ids: set[str]) -> set[str]:
+        rows = await self.session.execute(_INVENTORY_ITEMS, {"business_id": business_id, "ids": list(ids)})
+        return set(rows.scalars().all())
 
     async def allocations(self, business_id: str, settling_document_id: str) -> list[PaymentAllocation]:
         result = await self.session.execute(

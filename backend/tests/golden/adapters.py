@@ -32,16 +32,18 @@ class GoldenRun:
     tax_codes: dict[str, str] = field(default_factory=dict)  # fixture tax code key -> tax code id
     items: dict[str, str] = field(default_factory=dict)  # fixture item key -> item id
     invoices: dict[str, str] = field(default_factory=dict)  # fixture id -> sales / purchase invoice document id
+    documents: dict[str, str] = field(default_factory=dict)  # fixture id -> trade document id (orders, ...)
+    locations: dict[str, str] = field(default_factory=dict)  # fixture location key -> inventory location id
 
     def account_key(self, account_id: str) -> str:
         return next(k for k, v in self.accounts.items() if v == account_id)
 
     def dimensions(self, line: dict) -> dict:
-        """Fixture dimension keys of a Transaction Journal line (bank account, party, invoice, tax code)."""
+        """Fixture dimension keys of a Transaction Journal line (bank account, party, invoice, tax code, item)."""
         found = {}
         for name, ids, column in (("bank_account", self.banks, "bank_account_id"), ("party", self.parties, "party_id"),
                                   ("invoice", self.invoices, "invoice_document_id"),
-                                  ("tax_code", self.tax_codes, "tax_code_id")):
+                                  ("tax_code", self.tax_codes, "tax_code_id"), ("item", self.items, "item_id")):
             key = next((k for k, v in ids.items() if v == line.get(column)), None)
             if key:
                 found[name] = key
@@ -228,6 +230,8 @@ async def any_starting_balance(run: GoldenRun, fixture: dict) -> Outcome:
         return await bank_starting_balance(run, fixture)
     if kind == "sales_invoice":
         return await invoice_starting_balance(run, fixture)
+    if kind == "inventory_item":
+        return await inventory_starting_balance(run, fixture)
     return await starting_balance(run, fixture)
 
 
@@ -263,17 +267,86 @@ def _invoice_body(run: GoldenRun, doc: dict) -> dict:
     return body
 
 
+def _source(run: GoldenRun, fields: dict) -> dict:
+    """fields.linked {document type: fixture id} -> the create body's source document (order, ...)."""
+    linked = [v for k, v in fields.get("linked", {}).items() if k in ("sales_order", "purchase_order")]
+    return {"source_document_id": run.documents[linked[0]]} if linked else {}
+
+
 async def sales_invoice(run: GoldenRun, fixture: dict) -> Outcome:
     """BUG-05 warn (T43): the first post answers credit_limit_warning; the confirmed resend posts."""
-    body = _invoice_body(run, fixture["document"])
+    body = {**_invoice_body(run, fixture["document"]), **_source(run, fixture["document"].get("fields", {}))}
     path = biz(run.business_id, "/sales-invoices")
     response = await run.client.post(path, headers=run.owner.headers, json=body)
     if response.status_code == 409 and response.json()["details"].get("code") == "credit_limit_warning":
         response = await run.client.post(path, headers=run.owner.headers, json={**body, "credit_limit_override": True})
     outcome = await _with_journal(run, response)
     if outcome.status_code == 201:
-        run.invoices[fixture["id"]] = outcome.body["id"]
+        run.invoices[fixture["id"]] = run.documents[fixture["id"]] = outcome.body["id"]
     return outcome
+
+
+def trade_document(path: str, party_field: str, *, priced: bool = True) -> Adapter:
+    """Quotes, orders (PR-15), delivery notes and goods receipts (PR-37, PR-44): no ledger lines."""
+    async def adapter(run: GoldenRun, fixture: dict) -> Outcome:
+        doc = fixture["document"]
+        fields = doc.get("fields", {})
+        lines = _trade_lines(run, doc["lines"]) if priced else [
+            {"item_id": run.items[x["item"]], "qty": x["qty"]} for x in doc["lines"]]
+        response = await run.client.post(biz(run.business_id, path), headers=run.owner.headers, json={
+            "date": doc["date"], party_field: run.parties[fields["party"]], "post": True, "lines": lines,
+            **_source(run, fields)})
+        outcome = await _with_journal(run, response)
+        if outcome.status_code == 201:
+            run.documents[fixture["id"]] = outcome.body["id"]
+        return outcome
+    return adapter
+
+
+async def inventory_write_off(run: GoldenRun, fixture: dict) -> Outcome:
+    """PR-46: at moving average (BV-01), default location and account."""
+    doc = fixture["document"]
+    response = await run.client.post(biz(run.business_id, "/inventory-write-offs"), headers=run.owner.headers, json={
+        "date": doc["date"], "post": True,
+        "lines": [{"item_id": run.items[x["item"]], "qty": x["qty"]} for x in doc["lines"]]})
+    return await _with_journal(run, response)
+
+
+async def inventory_transfer(run: GoldenRun, fixture: dict) -> Outcome:
+    """PR-45: quantities between locations, no ledger lines."""
+    doc = fixture["document"]
+    fields = doc["fields"]
+    response = await run.client.post(biz(run.business_id, "/inventory-transfers"), headers=run.owner.headers, json={
+        "date": doc["date"], "post": True, "from_location_id": run.locations[fields["from_location"]],
+        "to_location_id": run.locations[fields["to_location"]],
+        "lines": [{"item_id": run.items[x["item"]], "qty": x["qty"]} for x in doc["lines"]]})
+    return await _with_journal(run, response)
+
+
+async def production_order(run: GoldenRun, fixture: dict) -> Outcome:
+    """PR-47: the bill of materials at moving average into the finished item."""
+    doc = fixture["document"]
+    fields = doc["fields"]
+    response = await run.client.post(biz(run.business_id, "/production-orders"), headers=run.owner.headers, json={
+        "date": doc["date"], "post": True, "finished_item_id": run.items[fields["finished_item"]],
+        "qty": fields["qty"],
+        "lines": [{"item_id": run.items[x["item"]], "qty": x["qty"]} for x in doc["lines"]]})
+    return await _with_journal(run, response)
+
+
+async def inventory_starting_balance(run: GoldenRun, fixture: dict) -> Outcome:
+    """T69 (PR-62): qty on hand per location + total cost -> one opening entry."""
+    fields = fixture["document"]["fields"]
+    response = await run.client.put(
+        biz(run.business_id, f"/starting-balances/inventory-items/{run.items[fields['item']]}"),
+        headers=run.owner.headers, json={"total_cost": fields["total_cost"], "locations": [
+            {"location_id": run.locations[x["location"]], "qty": x["qty_on_hand"]}
+            for x in fields["qty_on_hand_lines"]]})
+    body = response.json()
+    if response.status_code != 200:
+        return Outcome(response.status_code, body, [])
+    entries = (await journal(run.client, run.owner, run.business_id, body["document_id"]))["entries"]
+    return Outcome(201, body, entries)
 
 
 async def credit_note(run: GoldenRun, fixture: dict) -> Outcome:
@@ -309,11 +382,12 @@ async def late_payment_fee(run: GoldenRun, fixture: dict) -> Outcome:
 
 
 def _purchase_body(run: GoldenRun, doc: dict) -> dict:
-    """PR-38: due Net N days; the party is the supplier."""
+    """PR-38: due Net N days; the party is the supplier; PR-39: also acts as goods receipt."""
     fields = doc.get("fields", {})
     body = {"date": doc["date"], "supplier_id": run.parties[fields["party"]], "post": True,
             "description": fields.get("description"), "amounts_include_tax": fields.get("amounts_include_tax", False),
-            "lines": _trade_lines(run, doc["lines"]), "is_starting_balance": fields.get("is_starting_balance", False)}
+            "lines": _trade_lines(run, doc["lines"]), "is_starting_balance": fields.get("is_starting_balance", False),
+            "acts_as_stock_movement": fields.get("also_acts_as_goods_receipt", False), **_source(run, fields)}
     if fields.get("due", {}).get("kind") == "net_days":
         body["due_date"] = (date.fromisoformat(doc["date"]) + timedelta(days=fields["due"]["days"])).isoformat()
     return body
@@ -339,7 +413,7 @@ async def purchase_invoice(run: GoldenRun, fixture: dict) -> Outcome:
                                      json=_purchase_body(run, fixture["document"]))
     outcome = await _with_journal(run, response)
     if outcome.status_code == 201:
-        run.invoices[fixture["id"]] = outcome.body["id"]
+        run.invoices[fixture["id"]] = run.documents[fixture["id"]] = outcome.body["id"]
         outcome.actions = await _purchase_actions(run, fixture, outcome.body["id"])
         outcome.entries = (await journal(run.client, run.owner, run.business_id, outcome.body["id"]))["entries"]
     return outcome
@@ -384,21 +458,32 @@ ADAPTERS: dict[str, Adapter] = {
     "late_payment_fee": late_payment_fee,
     "purchase_invoice": purchase_invoice,
     "debit_note": debit_note,
+    # B6: orders, quotes and stock documents (fixtures moved from B4 / B5 because they use inventory items)
+    "sales_quote": trade_document("/sales-quotes", "customer_id"),
+    "sales_order": trade_document("/sales-orders", "customer_id"),
+    "delivery_note": trade_document("/delivery-notes", "customer_id", priced=False),
+    "purchase_quote": trade_document("/purchase-quotes", "supplier_id"),
+    "purchase_order": trade_document("/purchase-orders", "supplier_id"),
+    "goods_receipt": trade_document("/goods-receipts", "supplier_id", priced=False),
+    "inventory_write_off": inventory_write_off,
+    "inventory_transfer": inventory_transfer,
+    "production_order": production_order,
 }
 # Starting-balance kinds with an adapter (purchase invoices: B5, items: B6).
-STARTING_BALANCE_KINDS = {"balance_sheet_account", "bank_account", "sales_invoice"}
+STARTING_BALANCE_KINDS = {"balance_sheet_account", "bank_account", "sales_invoice", "inventory_item"}
 # Setup record kinds the runner can create; a fixture needing another kind waits for its phase
-# (T86 divisions: B15).
-SUPPORTED_SETUP = {"accounts", "settings", "account_groups", "bank_accounts", "parties", "tax_codes", "items"}
+# (T86 divisions: B15). dated_records: only manager_only ones (skipped, runner.dated_records).
+SUPPORTED_SETUP = {"accounts", "settings", "account_groups", "bank_accounts", "parties", "tax_codes", "items",
+                   "inventory_locations", "dated_records"}
 # Party kinds the runner can create (employees B10, special accounts B11).
 SUPPORTED_PARTY_KINDS = {"capital_account", "customer", "supplier"}
-# Item kinds the runner can create (inventory items and kits: B6).
-SUPPORTED_ITEM_KINDS = {"non_inventory"}
+# Item kinds the runner can create.
+SUPPORTED_ITEM_KINDS = {"non_inventory", "inventory", "kit"}
 # Tax code types the runner can create (multi-rate and reverse charge: B7).
 SUPPORTED_TAX_CODES = {"single_rate"}
 # Settings the runner can apply; others belong to later phases (stock B6, WHT B7, currencies B8,
 # billable expenses B12).
-SUPPORTED_SETTINGS = {"books_start_date", "lock_date", "credit_limit_policy"}
+SUPPORTED_SETTINGS = {"books_start_date", "lock_date", "credit_limit_policy", "allow_negative_stock"}
 # Base-currency bank accounts only until B8; withholding tax arrives in B7.
 FOREIGN_FIELDS = {"currency", "exchange_rate", "currency_amount", "debit_currency_amount", "withholding_tax"}
 
@@ -425,9 +510,15 @@ def _parties_supported(fixture: dict) -> bool:
                     for t in setup.get("tax_codes", [])))
 
 
+def _dated_records_supported(fixture: dict) -> bool:
+    """Every dated record is Manager-only setup (inventory unit costs, BV-01) or none at all."""
+    return all(r.get("applies_to") == "manager_only" for r in fixture.get("setup", {}).get("dated_records", []))
+
+
 def runner_supports(fixture: dict) -> bool:
     return (
         "document" in fixture
+        and _dated_records_supported(fixture)
         and adapter_for(fixture["document"]["type"]) is not None
         and _kind_supported(fixture["document"])
         and set(fixture.get("setup", {})) <= SUPPORTED_SETUP

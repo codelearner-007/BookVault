@@ -15,6 +15,7 @@ import { FormattedDate } from '@/components/common/business-format';
 import { Money } from '@/components/common/money';
 import { MONEY_INPUT, SIDES, SIDE_SHORT, isZeroAmount, normalSide, toInputAmount } from '../coa/coa-tree';
 import { ErrorAlert } from '../ledger/ledger-parts';
+import InventoryStartingBalances from '../inventory/InventoryStartingBalances';
 import StartingBalanceInvoices from '../sales/StartingBalanceInvoices';
 import { TRADE_SIDES } from '../sales/sales-documents';
 
@@ -136,7 +137,7 @@ function Section({ title, empty, children, count, footer }) {
 }
 
 // ?tab=settings&page=starting-balances: opening balances of every balance-sheet account and bank or cash account,
-// and the sales invoices customers owed when the books start.
+// inventory on hand, and the sales / purchase invoices still open when the books start.
 export default function BusinessStartingBalances({ business }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -201,6 +202,7 @@ export default function BusinessStartingBalances({ business }) {
               />
             ))}
           </Section>
+          <InventoryStartingBalances businessId={business.id} />
           <StartingBalanceInvoices businessId={business.id} side={TRADE_SIDES.sales} />
           <StartingBalanceInvoices businessId={business.id} side={TRADE_SIDES.purchases} />
         </div>

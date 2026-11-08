@@ -143,6 +143,8 @@ class InvoiceFields(TradeFields):
     is_starting_balance: bool = False
     paid_before_start: Optional[NonNegativeMoney] = None
     credit_limit_override: bool = False
+    acts_as_stock_movement: bool = False  # "Also acts as delivery note" (B6)
+    location_id: Optional[IdStr] = None  # where stock moves (null = the default location)
 
     @model_validator(mode="after")
     def _terms(self) -> "InvoiceFields":
@@ -157,6 +159,8 @@ class InvoiceFields(TradeFields):
 
 class CreditNoteFields(TradeFields):
     invoice_id: Optional[IdStr] = None  # null = Automatic (oldest open invoice, PR-30)
+    acts_as_stock_movement: bool = False  # the returned goods are back on hand (B6)
+    location_id: Optional[IdStr] = None
 
 
 class DeliveryLineIn(RequestModel):
@@ -171,6 +175,7 @@ class DeliveryNoteFields(RequestModel):
     customer_id: IdStr
     delivery_address: OptionalText = None
     description: OptionalText = None
+    location_id: Optional[IdStr] = None  # delivered from (null = the default location)
     lines: list[DeliveryLineIn] = Field(min_length=1, max_length=LIST_MAX)
 
 

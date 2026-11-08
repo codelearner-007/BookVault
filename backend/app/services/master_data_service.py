@@ -39,7 +39,7 @@ class MasterDataService:
         if row is None or not row.is_active or row.type not in types:
             raise LedgerValidationError(f"Choose an active {label} account of this business", "invalid_account")
 
-    async def _assert_unique(self, model, business_id: str, name: str | None, code: str | None,
+    async def assert_unique(self, model, business_id: str, name: str | None, code: str | None,
                              exclude_id: str | None = None) -> None:
         if name and await self.repo.name_taken(model, business_id, name, exclude_id):
             raise ConflictError("This name is already used", "name_taken")
@@ -61,7 +61,7 @@ class MasterDataService:
     async def create_tax_code(self, ctx: BusinessContext, body: CreateTaxCodeRequest) -> TaxCodeResponse:
         account_id = body.account_id or await self.coa.system_account_id(ctx.business_id, TAX_PAYABLE)
         await self._assert_account(ctx.business_id, account_id, TAX_ACCOUNT_TYPES, "liability or asset")
-        await self._assert_unique(TaxCode, ctx.business_id, body.name, body.code)
+        await self.assert_unique(TaxCode, ctx.business_id, body.name, body.code)
         code = TaxCode(business_id=ctx.business_id, name=body.name, code=body.code)
         await self.repo.add(code)
         await self.repo.add(TaxCodeComponent(business_id=ctx.business_id, tax_code_id=code.id, rate=body.rate,
@@ -77,7 +77,7 @@ class MasterDataService:
         check_version(code, body.version)
         fields = changed_fields(body, required=("name", "rate", "account_id"))
         await self._assert_account(ctx.business_id, fields.get("account_id"), TAX_ACCOUNT_TYPES, "liability or asset")
-        await self._assert_unique(TaxCode, ctx.business_id, fields.get("name"), fields.get("code"), code.id)
+        await self.assert_unique(TaxCode, ctx.business_id, fields.get("name"), fields.get("code"), code.id)
         component = await self.repo.tax_component(ctx.business_id, code.id)
         for key in ("rate", "account_id"):
             if key in fields:
@@ -112,7 +112,7 @@ class MasterDataService:
             raise ResourceNotFoundError("Item", item_id)
         return ItemResponse.model_validate(row)
 
-    async def _assert_item_refs(self, business_id: str, fields: dict) -> None:
+    async def assert_item_refs(self, business_id: str, fields: dict) -> None:
         await self._assert_account(business_id, fields.get("income_account_id"), {"income"}, "income")
         await self._assert_account(business_id, fields.get("expense_account_id"), {"expense"}, "expense")
         tax_code_id = fields.get("tax_code_id")
@@ -121,8 +121,8 @@ class MasterDataService:
 
     async def create_item(self, ctx: BusinessContext, body: CreateItemRequest) -> ItemResponse:
         fields = body.model_dump()
-        await self._assert_item_refs(ctx.business_id, fields)
-        await self._assert_unique(Item, ctx.business_id, None, body.code)
+        await self.assert_item_refs(ctx.business_id, fields)
+        await self.assert_unique(Item, ctx.business_id, None, body.code)
         item = Item(business_id=ctx.business_id, item_kind_key=NON_INVENTORY, **fields)
         await self.repo.add(item)
         after = await self.get_item(ctx.business_id, item.id)
@@ -134,8 +134,8 @@ class MasterDataService:
         item = await self.repo.item(ctx.business_id, item_id)
         check_version(item, body.version)
         fields = changed_fields(body, required=("name", "income_account_id"))
-        await self._assert_item_refs(ctx.business_id, fields)
-        await self._assert_unique(Item, ctx.business_id, None, fields.get("code"), item.id)
+        await self.assert_item_refs(ctx.business_id, fields)
+        await self.assert_unique(Item, ctx.business_id, None, fields.get("code"), item.id)
         for key, value in fields.items():
             setattr(item, key, value)
         await self.repo.save()

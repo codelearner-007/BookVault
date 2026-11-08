@@ -24,6 +24,7 @@ class CustomerResponse(BaseModel):
     ar_balance: MoneyOut
     available_credit: MoneyOut | None
     uninvoiced: MoneyOut
+    qty_to_deliver: MoneyOut
     status: str | None
     version: int
     created_at: datetime
@@ -146,6 +147,7 @@ class AppliedDocument(BaseModel):
     reference: str | None
     amount: MoneyOut
     early_discount: MoneyOut
+    is_credit_application: bool = False  # the party's earlier credit, absorbed by this invoice (T58)
 
 
 class LateFeeOnInvoice(BaseModel):
@@ -212,6 +214,7 @@ class TradeDocumentBase(BaseModel):
     invoice_reference: str | None = None
     is_closed: bool | None = None
     acts_as_stock_movement: bool = False
+    location_id: str | None = None  # where it moves stock (NULL = the default location)
     links: list[LinkedDocument] = []
     warnings: list[DocumentWarning] = []
     created_at: datetime

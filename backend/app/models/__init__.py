@@ -35,6 +35,16 @@ from app.models.ledger import (
     OpeningBalance,
     PaymentAllocation,
 )
+from app.models.inventory import (
+    InventoryCostCorrection,
+    InventoryItem,
+    InventoryLocation,
+    KitComponent,
+    ProductionOrder,
+    StockDocument,
+    StockDocumentLine,
+    StockMovement,
+)
 from app.models.mfa_recovery_code import MfaRecoveryCode
 from app.models.attachment import Attachment, AttachmentContent
 from app.models.bank_account import BankAccount
@@ -111,4 +121,12 @@ __all__ = [
     "RolePermission",
     "UserProfile",
     "UserRole",
+    "InventoryCostCorrection",
+    "InventoryItem",
+    "InventoryLocation",
+    "KitComponent",
+    "ProductionOrder",
+    "StockDocument",
+    "StockDocumentLine",
+    "StockMovement",
 ]

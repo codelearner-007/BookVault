@@ -10,7 +10,8 @@ import { InactiveBadge, TableSkeleton, useLoad } from '../banking/banking-parts'
 import { PARTY_STATUS } from './sales-documents';
 import { StatusPill, useUrlSearch } from './sales-parts';
 
-// Manager's columns after Name, per side: Customers add Uninvoiced and Available credit; Suppliers do not.
+// Manager's columns after Name, per side: Customers add Qty to deliver, Uninvoiced and Available credit;
+// Suppliers add Qty to receive.
 function partyColumns(side) {
   const name = {
     key: 'name',
@@ -20,9 +21,12 @@ function partyColumns(side) {
   };
   const balance = { key: 'balance', label: side.balance.label, kind: COLUMN_KIND.money, card: 'end', value: (party) => party[side.balance.field] };
   const status = { key: 'status', label: 'Status', render: (party) => <StatusPill statuses={PARTY_STATUS} status={party.status} /> };
-  if (side.key === 'purchases') return [name, balance, status];
+  if (side.key === 'purchases') {
+    return [name, { key: 'qty_to_receive', label: 'Qty to receive', kind: COLUMN_KIND.qty }, balance, status];
+  }
   return [
     name,
+    { key: 'qty_to_deliver', label: 'Qty to deliver', kind: COLUMN_KIND.qty },
     { key: 'uninvoiced', label: 'Uninvoiced', kind: COLUMN_KIND.money, zero: 'muted' },
     balance,
     status,

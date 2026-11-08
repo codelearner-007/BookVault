@@ -25,6 +25,7 @@ class SupplierResponse(BaseModel):
     is_inactive: bool
     ap_balance: MoneyOut  # credit-positive: what the business owes the supplier
     available_credit: MoneyOut | None
+    qty_to_receive: MoneyOut
     status: str | None
     version: int
     created_at: datetime

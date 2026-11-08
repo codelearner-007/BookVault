@@ -63,6 +63,7 @@ class CustomerService:
             "ar_balance": ar,
             "available_credit": round_money(limit - ar, dp) if limit is not None else None,
             "uninvoiced": round_money(summary.uninvoiced if summary else ZERO, dp),
+            "qty_to_deliver": summary.qty_to_deliver if summary else ZERO,
             "status": customer_status(ar, bool(summary and summary.has_history)),
         })
 
