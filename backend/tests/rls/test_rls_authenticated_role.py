@@ -110,14 +110,16 @@ async def test_db_composite_fk_blocks_cross_business_reference(db_conn, users):
         {"id": account_b, "b": business_b},
     )
 
+    # B4: the legacy receipts table is gone; an item of A pointing at an account of B.
     savepoint = await db_conn.begin_nested()
-    with pytest.raises(IntegrityError, match="receipts_business_received_in_account_fkey"):
+    with pytest.raises(IntegrityError, match="items_income_account_fkey"):
         await db_conn.execute(
             text(
-                "INSERT INTO public.receipts (business_id, date, received_in_account_id)"
-                " VALUES (:a, current_date, :account)"
+                "INSERT INTO public.items (business_id, item_kind_key, name, income_account_id)"
+                " SELECT :a, 'non_inventory', 'Item', a.id FROM public.coa_accounts a"
+                " WHERE a.business_id = :b LIMIT 1"
             ),
-            {"a": business_a, "account": account_b},
+            {"a": business_a, "b": business_b},
         )
     await savepoint.rollback()
 

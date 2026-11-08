@@ -61,9 +61,11 @@ _DETAIL = text(f"""
 _LINES = text(f"""
     SELECT CAST(x.id AS text) AS id, x.line_no, CAST(x.account_id AS text) AS account_id, a.code AS account_code,
            a.name AS account_name, CAST(x.party_id AS text) AS party_id, {_PARTY_NAME} AS party_name,
+           CAST(x.invoice_document_id AS text) AS invoice_id, inv.reference AS invoice_reference,
            x.description, x.qty, x.unit_price, x.discount
     FROM public.cash_transaction_lines x
     LEFT JOIN public.coa_accounts a ON a.business_id = x.business_id AND a.id = x.account_id
+    LEFT JOIN public.documents inv ON inv.business_id = x.business_id AND inv.id = x.invoice_document_id
     {_party_joins("x", "party_id")}
     WHERE x.business_id = :business_id AND x.document_id = :document_id
     ORDER BY x.line_no
@@ -94,6 +96,14 @@ _LINES_REPORT = text(f"""
     OFFSET :offset LIMIT :limit
 """)
 _LINES_REPORT_COUNT = text(f"SELECT count(*) {_LINES_REPORT_FILTER}")
+_ALLOCATIONS = text("""
+    SELECT CAST(pa.invoice_document_id AS text) AS invoice_id, inv.reference AS invoice_reference, pa.amount,
+           pa.early_discount
+    FROM public.payment_allocations pa
+    LEFT JOIN public.documents inv ON inv.business_id = pa.business_id AND inv.id = pa.invoice_document_id
+    WHERE pa.business_id = :business_id AND pa.settling_document_id = :document_id
+    ORDER BY inv.document_date, pa.id
+""")
 _PARTY_KINDS = text("""
     SELECT CAST(id AS text) AS id, kind_key FROM public.parties
     WHERE business_id = :business_id AND id = ANY(CAST(:ids AS uuid[]))
@@ -142,6 +152,10 @@ class CashTransactionRepository:
         total = (await self.session.execute(_LINES_REPORT_COUNT, args)).scalar_one()
         rows = (await self.session.execute(_LINES_REPORT, {**args, "dp": dp, "offset": offset, "limit": limit})).all()
         return list(rows), total
+
+    async def allocations(self, business_id: str, document_id: str) -> list[Row]:
+        return list((await self.session.execute(
+            _ALLOCATIONS, {"business_id": business_id, "document_id": document_id})).all())
 
     async def party_kinds(self, business_id: str, ids: set[str]) -> dict[str, str]:
         rows = await self.session.execute(_PARTY_KINDS, {"business_id": business_id, "ids": list(ids)})

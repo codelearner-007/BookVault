@@ -6,8 +6,10 @@ COMMIT, immutable posted lines, inclusive lock date, unique numbering.
 
 Two kinds of documents: types without a typed line table (journal entries, opening balances)
 keep their editable lines in document_lines and post them with `post`; typed documents
-(receipts, payments, transfers, B3) keep their own lines and post computed lines with
-`post_lines`. Every line passes the same sub-ledger rules (`_assert_dimensions`).
+(receipts, payments, transfers, B3; trade documents, late fees, B4) keep their own lines and
+post computed lines with `post_lines`. Every line passes the same sub-ledger rules
+(`_assert_dimensions`). Allocations (which document settles which invoice, PR-64) and document
+links are written here too, in the same transaction as the posting.
 """
 
 from dataclasses import dataclass, replace
@@ -18,7 +20,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import JournalUnbalancedError, LedgerValidationError, PeriodLockedError
 from app.core.money import DEFAULT_CURRENCY_DECIMALS, round_money
-from app.models.ledger import Document, DocumentLine, JournalEntry, JournalLine, OpeningBalance
+from app.models.ledger import (
+    Document,
+    DocumentLine,
+    JournalEntry,
+    JournalLine,
+    OpeningBalance,
+    PaymentAllocation,
+)
+from app.models.sales import DocumentLink
 from app.repositories.ledger_repository import LedgerRepository
 from app.services.access_service import BusinessContext
 
@@ -28,9 +38,9 @@ OPENING_BALANCE = "opening_balance"
 MIN_POSTED_LINES = 2
 
 # Sub-ledger kinds (system_account_types.subledger_kind) and the party kind each control account
-# takes; control accounts of later phases (AR/AP: B4/B5, assets: B9, ...) are not postable yet.
+# takes; control accounts of later phases (AP: B5, assets: B9, ...) are not postable yet.
 SUBLEDGER_NONE, SUBLEDGER_BANK, SUBLEDGER_PARTY = "none", "bank_account", "party"
-PARTY_KIND_OF_CONTROL = {"capital_control": "capital_account"}
+PARTY_KIND_OF_CONTROL = {"capital_control": "capital_account", "accounts_receivable": "customer"}
 
 
 @dataclass(frozen=True)
@@ -41,9 +51,27 @@ class LineInput:
     description: str | None = None
     bank_account_id: str | None = None
     party_id: str | None = None
+    invoice_document_id: str | None = None
+    item_id: str | None = None
+    tax_code_id: str | None = None
 
     def ledger_key(self) -> tuple:
-        return (self.account_id, self.debit, self.credit, self.bank_account_id, self.party_id)
+        return (self.account_id, self.debit, self.credit, self.bank_account_id, self.party_id,
+                self.invoice_document_id, self.item_id, self.tax_code_id)
+
+    def dimensions(self) -> dict:
+        return {"bank_account_id": self.bank_account_id, "party_id": self.party_id,
+                "invoice_document_id": self.invoice_document_id, "item_id": self.item_id,
+                "tax_code_id": self.tax_code_id}
+
+
+@dataclass(frozen=True)
+class Allocation:
+    """Part of an invoice settled by a document (amount received + early-payment discount)."""
+
+    invoice_document_id: str
+    amount: Decimal
+    early_discount: Decimal = Decimal(0)
 
 
 @dataclass(frozen=True)
@@ -89,9 +117,11 @@ class PostingService:
     async def books_start_date(self, business_id: str) -> date:
         return await self.repo.books_start_date(business_id)
 
-    async def assert_on_or_after_books_start(self, business_id: str, type_key: str, document_date: date) -> None:
-        """Only opening balances (dated books_start_date - 1) may precede the books (posting-rules §10)."""
-        if type_key == OPENING_BALANCE:
+    async def assert_on_or_after_books_start(self, business_id: str, type_key: str, document_date: date,
+                                             *, starting_balance: bool = False) -> None:
+        """Only opening balances (dated books_start_date - 1) and starting-balance invoices (PR-61,
+        D-36, flagged explicitly) may precede the books (posting-rules §10)."""
+        if type_key == OPENING_BALANCE or starting_balance:
             return
         start = await self.repo.books_start_date(business_id)
         if document_date < start:
@@ -163,10 +193,12 @@ class PostingService:
 
     async def create_header(
         self, ctx: BusinessContext, type_key: str, area_key: str, header: DocumentHeader, status: str,
+        *, starting_balance: bool = False,
     ) -> Document:
         """Insert the document row only (numbered when no reference is given)."""
         await self.assert_open(ctx.business_id, header.document_date)
-        await self.assert_on_or_after_books_start(ctx.business_id, type_key, header.document_date)
+        await self.assert_on_or_after_books_start(ctx.business_id, type_key, header.document_date,
+                                                  starting_balance=starting_balance)
         reference = header.reference or await self.repo.next_reference(ctx.business_id, type_key, area_key)
         document = Document(
             business_id=ctx.business_id,
@@ -193,10 +225,12 @@ class PostingService:
         await self._write_lines(document, lines)
         return document
 
-    async def update_header(self, ctx: BusinessContext, document: Document, header: DocumentHeader) -> None:
+    async def update_header(self, ctx: BusinessContext, document: Document, header: DocumentHeader,
+                            *, starting_balance: bool = False) -> None:
         await self.assert_open(ctx.business_id, document.document_date, header.document_date)
         type_key = await self.repo.document_type_key(document.document_type_id)
-        await self.assert_on_or_after_books_start(ctx.business_id, type_key, header.document_date)
+        await self.assert_on_or_after_books_start(ctx.business_id, type_key, header.document_date,
+                                                  starting_balance=starting_balance)
         document.document_date = header.document_date
         document.reference = header.reference or document.reference
         document.description = header.description
@@ -238,7 +272,7 @@ class PostingService:
             DocumentLine(
                 business_id=document.business_id, document_id=document.id, line_no=no,
                 account_id=x.account_id, debit=x.debit, credit=x.credit, description=x.description,
-                bank_account_id=x.bank_account_id, party_id=x.party_id,
+                **x.dimensions(),
             )
             for no, x in enumerate(lines, start=1)
         ])
@@ -275,19 +309,19 @@ class PostingService:
                 business_id=ctx.business_id, line_no=x.line_no, account_id=x.account_id,
                 debit=x.debit, credit=x.credit, document_line_id=x.id, description=x.description,
                 bank_account_id=x.bank_account_id, party_id=x.party_id,
+                invoice_document_id=x.invoice_document_id, item_id=x.item_id, tax_code_id=x.tax_code_id,
             )
             for x in lines
         ])
 
     async def post_lines(self, ctx: BusinessContext, document: Document, lines: list[LineInput]) -> JournalEntry:
-        """Post computed lines of a typed document (receipt, payment, transfer) as one entry."""
+        """Post computed lines of a typed document (receipt, invoice, transfer, ...) as one entry."""
         self._assert_balanced(lines)
         await self.assert_lines(ctx.business_id, lines)
         return await self._add_entry(ctx, document, SOURCE_DOCUMENT, [
             JournalLine(
                 business_id=ctx.business_id, line_no=no, account_id=x.account_id, debit=x.debit,
-                credit=x.credit, description=x.description, bank_account_id=x.bank_account_id,
-                party_id=x.party_id,
+                credit=x.credit, description=x.description, **x.dimensions(),
             )
             for no, x in enumerate(lines, start=1)
         ])
@@ -298,7 +332,8 @@ class PostingService:
         if entry is None:
             return []
         return [
-            LineInput(x.account_id, x.debit, x.credit, x.description, x.bank_account_id, x.party_id)
+            LineInput(x.account_id, x.debit, x.credit, x.description, x.bank_account_id, x.party_id,
+                      x.invoice_document_id, x.item_id, x.tax_code_id)
             for x in await self.repo.entry_lines(document.business_id, entry.id)
         ]
 
@@ -317,6 +352,7 @@ class PostingService:
                 debit=x.credit, credit=x.debit, document_line_id=x.document_line_id,
                 line_date=x.line_date, description=x.description,
                 bank_account_id=x.bank_account_id, party_id=x.party_id,
+                invoice_document_id=x.invoice_document_id, item_id=x.item_id, tax_code_id=x.tax_code_id,
             )
             for x in originals
         ])
@@ -327,12 +363,37 @@ class PostingService:
         return await self.reverse(ctx, entry) if entry else None
 
     async def link_opening_balance(self, ctx: BusinessContext, document: Document, kind_key: str,
-                                   account_id: str | None = None, bank_account_id: str | None = None) -> None:
+                                   account_id: str | None = None, bank_account_id: str | None = None,
+                                   invoice_document_id: str | None = None,
+                                   paid_before_start: Decimal | None = None) -> None:
         """Name the opening document's source record (one live row per record, DB trigger)."""
         await self.repo.add_opening_balance(OpeningBalance(
             document_id=document.id, business_id=ctx.business_id, kind_key=kind_key,
             account_id=account_id, bank_account_id=bank_account_id,
+            invoice_document_id=invoice_document_id, paid_before_start=paid_before_start,
         ))
+
+    # ---------------------------------------------------------------- allocations and links
+    async def replace_allocations(self, ctx: BusinessContext, document: Document,
+                                  allocations: list[Allocation]) -> None:
+        """The invoices this document settles (stored at posting, never re-shuffled, PR-64)."""
+        await self.repo.delete_allocations(ctx.business_id, document.id)
+        await self.repo.add_allocations([
+            PaymentAllocation(business_id=ctx.business_id, settling_document_id=document.id,
+                              invoice_document_id=a.invoice_document_id, amount=a.amount,
+                              early_discount=a.early_discount)
+            for a in allocations if a.amount > 0
+        ])
+
+    async def allocations_of(self, document: Document) -> list[PaymentAllocation]:
+        return await self.repo.allocations(document.business_id, document.id)
+
+    async def unlink(self, ctx: BusinessContext, to_document: Document, link_type: str) -> None:
+        await self.repo.delete_links(ctx.business_id, to_document.id, link_type)
+
+    async def link(self, ctx: BusinessContext, from_document_id: str, to_document: Document, link_type: str) -> None:
+        await self.repo.add_link(DocumentLink(business_id=ctx.business_id, from_document_id=from_document_id,
+                                              to_document_id=to_document.id, link_type_key=link_type))
 
     async def repost(self, ctx: BusinessContext, document: Document) -> JournalEntry:
         """PR-73: edit of a posted document = reversal of its current entry + a new entry."""
@@ -344,7 +405,8 @@ class PostingService:
         return await self.post_lines(ctx, document, lines)
 
     async def void(self, ctx: BusinessContext, document: Document) -> None:
-        """Posted: reversal + status void. Draft: status void, no ledger effect."""
+        """Posted: reversal + status void; what it settled is released. Draft: status void only."""
         await self.assert_open(ctx.business_id, document.document_date)
         await self.reverse_live_entry(ctx, document)
+        await self.repo.delete_allocations(ctx.business_id, document.id)
         await self.set_status(ctx, document, VOID)

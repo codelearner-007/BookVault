@@ -107,13 +107,13 @@ async def test_rls_helpers_are_security_definer_with_empty_search_path(db_conn):
 # B3: typed document extensions, allocations and attachments are voided / soft-deleted the same way.
 APPEND_ONLY = {"audit_logs", "documents", "journal_entries", "journal_lines", "opening_balances",
                "cash_transactions", "inter_account_transfers", "payment_allocations", "attachments",
-               "attachment_contents"}
+               "attachment_contents", "trade_documents", "invoice_terms", "late_payment_fees"}
 # One row per business, inserted by a trigger and removed by the FK cascade (B0.7).
 # business_currencies (creation trigger) and document_sequences (next_document_reference())
 # are written by SECURITY DEFINER functions only (B1).
 SINGLETONS = {"business_settings", "business_currencies", "document_sequences"}
-# The pre-B3 receipts table is read-only until B4 drops it (migration 20261108000032).
-READ_ONLY = {"receipts"}
+# B4 dropped the read-only pre-B3 receipts table (migration 20261108000033).
+READ_ONLY: set[str] = set()
 
 
 async def test_business_tables_have_policies_for_every_command(db_conn):

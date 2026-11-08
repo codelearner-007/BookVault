@@ -39,6 +39,7 @@ class CashLineIn(LineAmountsIn):
     # Optional in the schema so a missing account is answered with code account_required (T31).
     account_id: Optional[IdStr] = None
     party_id: Optional[IdStr] = None
+    invoice_id: Optional[IdStr] = None  # receipts, Accounts receivable lines only; null = Automatic (B4)
     description: OptionalText = None
 
 

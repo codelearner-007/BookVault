@@ -14,6 +14,7 @@ import {
 import { formatMoney } from '@/lib/utils/money';
 import { MONEY_INPUT, SIDES, SIDE_SHORT, isZeroAmount, normalSide, toInputAmount } from '../coa/coa-tree';
 import { ErrorAlert } from '../ledger/ledger-parts';
+import StartingBalanceInvoices from '../sales/StartingBalanceInvoices';
 
 // Skeleton rows of the two sections: bank and cash accounts, then balance sheet accounts.
 const SKELETON_SECTIONS = [2, 5];
@@ -128,7 +129,8 @@ function Section({ title, empty, children, count, footer }) {
   );
 }
 
-// ?tab=settings&page=starting-balances: opening balances of every balance-sheet account and bank or cash account.
+// ?tab=settings&page=starting-balances: opening balances of every balance-sheet account and bank or cash account,
+// and the sales invoices customers owed when the books start.
 export default function BusinessStartingBalances({ business }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -193,6 +195,7 @@ export default function BusinessStartingBalances({ business }) {
               />
             ))}
           </Section>
+          <StartingBalanceInvoices businessId={business.id} />
         </div>
       )}
     </>

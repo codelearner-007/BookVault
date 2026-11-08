@@ -13,9 +13,13 @@ import { useIdempotencyKey } from './banking-parts';
   The frame of a banking document view (receipt, payment, transfer): title, Edit / Post / Void,
   the void confirmation, errors (409 period_locked text comes from the API) and the lock notice.
   postCall / voidCall: (version, idempotencyKey) => Promise. onChanged runs after a successful action.
+  menuItems: extra More-menu entries (Copy to ...); voidCopy: { label, action?, keepLabel?, body } for documents whose void is not a
+  ledger reversal (a cancelled quote or order).
 */
+const LEDGER_VOID = { label: 'Void', body: (noun) => `A reversal is posted to the ledger. The ${noun} stays on record as Void.` };
+
 export default function DocumentViewFrame({
-  title, doc, rights, noun, onBack, onEdit, postCall, voidCall, onChanged, children,
+  title, doc, rights, noun, onBack, onEdit, postCall, voidCall, onChanged, children, menuItems = [], voidCopy = LEDGER_VOID,
 }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
@@ -44,7 +48,12 @@ export default function DocumentViewFrame({
 
   const actions = (
     <>
-      {canVoid && <MoreMenu items={[{ label: 'Void', icon: Ban, destructive: true, onSelect: () => setConfirmVoid(true) }]} />}
+      <MoreMenu
+        items={[
+          ...menuItems,
+          canVoid && { label: voidCopy.label, icon: Ban, destructive: true, separatorBefore: menuItems.length > 0, onSelect: () => setConfirmVoid(true) },
+        ]}
+      />
       {canEdit && (
         <Button variant={canPost ? 'secondary' : 'default'} onClick={onEdit} disabled={!!busy}>
           <Pencil />
@@ -63,15 +72,15 @@ export default function DocumentViewFrame({
     <div className="max-w-4xl">
       <ConfirmDialog
         confirm={confirmVoid ? {
-          title: `Void this ${noun}?`,
-          body: `A reversal is posted to the ledger. The ${noun} stays on record as Void.`,
-          action: 'Void',
+          title: `${voidCopy.label} this ${noun}?`,
+          body: voidCopy.body(noun),
+          action: voidCopy.action ?? voidCopy.label,
           destructive: true,
         } : null}
         busy={busy === 'void'}
         onConfirm={() => run('void', voidCall)}
         onClose={() => setConfirmVoid(false)}
-        cancelLabel="Cancel"
+        cancelLabel={voidCopy.keepLabel ?? 'Cancel'}
       />
       <PageHeader title={title} back={<BackButton onClick={onBack} />} actions={actions} />
       {error && <ErrorAlert>{error}</ErrorAlert>}

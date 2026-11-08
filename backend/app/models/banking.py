@@ -41,6 +41,7 @@ class CashTransactionLine(Base):
     line_no: Mapped[int] = mapped_column(Integer, nullable=False)
     account_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     party_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    invoice_document_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     qty: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     unit_price: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     discount: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)

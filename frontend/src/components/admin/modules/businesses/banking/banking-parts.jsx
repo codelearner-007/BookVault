@@ -28,6 +28,12 @@ const DOCUMENT_TABS = {
   payment: BANKING_TABS.payments,
   inter_account_transfer: BANKING_TABS.transfers,
   journal_entry: 'journal-entries',
+  sales_quote: 'sales-quotes',
+  sales_order: 'sales-orders',
+  sales_invoice: 'sales-invoices',
+  credit_note: 'credit-notes',
+  delivery_note: 'delivery-notes',
+  late_payment_fee: 'late-payment-fees',
 };
 export const DOCUMENT_TYPE_LABELS = {
   receipt: 'Receipt',
@@ -35,6 +41,12 @@ export const DOCUMENT_TYPE_LABELS = {
   inter_account_transfer: 'Inter Account Transfer',
   journal_entry: 'Journal Entry',
   opening_balance: 'Starting balance',
+  sales_quote: 'Sales Quote',
+  sales_order: 'Sales Order',
+  sales_invoice: 'Sales Invoice',
+  credit_note: 'Credit Note',
+  delivery_note: 'Delivery Note',
+  late_payment_fee: 'Late Payment Fee',
 };
 const STARTING_BALANCES_HREF = '?tab=settings&page=starting-balances';
 

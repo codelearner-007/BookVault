@@ -21,6 +21,10 @@ class LedgerLineResponse(BaseModel):
     bank_account_name: str | None = None
     party_id: str | None = None
     party_name: str | None = None
+    invoice_document_id: str | None = None
+    invoice_reference: str | None = None
+    tax_code_id: str | None = None
+    tax_code_name: str | None = None
 
 
 class JournalEntryLineResponse(LedgerLineResponse):

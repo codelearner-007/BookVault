@@ -308,3 +308,66 @@ async def test_void_receipt_exactly_negates(client, books):
                              headers=owner.headers)).json()
     await client.post(biz(bid, f"/receipts/{doc['id']}/void"), json={"version": doc["version"]}, headers=owner.headers)
     assert await trial_balance(client, owner, bid) == before
+
+
+# ---------------------------------------------------------------- B4 sales (INV-2 AR, INV-3, INV-6)
+
+
+async def _random_sales(client, owner, bid, income, bank, customers, rng) -> None:
+    """Invoices, receipts (named and Automatic, some overpaying), credit notes, late fees; some voided."""
+    invoices = []
+    for _ in range(6):
+        customer = rng.choice(customers)
+        amount = str(Decimal(rng.randint(100, 50_000)) / 100)
+        body = {"date": DAY, "customer_id": customer, "post": True, "early_discount_rate": "2",
+                "early_discount_days": 10, "lines": [{"account_id": income, "qty": "1", "unit_price": amount}]}
+        response = await client.post(biz(bid, "/sales-invoices"), json=body, headers=owner.headers)
+        assert response.status_code == 201, response.text
+        invoices.append(response.json())
+    ar = await system_account_id(client, owner, bid, "accounts_receivable")
+    created = []
+    for _ in range(6):
+        invoice = rng.choice(invoices)
+        amount = str(Decimal(rng.randint(100, 60_000)) / 100)
+        kind = rng.choice(["receipts", "credit-notes", "late-payment-fees"])
+        if kind == "receipts":
+            line = {"account_id": ar, "party_id": invoice["customer_id"], "unit_price": amount,
+                    "invoice_id": rng.choice([invoice["id"], None])}
+            body = {"date": DAY, "bank_account_id": bank, "post": True, "lines": [line]}
+        elif kind == "credit-notes":
+            body = {"date": DAY, "customer_id": invoice["customer_id"], "post": True,
+                    "invoice_id": rng.choice([invoice["id"], None]),
+                    "lines": [{"account_id": income, "unit_price": amount}]}
+        else:
+            body = {"date": DAY, "customer_id": invoice["customer_id"], "invoice_id": invoice["id"],
+                    "amount": amount, "post": True}
+        response = await client.post(biz(bid, f"/{kind}"), json=body, headers=owner.headers)
+        assert response.status_code == 201, response.text
+        created.append((kind, response.json()))
+    for kind, doc in rng.sample(created, 2):
+        await client.post(biz(bid, f"/{kind}/{doc['id']}/void"), json={"version": doc["version"]},
+                          headers=owner.headers)
+
+
+@pytest.mark.parametrize("seed", [5, 23])
+async def test_receivable_equals_sum_of_customers(client, books, db_conn, seed):
+    """INV-2: Accounts receivable = Σ customers' AR balances; INV-3: no invoice balance below 0;
+    every AR line carries its customer; INV-1 the business balances."""
+    owner, bid, (income, *_) = books
+    bank = (await create_bank_account(client, owner, bid))["id"]
+    customers = [(await client.post(biz(bid, "/customers"), json={"name": f"Customer {i}"},
+                                    headers=owner.headers)).json()["id"] for i in range(3)]
+    await _random_sales(client, owner, bid, income, bank, customers, random.Random(seed))
+    ar = await system_account_id(client, owner, bid, "accounts_receivable")
+    control = await _scalar(db_conn, "SELECT COALESCE(sum(debit - credit), 0) FROM public.journal_lines"
+                            " WHERE business_id = CAST(:b AS uuid) AND account_id = CAST(:a AS uuid)", b=bid, a=ar)
+    listed = (await client.get(biz(bid, "/customers"), headers=owner.headers)).json()
+    each = sum((Decimal(x["ar_balance"]) for x in listed["items"]), Decimal(0))
+    without_party = await _scalar(db_conn, "SELECT count(*) FROM public.journal_lines WHERE business_id = CAST(:b AS uuid)"
+                                  " AND account_id = CAST(:a AS uuid) AND party_id IS NULL", b=bid, a=ar)
+    invoices = (await client.get(biz(bid, "/sales-invoices"), headers=owner.headers)).json()["items"]
+    business_net = await _scalar(db_conn, "SELECT COALESCE(sum(debit - credit), 0) FROM public.journal_lines"
+                                 " WHERE business_id = CAST(:b AS uuid)", b=bid)
+    assert control == each == Decimal(listed["total_ar_balance"])
+    assert without_party == 0 and business_net == 0
+    assert all(Decimal(x["balance_due"]) >= 0 for x in invoices if x["balance_due"] is not None)

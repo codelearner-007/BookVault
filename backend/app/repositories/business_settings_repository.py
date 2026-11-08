@@ -1,4 +1,4 @@
-"""Business settings repository: the book settings (books start date, lock date)."""
+"""Business settings repository: book settings (books start, lock date) and the credit-limit policy."""
 
 from datetime import date
 
@@ -38,3 +38,13 @@ class BusinessSettingsRepository:
             update(BusinessSettings).where(BusinessSettings.business_id == business_id)
             .values(books_start_date=books_start_date).execution_options(synchronize_session=False)
         )
+
+    async def update_credit_limit_policy(self, business_id: str, version: int, policy: str) -> bool:
+        result = await self.session.execute(
+            update(BusinessSettings)
+            .where(BusinessSettings.business_id == business_id, BusinessSettings.version == version)
+            .values(credit_limit_policy_key=policy, version=version + 1)
+            .execution_options(synchronize_session=False)
+        )
+        self.session.expire_all()
+        return result.rowcount == 1

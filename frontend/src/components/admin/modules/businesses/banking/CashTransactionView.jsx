@@ -9,6 +9,7 @@ import { ErrorAlert, JE_STATUS, StatusBadge, accountLabel, useTabNavigate } from
 import AttachmentsPanel from './AttachmentsPanel';
 import { DocumentSkeleton, PendingBadge, useLoad } from './banking-parts';
 import DocumentViewFrame from './DocumentViewFrame';
+import ReceiptAllocations from '../sales/ReceiptAllocations';
 
 function Field({ label, children }) {
   return (
@@ -24,7 +25,7 @@ function qty(value) {
 }
 
 function lineAccount(line) {
-  return line.party_name ? `${accountLabel(line)} — ${line.party_name}` : accountLabel(line);
+  return [accountLabel(line), line.party_name, line.invoice_reference].filter(Boolean).join(' — ');
 }
 
 // Manager's receipt / payment document: header fields, then Account / Description / Qty / Amount / Total.
@@ -104,6 +105,7 @@ export default function CashTransactionView({ business, direction, docId, rights
       onChanged={reload}
     >
       <CashDocument doc={doc} direction={direction} businessName={business.name} />
+      <ReceiptAllocations doc={doc} />
       <TransactionJournal journal={journal} />
       <AttachmentsPanel businessId={business.id} documentId={doc.id} canEdit={rights.edit && !doc.is_locked} />
     </DocumentViewFrame>

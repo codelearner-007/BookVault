@@ -28,12 +28,14 @@ from app.schemas.response.coa import (
 from app.services.access_service import BusinessContext
 from app.services.audit_service import AuditService
 from app.services.coa_tree import root_key_of
+from app.services.invoice_opening_service import InvoiceOpeningService
 from app.services.opening_balance_rules import can_have_opening_balance, opening_side
 from app.services.posting import OPENING_BALANCE, POSTED, SOURCE_OPENING, DocumentHeader, LineInput, PostingService
 
 AREA = "settings.starting_balances"
 KIND_ACCOUNT = "account"
 KIND_BANK_ACCOUNT = "bank_account"
+KIND_SALES_INVOICE = "sales_invoice"
 CASH_CONTROL = "cash_control"
 ENTITY = "StartingBalance"
 RETAINED_EARNINGS = "retained_earnings"
@@ -46,6 +48,7 @@ def opening_date(books_start: date) -> date:
 
 class OpeningBalanceService:
     def __init__(self, session: AsyncSession) -> None:
+        self.session = session
         self.posting = PostingService(session)
         self.openings = OpeningBalanceRepository(session)
         self.coa = CoaRepository(session)
@@ -172,8 +175,9 @@ class OpeningBalanceService:
             raise LedgerValidationError(
                 "Documents are dated before the new books start date", "documents_before_books_start"
             )
-        live = await self.openings.live_documents(ctx.business_id)
+        live = [r for r in await self.openings.live_documents(ctx.business_id) if r.kind_key != KIND_SALES_INVOICE]
         plug = await self.coa.system_account_id(ctx.business_id, RETAINED_EARNINGS)
+        await InvoiceOpeningService(self.session).redate(ctx, new_start)
         for row in live:
             document = await self._void(ctx, row.document_id)
             lines = [x for x in await self.posting.document_lines(document) if x.account_id != plug]

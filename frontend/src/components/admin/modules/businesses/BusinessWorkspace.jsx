@@ -16,7 +16,6 @@ import BusinessDetails from './tabs/BusinessDetails';
 import BusinessChartOfAccounts from './tabs/BusinessChartOfAccounts';
 import BusinessStartingBalances from './tabs/BusinessStartingBalances';
 import BusinessBankAndCashAccounts from './tabs/BusinessBankAndCashAccounts';
-import BusinessCustomers from './tabs/BusinessCustomers';
 import BusinessSuppliers from './tabs/BusinessSuppliers';
 import BusinessHistory from './tabs/BusinessHistory';
 import BusinessReceipts from './tabs/BusinessReceipts';
@@ -25,6 +24,13 @@ import BusinessInterAccountTransfers from './tabs/BusinessInterAccountTransfers'
 import BusinessCapitalAccounts from './tabs/BusinessCapitalAccounts';
 import BusinessJournalEntries from './tabs/BusinessJournalEntries';
 import BusinessReports from './tabs/BusinessReports';
+import {
+  BusinessCreditNotes, BusinessCustomers, BusinessDeliveryNotes, BusinessLatePaymentFees, BusinessSalesInvoices,
+  BusinessSalesOrders, BusinessSalesQuotes,
+} from './tabs/BusinessSalesTabs';
+import NonInventoryItemsPage from './sales/NonInventoryItemsPage';
+import SalesSettingsPage from './sales/SalesSettingsPage';
+import TaxCodesPage from './sales/TaxCodesPage';
 
 // Sidebar tabs (?tab=X): each must exist in admin_tabs (CLAUDE.md rule 18).
 const TAB_COMPONENTS = {
@@ -32,6 +38,12 @@ const TAB_COMPONENTS = {
   settings: BusinessSettings,
   'bank-and-cash-accounts': BusinessBankAndCashAccounts,
   customers: BusinessCustomers,
+  'sales-quotes': BusinessSalesQuotes,
+  'sales-orders': BusinessSalesOrders,
+  'sales-invoices': BusinessSalesInvoices,
+  'credit-notes': BusinessCreditNotes,
+  'late-payment-fees': BusinessLatePaymentFees,
+  'delivery-notes': BusinessDeliveryNotes,
   suppliers: BusinessSuppliers,
   receipts: BusinessReceipts,
   payments: BusinessPayments,
@@ -48,6 +60,9 @@ const SETTINGS_PAGE_COMPONENTS = {
   'business-details': BusinessDetails,
   'chart-of-accounts': BusinessChartOfAccounts,
   'starting-balances': BusinessStartingBalances,
+  'tax-codes': TaxCodesPage,
+  'non-inventory-items': NonInventoryItemsPage,
+  sales: SalesSettingsPage,
 };
 
 export function WorkspaceSkeleton() {

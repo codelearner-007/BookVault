@@ -51,8 +51,8 @@ def test_manager_only_setup_records_are_skipped():
     assert bookvault_setup_records(records) == [{"kind": "price"}]
 
 
-def test_b1_to_b3_schedule_is_runnable():
-    assert {f["id"] for f in RUNNABLE} == B1_FIXTURES | B2_FIXTURES | B3_FIXTURES
+def test_b1_to_b4_schedule_is_runnable():
+    assert {f["id"] for f in RUNNABLE} == B1_FIXTURES | B2_FIXTURES | B3_FIXTURES | B4_FIXTURES | B7_EARLY
 
 
 def test_golden_support_report(capsys):
@@ -151,16 +151,58 @@ async def _setup_banks(run: GoldenRun, fixture: dict) -> None:
             run.pending_banks.add(key)
 
 
+PARTY_ROUTES = {"capital_account": "/capital-accounts", "customer": "/customers"}
+
+
 async def _setup_parties(run: GoldenRun, fixture: dict) -> None:
-    """Capital accounts only in B3 (runner_supports keeps other kinds for their phase)."""
+    """Capital accounts (B3) and customers (B4, with their credit limit); other kinds wait for their phase."""
     specs = load_golden_file()["master_data"]["parties"]
     for key in fixture.get("setup", {}).get("parties", []):
         if key in run.parties:
             continue
-        response = await run.client.post(biz(run.business_id, "/capital-accounts"), headers=run.owner.headers,
-                                         json={"name": specs[key]["name"]})
+        spec = specs[key]
+        body = {"name": spec["name"], **({"credit_limit": spec["credit_limit"]} if "credit_limit" in spec else {})}
+        response = await run.client.post(biz(run.business_id, PARTY_ROUTES[spec["kind"]]), headers=run.owner.headers,
+                                         json=body)
         assert response.status_code == 201, response.text
         run.parties[key] = response.json()["id"]
+
+
+async def _setup_tax_codes(run: GoldenRun, fixture: dict) -> None:
+    specs = load_golden_file()["master_data"]["tax_codes"]
+    for key in fixture.get("setup", {}).get("tax_codes", []):
+        if key in run.tax_codes:
+            continue
+        spec = specs[key]
+        response = await run.client.post(biz(run.business_id, "/tax-codes"), headers=run.owner.headers, json={
+            "name": spec["name"], "rate": spec["rate"], "account_id": run.accounts[spec["account"]]})
+        assert response.status_code == 201, response.text
+        run.tax_codes[key] = response.json()["id"]
+
+
+async def _setup_items(run: GoldenRun, fixture: dict) -> None:
+    specs = load_golden_file()["master_data"]["items"]
+    for key in fixture.get("setup", {}).get("items", []):
+        if key in run.items:
+            continue
+        spec = specs[key]
+        if spec["income_account"] not in run.accounts:
+            await _setup_accounts(run, {"setup": {"accounts": [spec["income_account"]]}})
+        response = await run.client.post(biz(run.business_id, "/non-inventory-items"), headers=run.owner.headers,
+                                         json={"name": spec["name"], "income_account_id": run.accounts[spec["income_account"]]})
+        assert response.status_code == 201, response.text
+        run.items[key] = response.json()["id"]
+
+
+async def _apply_settings(run: GoldenRun, fixture: dict) -> None:
+    """BookVault-only sales setting (BUG-05); books_start_date is the runner's (no-op, T68)."""
+    for setting in bookvault_setup_records(fixture.get("setup", {}).get("settings", [])):
+        if setting["key"] != "credit_limit_policy":
+            continue
+        current = (await run.client.get(biz(run.business_id, "/settings/sales"), headers=run.owner.headers)).json()
+        response = await run.client.put(biz(run.business_id, "/settings/sales"), headers=run.owner.headers,
+                                        json={"version": current["version"], "credit_limit_policy": setting["value"]})
+        assert response.status_code == 200, response.text
 
 
 def _lock_setting(fixture: dict) -> dict | None:
@@ -168,7 +210,8 @@ def _lock_setting(fixture: dict) -> dict | None:
     return next((s for s in settings if s["key"] == "lock_date"), None)
 
 
-DOCUMENT_LISTS = ("/journal-entries", "/receipts", "/payments", "/inter-account-transfers")
+DOCUMENT_LISTS = ("/journal-entries", "/receipts", "/payments", "/inter-account-transfers", "/sales-invoices",
+                  "/credit-notes", "/late-payment-fees")
 
 
 async def _document_count(run: GoldenRun) -> int:
@@ -201,6 +244,9 @@ async def _run_fixture(run: GoldenRun, fixture: dict) -> None:
     await _setup_accounts(run, fixture)
     await _setup_banks(run, fixture)
     await _setup_parties(run, fixture)
+    await _setup_tax_codes(run, fixture)
+    await _setup_items(run, fixture)
+    await _apply_settings(run, fixture)
     lock = _lock_setting(fixture)
     if lock and lock["value"]["enabled"]:
         await set_lock_date(run.client, run.owner, run.business_id, lock["value"]["date"])
@@ -208,6 +254,8 @@ async def _run_fixture(run: GoldenRun, fixture: dict) -> None:
         before = await _document_count(run)
         outcome = await adapter_for(fixture["document"]["type"])(run, fixture)
         expected = fixture["bookvault_expected"].get("outcome") or fixture["manager_observed"]["outcome"]
+        if expected == "not_applicable":
+            return  # T99 BookVault variant: no pending step, the discount already posted (BUG-07)
         if expected == "rejected":
             assert_rejection(fixture, outcome.status_code, outcome.body)
             assert await _document_count(run) == before, "a rejected fixture stored a document"
@@ -232,6 +280,11 @@ RUNNABLE = [f for f in DOCUMENTS if _runnable(f)]
 B1_FIXTURES = {"T30", "T96a", "T96"}
 B2_FIXTURES = {"T36", "T95"}
 B3_FIXTURES = {"T01", "T02", "T03", "T08", "T31", "T41", "T64", "T65", "T67", "T74", "T83", "T84", "T85"}
+B4_FIXTURES = {"T04", "T05", "T09", "T37", "T42a", "T42b", "T43", "T47", "T56", "T62", "T68a", "T68", "T97", "T98",
+               "T99", "T100", "T101"}
+# Scheduled for B7 but already runnable on the single-rate engine (inclusive tax T53, per-line rounding T82);
+# B7 re-asserts them with the full tax engine.
+B7_EARLY = {"T53", "T82"}
 STATEMENT_ROOT = {"pl": "expenses", "balance_sheet": "assets"}
 NOT_YET = [f for f in DOCUMENTS if not _runnable(f)]
 

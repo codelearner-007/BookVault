@@ -1,4 +1,4 @@
-"""Customers and suppliers endpoints (one router per contact kind, same rules)."""
+"""Suppliers endpoints (customers moved to customers.py in B4; suppliers become AP parties in B5)."""
 
 from typing import Optional
 
@@ -13,7 +13,7 @@ from app.schemas.request.contact import ContactCreate, ContactUpdate
 from app.schemas.response.contact import ContactResponse
 from app.schemas.response.cash_transaction import CashTransactionListResponse
 from app.services.access_service import BusinessContext
-from app.services.contact_service import CUSTOMERS, SUPPLIERS, ContactKind, ContactService
+from app.services.contact_service import SUPPLIERS, ContactKind, ContactService
 from app.services.idempotency_service import IdempotencyService, business_scope
 from app.services.cash_transaction_service import RECEIPT, CashTransactionService
 
@@ -88,5 +88,4 @@ def build_contact_router(kind: ContactKind) -> APIRouter:
     return router
 
 
-customers_router = build_contact_router(CUSTOMERS)
 suppliers_router = build_contact_router(SUPPLIERS)

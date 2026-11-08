@@ -33,12 +33,23 @@ from app.models.ledger import (
     JournalEntrySource,
     JournalLine,
     OpeningBalance,
+    PaymentAllocation,
 )
 from app.models.mfa_recovery_code import MfaRecoveryCode
 from app.models.attachment import Attachment, AttachmentContent
 from app.models.bank_account import BankAccount
 from app.models.banking import CashTransaction, CashTransactionLine, InterAccountTransfer
 from app.models.party import CapitalAccount
+from app.models.sales import (
+    DocumentLink,
+    InvoiceTerms,
+    Item,
+    LatePaymentFee,
+    TaxCode,
+    TaxCodeComponent,
+    TradeDocument,
+    TradeDocumentLine,
+)
 from app.models.supplier import Supplier
 from app.models.permission import Permission
 from app.models.role import Role
@@ -76,6 +87,15 @@ __all__ = [
     "BusinessTab",
     "CoaAccount",
     "OpeningBalance",
+    "PaymentAllocation",
+    "DocumentLink",
+    "InvoiceTerms",
+    "Item",
+    "LatePaymentFee",
+    "TaxCode",
+    "TaxCodeComponent",
+    "TradeDocument",
+    "TradeDocumentLine",
     "CoaGroup",
     "Customer",
     "Attachment",

@@ -83,6 +83,37 @@ for _path, _area in (("receipts", "receipts"), ("payments", "payments"),
         f"GET /{_path}/{{document_id}}": [(_area, V)], f"PUT /{_path}/{{document_id}}": [(_area, E)],
         f"POST /{_path}/{{document_id}}/post": [(_area, E)], f"POST /{_path}/{{document_id}}/void": [(_area, D)],
     })
+# B4: sales trade documents, late fees, customers, tax codes, items, sales settings, invoice starting balances
+for _path, _area in (("sales-quotes", "sales_quotes"), ("sales-orders", "sales_orders"),
+                     ("sales-invoices", "sales_invoices"), ("credit-notes", "credit_notes"),
+                     ("delivery-notes", "delivery_notes"), ("late-payment-fees", "late_payment_fees")):
+    ROUTE_MAP.update({
+        f"GET /{_path}": [(_area, V)], f"POST /{_path}": [(_area, C)],
+        f"GET /{_path}/{{document_id}}": [(_area, V)], f"PUT /{_path}/{{document_id}}": [(_area, E)],
+        f"POST /{_path}/{{document_id}}/post": [(_area, E)], f"POST /{_path}/{{document_id}}/void": [(_area, D)],
+    })
+    if _area != "late_payment_fees":
+        ROUTE_MAP.update({f"POST /{_path}/totals": [(_area, V)], f"GET /{_path}/lines": [(_area, V)]})
+    if _area in ("sales_quotes", "sales_orders", "sales_invoices"):
+        ROUTE_MAP[f"POST /{_path}/{{document_id}}/copy-to"] = [(_area, V)]
+ROUTE_MAP.update({
+    "GET /sales-invoices/early-payment-discounts": [("sales_invoices", V)],
+    "GET /late-payment-fees/proposals": [("late_payment_fees", V)],
+    "POST /late-payment-fees/proposals/confirm": [("late_payment_fees", C)],
+    "GET /customers/{contact_id}/transactions": [("customers", V)],
+    "GET /customers/{contact_id}/open-invoices": [("receipts", V)],
+    "GET /settings/sales": [("settings.business_details", V)],
+    "PUT /settings/sales": [("settings.business_details", E)],
+    "GET /starting-balances/sales-invoices": [("settings.starting_balances", V)],
+    "PUT /starting-balances/sales-invoices/{invoice_id}": [("settings.starting_balances", E)],
+})
+for _path, _area, _id in (("tax-codes", "settings.tax_codes", "tax_code_id"),
+                          ("non-inventory-items", "non_inventory_items", "item_id")):
+    ROUTE_MAP.update({
+        f"GET /{_path}": [(_area, V)], f"POST /{_path}": [(_area, C)],
+        f"GET /{_path}/{{{_id}}}": [(_area, V)], f"PUT /{_path}/{{{_id}}}": [(_area, E)],
+        f"DELETE /{_path}/{{{_id}}}": [(_area, D)],
+    })
 for _path in ("receipts", "payments"):
     ROUTE_MAP.update({f"POST /{_path}/totals": [(_path, V)], f"GET /{_path}/lines": [(_path, V)]})
 for _path, _area, _id in (("bank-accounts", "bank_cash_accounts", "bank_account_id"),

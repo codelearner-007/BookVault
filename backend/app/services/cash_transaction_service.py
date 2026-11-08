@@ -6,7 +6,7 @@ ledger; an edit of a posted document that changes its ledger image is a reversal
 entry (PR-73); void = reversal (PR-74). Clear dates (PR-12) never touch the ledger.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +28,7 @@ from app.schemas.request.cash_transaction import (
     UpdateCashTransactionRequest,
 )
 from app.schemas.response.cash_transaction import (
+    AllocationResponse,
     CashLineReportItem,
     CashLineReportResponse,
     CashLineResponse,
@@ -40,6 +41,7 @@ from app.schemas.response.cash_transaction import (
 from app.services.access_service import BusinessContext
 from app.services.audit_service import AuditService
 from app.services.posting import DRAFT, POSTED, VOID, DocumentHeader, LineInput, PostingService
+from app.services.receipt_settlement import ReceiptSettlement
 from app.services.versioning import check_version
 
 RECEIPT, PAYMENT = "receipt", "payment"
@@ -78,6 +80,7 @@ class CashTransactionService:
         self.banks = BankAccountRepository(session)
         self.coa = CoaRepository(session)
         self.posting = PostingService(session)
+        self.settlement = ReceiptSettlement(session)
         self.audit = AuditService(session)
 
     # ---------------------------------------------------------------- reads
@@ -118,7 +121,7 @@ class CashTransactionService:
         await self.repo.add(self._extension(document, body))
         await self._store_lines(document, prepared)
         if body.post:
-            await self.posting.post_lines(ctx, document, prepared.ledger)
+            await self._post_settled(ctx, document, body.date, prepared)
         after = await self._response(document)
         await self.audit.record(ctx.user_id, "create", self.entity, document.id, ctx.business_id, after=after)
         return after
@@ -131,6 +134,11 @@ class CashTransactionService:
         posted = await self.posting.status_of(document) == POSTED
         prepared = await self._prepare(ctx.business_id, body, require_postable=posted)
         extension = await self.repo.get(ctx.business_id, document.id)
+        allocations = []
+        if posted:
+            ledger, allocations = await self.settlement.settle(ctx, document, body.date, prepared.lines,
+                                                               prepared.amounts, prepared.ledger)
+            prepared = replace(prepared, ledger=ledger)
         if posted and await self._same_ledger(document, body, prepared):
             # No ledger change: description, clear dates, counterparty, line texts (PR-75 allows
             # description and clear dates on a locked document; the DB guards the rest).
@@ -145,6 +153,8 @@ class CashTransactionService:
             await self._store_lines(document, prepared)
             if posted:
                 await self.posting.repost_lines(ctx, document, prepared.ledger)
+        if posted:
+            await self.posting.replace_allocations(ctx, document, allocations)
         after = await self._response(document)
         await self.audit.record(ctx.user_id, "update", self.entity, document.id, ctx.business_id,
                                 before=before, after=after)
@@ -156,7 +166,7 @@ class CashTransactionService:
             raise ConflictError("Only a draft can be posted", "document_not_draft")
         before = await self._response(document)
         prepared = await self._prepare_stored(document)
-        await self.posting.post_lines(ctx, document, prepared.ledger)
+        await self._post_settled(ctx, document, document.document_date, prepared)
         await self.posting.set_status(ctx, document, POSTED)
         after = await self._response(document)
         await self.audit.record(ctx.user_id, "post", self.entity, document.id, ctx.business_id,
@@ -171,6 +181,13 @@ class CashTransactionService:
         await self.audit.record(ctx.user_id, "void", self.entity, document.id, ctx.business_id,
                                 before=before, after=after)
         return after
+
+    async def _post_settled(self, ctx: BusinessContext, document: Document, on, prepared: Prepared) -> None:
+        """Post the receipt with its AR lines split by the invoices they settle (PR-02, PR-22)."""
+        ledger, allocations = await self.settlement.settle(ctx, document, on, prepared.lines, prepared.amounts,
+                                                           prepared.ledger)
+        await self.posting.post_lines(ctx, document, ledger)
+        await self.posting.replace_allocations(ctx, document, allocations)
 
     # ---------------------------------------------------------------- validation
     async def _bank(self, business_id: str, bank_account_id: str | None) -> BankAccount:
@@ -187,17 +204,27 @@ class CashTransactionService:
         if party_id and (await self.repo.party_kinds(business_id, {party_id})).get(party_id) not in COUNTERPARTY_KINDS:
             raise LedgerValidationError("Contact not found in this business", "counterparty_invalid")
 
+    async def _check_invoices(self, business_id: str, lines: list) -> None:
+        """An invoice may be named only on a receipt's Accounts receivable line with its customer."""
+        if not any(x.invoice_id for x in lines):
+            return
+        ar = await self.settlement.receivable_account(business_id)
+        if self.direction != RECEIPT or any(x.invoice_id and (x.account_id != ar or not x.party_id) for x in lines):
+            raise LedgerValidationError("Only a receipt's Accounts receivable line with a customer can name an invoice",
+                                        "invoice_not_allowed")
+
     async def _prepare(self, business_id: str, body: CashTransactionFields, *,
                        require_postable: bool) -> Prepared:
         if any(x.account_id is None for x in body.lines):
             raise LedgerValidationError("Every line needs an account", "account_required")
+        await self._check_invoices(business_id, body.lines)
         bank = await self._bank(business_id, body.bank_account_id)
         await self._check_header(business_id, bank, body.clears_later, body.counterparty_party_id)
         dp = await self.posting.decimals(business_id)
         lines = [
             CashTransactionLine(
                 business_id=business_id, line_no=no, account_id=x.account_id, party_id=x.party_id,
-                qty=x.qty, unit_price=x.unit_price,
+                invoice_document_id=x.invoice_id, qty=x.qty, unit_price=x.unit_price,
                 discount=round_money(x.discount, dp) if x.discount is not None else None,
                 description=x.description,
             )
@@ -292,9 +319,19 @@ class CashTransactionService:
             CashLineResponse.model_validate({**r._mapping, "amount": line_amount(r, dp)})
             for r in await self.repo.line_rows(business_id, document.id)
         ]
+        allocations = [AllocationResponse.model_validate({**r._mapping, "amount": round_money(r.amount, dp),
+                                                          "early_discount": round_money(r.early_discount, dp)})
+                       for r in await self.repo.allocations(business_id, document.id)]
+        status = await self.posting.status_of(document)
+        ar = await self.settlement.receivable_account(business_id)
+        receivable = sum((x.amount for x in lines if x.account_id == ar), ZERO)
+        credit = receivable - sum((a.amount for a in allocations), ZERO)
         return CashTransactionResponse(
+            allocations=allocations,
+            early_discount_total=round_money(sum((a.early_discount for a in allocations), ZERO), dp),
+            unallocated_credit=round_money(credit if self.direction == RECEIPT and status == POSTED else ZERO, dp),
             id=document.id, direction=self.direction, reference=document.reference, date=document.document_date,
-            status=await self.posting.status_of(document), version=document.version,
+            status=status, version=document.version,
             is_locked=await self.posting.is_locked(document),
             bank_account_id=extension.bank_account_id, bank_account_name=detail.bank_account_name,
             bank_can_have_pending=detail.bank_can_have_pending,
@@ -321,4 +358,4 @@ def _apply_extension(extension: CashTransaction, body: CashTransactionFields) ->
 
 
 def _line_key(line: CashTransactionLine) -> tuple:
-    return (line.account_id, line.party_id, line.qty, line.unit_price, line.discount)
+    return (line.account_id, line.party_id, line.invoice_document_id, line.qty, line.unit_price, line.discount)

@@ -20,6 +20,11 @@ CREATE_SUFFIXES = (
     "/receipts/{document_id}/post", "/receipts/{document_id}/void",
     "/payments/{document_id}/post", "/payments/{document_id}/void",
     "/inter-account-transfers/{document_id}/post", "/inter-account-transfers/{document_id}/void",
+    # B4
+    "/tax-codes", "/non-inventory-items", "/late-payment-fees/proposals/confirm",
+    *(f"/{p}{s}" for p in ("sales-quotes", "sales-orders", "sales-invoices", "credit-notes", "delivery-notes",
+                           "late-payment-fees")
+      for s in ("", "/{document_id}/post", "/{document_id}/void")),
 )
 
 

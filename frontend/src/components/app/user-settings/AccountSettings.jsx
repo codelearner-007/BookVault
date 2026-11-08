@@ -13,7 +13,7 @@ const TABS = { profile: 'profile', security: 'security' };
 // Old links (?tab=password) open Security, where the password now lives.
 const TAB_ALIASES = { password: TABS.security };
 
-// The account page of /admin/profile and /super-admin/profile: Profile and Security tabs.
+// The account page of /admin/profile: Profile and Security tabs.
 export function AccountSettings({ basePath }) {
   const router = useRouter();
   const searchParams = useSearchParams();

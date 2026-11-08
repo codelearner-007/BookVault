@@ -15,11 +15,20 @@ class CashLineResponse(BaseModel):
     account_name: str | None
     party_id: str | None
     party_name: str | None
+    invoice_id: str | None = None
+    invoice_reference: str | None = None
     description: str | None
     qty: MoneyOut | None
     unit_price: MoneyOut
     discount: MoneyOut | None
     amount: MoneyOut
+
+
+class AllocationResponse(BaseModel):
+    invoice_id: str
+    invoice_reference: str | None
+    amount: MoneyOut
+    early_discount: MoneyOut
 
 
 class CashTransactionResponse(BaseModel):
@@ -43,6 +52,9 @@ class CashTransactionResponse(BaseModel):
     is_pending: bool
     lines: list[CashLineResponse]
     total: MoneyOut
+    allocations: list[AllocationResponse] = []
+    early_discount_total: MoneyOut
+    unallocated_credit: MoneyOut
     created_at: datetime
     updated_at: datetime
 

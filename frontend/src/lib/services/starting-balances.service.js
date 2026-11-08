@@ -24,3 +24,14 @@ export async function listBankStartingBalances(businessId) {
 export async function setBankStartingBalance(businessId, bankAccountId, { side, amount }) {
   return apiClient.put(`${bankBase(businessId)}/${bankAccountId}`, { side, amount });
 }
+
+const invoiceBase = (businessId) => `/v1/businesses/${businessId}/starting-balances/sales-invoices`;
+
+// Starting-balance sales invoices; the envelope also carries books_start_date and opening_date.
+export async function listStartingBalanceInvoices(businessId) {
+  return listAllPages(invoiceBase(businessId));
+}
+
+export async function setPaidBeforeStart(businessId, invoiceId, paidBeforeStart) {
+  return apiClient.put(`${invoiceBase(businessId)}/${invoiceId}`, { paid_before_start: paidBeforeStart });
+}

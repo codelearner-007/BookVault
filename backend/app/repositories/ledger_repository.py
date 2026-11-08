@@ -19,7 +19,9 @@ from app.models.ledger import (
     JournalEntrySource,
     JournalLine,
     OpeningBalance,
+    PaymentAllocation,
 )
+from app.models.sales import DocumentLink
 
 _NEXT_REFERENCE = text("SELECT public.next_document_reference(:business_id, :type_key, :area_key)")
 _ACCOUNT_SUBLEDGERS = text("""
@@ -184,6 +186,35 @@ class LedgerRepository:
         return result.scalar_one_or_none()
 
     async def add_opening_balance(self, row: OpeningBalance) -> None:
+        self.session.add(row)
+        await self.session.flush()
+
+    async def delete_allocations(self, business_id: str, settling_document_id: str) -> None:
+        await self.session.execute(delete(PaymentAllocation).where(
+            PaymentAllocation.business_id == business_id,
+            PaymentAllocation.settling_document_id == settling_document_id,
+        ))
+
+    async def add_allocations(self, rows: list[PaymentAllocation]) -> None:
+        self.session.add_all(rows)
+        await self.session.flush()
+
+    async def allocations(self, business_id: str, settling_document_id: str) -> list[PaymentAllocation]:
+        result = await self.session.execute(
+            select(PaymentAllocation)
+            .where(PaymentAllocation.business_id == business_id,
+                   PaymentAllocation.settling_document_id == settling_document_id)
+            .order_by(PaymentAllocation.id)
+        )
+        return list(result.scalars().all())
+
+    async def delete_links(self, business_id: str, to_document_id: str, link_type: str) -> None:
+        await self.session.execute(delete(DocumentLink).where(
+            DocumentLink.business_id == business_id, DocumentLink.to_document_id == to_document_id,
+            DocumentLink.link_type_key == link_type,
+        ))
+
+    async def add_link(self, row: DocumentLink) -> None:
         self.session.add(row)
         await self.session.flush()
 

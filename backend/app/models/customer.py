@@ -1,6 +1,8 @@
-"""Customer model — customer records scoped to a business."""
+"""Customer model: the customer party extension (B3 parties, B4 sales fields)."""
 
-from sqlalchemy import ForeignKey, Text, text
+from decimal import Decimal
+
+from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,6 +30,10 @@ class Customer(Base, TimestampMixin, VersionedMixin):
     billing_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     delivery_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    credit_limit: Mapped[Decimal | None] = mapped_column(Numeric(19, 4), nullable=True)
+    default_due_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    default_hourly_rate: Mapped[Decimal | None] = mapped_column(Numeric(19, 4), nullable=True)
+    is_inactive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     def __repr__(self) -> str:
         return (

@@ -10,7 +10,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatMoney } from '@/lib/utils/money';
 import { parseAmount } from '../ledger/JournalLinesEditor';
-import { PARTY_CONTROL_ACCOUNTS } from './cash-directions';
+import ReceiptInvoiceField from '../sales/ReceiptInvoiceField';
+import { PARTY_LABELS } from './cash-directions';
+import { PARTY_KINDS } from '@/lib/services/parties.service';
 import PartyPicker from './PartyPicker';
 
 const TOTALS_DEBOUNCE_MS = 300;
@@ -26,7 +28,7 @@ const COLUMN_WIDTHS = {
 };
 
 export function emptyCashLine() {
-  return { key: crypto.randomUUID(), account_id: '', party: null, description: '', qty: '', unit_price: '', discount: '' };
+  return { key: crypto.randomUUID(), account_id: '', party: null, invoice: null, description: '', qty: '', unit_price: '', discount: '' };
 }
 
 // Optional numbers: blank -> null, otherwise the parsed decimal string (null-or-invalid is told apart by `invalid`).
@@ -63,17 +65,19 @@ function useServerTotals(service, businessId, lines, initialTotals) {
   return { totals, invalid };
 }
 
-function FieldLabel({ children }) {
+export function FieldLabel({ children }) {
   return <span className="text-sm text-muted-foreground md:hidden" aria-hidden="true">{children}</span>;
 }
 
-function AccountCell({ line, number, accounts, businessId, disabled, onChange }) {
+// The line's account; a party control account adds its party (capital account, or a receipt's customer and invoice).
+function AccountCell({ line, number, accounts, businessId, disabled, onChange, partyAccounts, allocation }) {
   const account = accounts.find((a) => a.id === line.account_id);
-  const partyKind = PARTY_CONTROL_ACCOUNTS[account?.system_account_code];
+  const partyKind = partyAccounts[account?.system_account_code];
+  const partyLabel = PARTY_LABELS[partyKind];
   return (
     <div className="col-span-2 grid gap-1.5 md:col-span-1">
       <FieldLabel>Account</FieldLabel>
-      <Select value={line.account_id} onValueChange={(value) => onChange({ account_id: value, party: null })} disabled={disabled}>
+      <Select value={line.account_id} onValueChange={(value) => onChange({ account_id: value, party: null, invoice: null })} disabled={disabled}>
         <SelectTrigger aria-label={`Account, line ${number}`} className="w-full min-w-0">
           <SelectValue placeholder="Select account" />
         </SelectTrigger>
@@ -86,17 +90,28 @@ function AccountCell({ line, number, accounts, businessId, disabled, onChange })
           businessId={businessId}
           kind={partyKind}
           value={line.party}
-          onChange={(party) => onChange({ party })}
+          onChange={(party) => onChange({ party, invoice: null })}
           disabled={disabled}
-          label={`Capital account, line ${number}`}
-          placeholder="Select capital account"
+          label={`${partyLabel}, line ${number}`}
+          placeholder={`Select ${partyLabel}`}
+        />
+      )}
+      {partyKind === PARTY_KINDS.customer && allocation && (
+        <ReceiptInvoiceField
+          businessId={businessId}
+          customerId={line.party?.id}
+          date={allocation.date}
+          value={line.invoice}
+          onChange={(invoice) => onChange({ invoice })}
+          disabled={disabled}
+          number={number}
         />
       )}
     </div>
   );
 }
 
-function NumberCell({ line, field, label, number, disabled, onChange, required }) {
+export function NumberCell({ line, field, label, number, disabled, onChange, required }) {
   const value = line[field];
   const invalid = required ? parseAmount(value) === null : value.trim() !== '' && parseAmount(value) === null;
   return (
@@ -116,14 +131,14 @@ function NumberCell({ line, field, label, number, disabled, onChange, required }
   );
 }
 
-function LineRow({ line, number, columns, accounts, businessId, amount, disabled, canRemove, onChange, onRemove, gridStyle }) {
+function LineRow({ line, number, columns, accounts, businessId, amount, disabled, canRemove, onChange, onRemove, gridStyle, partyAccounts, allocation }) {
   const change = (patch) => onChange(line.key, patch);
   return (
     <li
       style={gridStyle}
       className="grid grid-cols-2 gap-3 rounded-card border border-card-border p-4 md:grid-cols-[var(--line-cols)] md:items-start md:gap-x-2 md:rounded-none md:border-0 md:p-0 md:py-1.5"
     >
-      <AccountCell line={line} number={number} accounts={accounts} businessId={businessId} disabled={disabled} onChange={change} />
+      <AccountCell line={line} number={number} accounts={accounts} businessId={businessId} disabled={disabled} onChange={change} partyAccounts={partyAccounts} allocation={allocation} />
       {columns.description && (
         <div className="col-span-2 grid gap-1.5 md:col-span-1 md:block">
           <FieldLabel>Description</FieldLabel>
@@ -170,12 +185,13 @@ function ColumnToggles({ columns, setColumns, disabled }) {
 }
 
 /*
-  The line grid of a receipt or payment: Account (+ capital account on the Capital accounts control),
+  The line grid of a receipt or payment: Account (+ its party on a party control account: a capital account,
+  or on a receipt's Accounts receivable line a customer and the invoice it pays; allocation: { date }),
   optional Description / Qty / Discount columns, Amount (unit price) and the server-computed line total.
   Table-like columns on md+, stacked cards and a sticky total bar on phones.
 */
 export default function CashLinesEditor({
-  businessId, service, lines, setLines, columns, setColumns, accounts, initialTotals, disabled,
+  businessId, service, lines, setLines, columns, setColumns, accounts, initialTotals, disabled, partyAccounts, allocation = null,
 }) {
   const { totals, invalid } = useServerTotals(service, businessId, lines, initialTotals);
   const visible = ['account', columns.description && 'description', columns.qty && 'qty', 'unit_price',
@@ -214,6 +230,8 @@ export default function CashLinesEditor({
             onChange={changeLine}
             onRemove={(key) => setLines((prev) => prev.filter((l) => l.key !== key))}
             gridStyle={gridStyle}
+            partyAccounts={partyAccounts}
+            allocation={allocation}
           />
         ))}
       </ol>

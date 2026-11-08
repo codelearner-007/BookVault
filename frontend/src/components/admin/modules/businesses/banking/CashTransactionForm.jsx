@@ -44,6 +44,7 @@ function formFromDoc(doc) {
     key: line.id,
     account_id: line.account_id,
     party: line.party_id ? { id: line.party_id, name: line.party_name } : null,
+    invoice: line.invoice_id ? { id: line.invoice_id, reference: line.invoice_reference } : null,
     description: line.description ?? '',
     qty: line.qty === null ? '' : toInputAmount(line.qty),
     unit_price: toInputAmount(line.unit_price),
@@ -99,6 +100,7 @@ function buildBody(form, canHavePending) {
       lines: lines.map((l) => ({
         account_id: l.account_id || null,
         party_id: l.party?.id ?? null,
+        invoice_id: l.invoice?.id ?? null,
         description: form.columns.description ? l.description.trim() || null : null,
         qty: form.columns.qty ? optionalNumber(l.qty) : null,
         unit_price: parseAmount(l.unit_price),
@@ -228,6 +230,8 @@ export default function CashTransactionForm({ businessId, direction, docId, allo
           columns={form.columns}
           setColumns={(update) => setForm((prev) => ({ ...prev, columns: update(prev.columns) }))}
           accounts={lineAccountsFromTree(data.data.tree, doc?.lines)}
+          partyAccounts={direction.partyAccounts}
+          allocation={direction.allocatesInvoices ? { date: form.date } : null}
           initialTotals={doc ? { lines: doc.lines.map((l) => ({ amount: l.amount })), total: doc.total } : null}
           disabled={saving}
         />

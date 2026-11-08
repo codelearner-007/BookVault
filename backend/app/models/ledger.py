@@ -81,6 +81,9 @@ class DocumentLine(Base):
     credit: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal(0))
     bank_account_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     party_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    invoice_document_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    item_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    tax_code_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
@@ -115,6 +118,9 @@ class JournalLine(Base):
     credit: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     bank_account_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     party_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    invoice_document_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    item_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    tax_code_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     document_line_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     line_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -130,4 +136,19 @@ class OpeningBalance(Base):
     kind_key: Mapped[str] = mapped_column(Text, nullable=False)
     account_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     bank_account_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    invoice_document_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    paid_before_start: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PaymentAllocation(Base):
+    """A receipt, credit note or starting balance settling part of an invoice (PR-64, stored)."""
+
+    __tablename__ = "payment_allocations"
+
+    id: Mapped[str] = _uuid_pk()
+    business_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    settling_document_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    invoice_document_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    early_discount: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal(0))

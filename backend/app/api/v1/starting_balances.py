@@ -1,4 +1,4 @@
-"""Starting balances: balance-sheet accounts (B2), bank and cash accounts (B3); invoices, items later."""
+"""Starting balances: balance-sheet accounts (B2), bank and cash accounts (B3), sales invoices (B4)."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,9 @@ from app.schemas.response.coa import (
     StartingBalancesResponse,
 )
 from app.services.access_service import BusinessContext
+from app.schemas.request.sales import SetInvoiceStartingBalanceRequest
+from app.schemas.response.sales import InvoiceStartingBalanceItem, InvoiceStartingBalancesResponse
+from app.services.invoice_opening_service import InvoiceOpeningService
 from app.services.opening_balance_service import AREA, OpeningBalanceService
 
 router = APIRouter(prefix="/businesses/{business_id}/starting-balances", tags=["Starting Balances"])
@@ -58,3 +61,24 @@ async def set_bank_starting_balance(
 ) -> BankStartingBalanceItem:
     """T67: one two-line opening entry per bank or cash account (void + re-post on change)."""
     return await OpeningBalanceService(db).set_bank_account(ctx, bank_account_id, body)
+
+
+@router.get("/sales-invoices", response_model=InvoiceStartingBalancesResponse)
+async def list_invoice_starting_balances(
+    params: PageParams = Depends(page_params),
+    ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.VIEW)),
+    db: AsyncSession = Depends(get_db, scope="function"),
+) -> InvoiceStartingBalancesResponse:
+    """Starting-balance sales invoices (PR-61, D-36) with what was paid before the books start."""
+    return await InvoiceOpeningService(db).list_page(ctx.business_id, params)
+
+
+@router.put("/sales-invoices/{invoice_id}", response_model=InvoiceStartingBalanceItem)
+async def set_invoice_starting_balance(
+    invoice_id: IdStr,
+    body: SetInvoiceStartingBalanceRequest,
+    ctx: BusinessContext = Depends(require_business_access(AREA, AreaRight.EDIT)),
+    db: AsyncSession = Depends(get_db, scope="function"),
+) -> InvoiceStartingBalanceItem:
+    """Paid before start: void the invoice's opening document and post the new outstanding amount."""
+    return await InvoiceOpeningService(db).set_paid(ctx, invoice_id, body.paid_before_start)

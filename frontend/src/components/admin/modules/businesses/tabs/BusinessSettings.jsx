@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Building2, BookOpen, ChevronRight, Scale, UserCog } from 'lucide-react';
+import { Building2, BookOpen, ChevronRight, Package, Percent, Receipt, Scale, UserCog } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/common/page';
 import { useBusinessWorkspace } from '@/components/shell/ShellContext';
@@ -27,8 +27,29 @@ const SETTING_PAGES = [
     key: 'starting-balances',
     href: '?tab=settings&page=starting-balances',
     label: 'Starting Balances',
-    description: 'Opening balances of balance sheet accounts.',
+    description: 'Opening balances of balance sheet accounts and unpaid sales invoices.',
     icon: Scale,
+  },
+  {
+    key: 'tax-codes',
+    href: '?tab=settings&page=tax-codes',
+    label: 'Tax Codes',
+    description: 'Tax rates used on sales lines.',
+    icon: Percent,
+  },
+  {
+    key: 'non-inventory-items',
+    href: '?tab=settings&page=non-inventory-items',
+    label: 'Non-inventory Items',
+    description: 'Services and goods that fill sales lines.',
+    icon: Package,
+  },
+  {
+    key: 'sales',
+    href: '?tab=settings&page=sales',
+    label: 'Sales',
+    description: 'What happens when an invoice goes over a credit limit.',
+    icon: Receipt,
   },
 ];
 

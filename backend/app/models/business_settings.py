@@ -1,4 +1,4 @@
-"""Business settings model (migrations 20261108000020, 20261108000025: ledger columns)."""
+"""Business settings model (migrations 20261108000020, 20261108000025: ledger columns, 20261108000034: credit limit policy)."""
 
 from datetime import date
 
@@ -25,4 +25,5 @@ class BusinessSettings(Base, TimestampMixin):
     rounding_mode_key: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=text("'half_away_from_zero'")
     )
+    credit_limit_policy_key: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'warn'"))
     version: Mapped[int] = mapped_column(nullable=False, server_default=text("1"))

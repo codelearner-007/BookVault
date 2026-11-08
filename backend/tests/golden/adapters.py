@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 
 import httpx
 
@@ -28,14 +29,19 @@ class GoldenRun:
     banks: dict[str, str] = field(default_factory=dict)  # fixture bank key -> bank account id
     pending_banks: set[str] = field(default_factory=set)  # keys of banks that can have pending
     parties: dict[str, str] = field(default_factory=dict)  # fixture party key -> party id
+    tax_codes: dict[str, str] = field(default_factory=dict)  # fixture tax code key -> tax code id
+    items: dict[str, str] = field(default_factory=dict)  # fixture item key -> item id
+    invoices: dict[str, str] = field(default_factory=dict)  # fixture id -> sales invoice document id
 
     def account_key(self, account_id: str) -> str:
         return next(k for k, v in self.accounts.items() if v == account_id)
 
     def dimensions(self, line: dict) -> dict:
-        """Fixture dimension keys of a Transaction Journal line (bank account, party)."""
+        """Fixture dimension keys of a Transaction Journal line (bank account, party, invoice, tax code)."""
         found = {}
-        for name, ids, column in (("bank_account", self.banks, "bank_account_id"), ("party", self.parties, "party_id")):
+        for name, ids, column in (("bank_account", self.banks, "bank_account_id"), ("party", self.parties, "party_id"),
+                                  ("invoice", self.invoices, "invoice_document_id"),
+                                  ("tax_code", self.tax_codes, "tax_code_id")):
             key = next((k for k, v in ids.items() if v == line.get(column)), None)
             if key:
                 found[name] = key
@@ -145,9 +151,10 @@ def _cash_body(run: GoldenRun, doc: dict) -> dict:
     clears_later, cleared_on = _cleared(run, fields["bank_account"], fields.get("cleared"))
     contact = fields.get("contact")
     lines = [{"account_id": run.accounts.get(x["account_key"]) if x.get("account_key") else None,
-              "unit_price": x["amount"], **_dimension_ids(run, x)} for x in doc["lines"]]
+              "unit_price": x["amount"], **_dimension_ids(run, x), **_invoice_id(run, x)} for x in doc["lines"]]
     return {
         "date": doc["date"], "bank_account_id": run.banks[fields["bank_account"]], "post": True,
+        "counterparty_party_id": run.parties.get(fields.get("party")),
         "counterparty_name": contact if fields.get("payer_kind", fields.get("payee_kind")) == "other" else None,
         "clears_later": clears_later, "cleared_on": cleared_on,
         # T41: lines unspecified; the lock date is checked before the lines.
@@ -169,7 +176,8 @@ async def _cash_actions(run: GoldenRun, fixture: dict, kind: str, created: dict)
             body = {k: current[k] for k in ("version", "date", "reference", "bank_account_id", "description",
                                             "counterparty_party_id", "counterparty_name")}
             body.update(clears_later=clears_later, cleared_on=cleared_on, lines=[
-                {k: x[k] for k in ("account_id", "party_id", "description", "qty", "unit_price", "discount")}
+                {**{k: x[k] for k in ("account_id", "party_id", "description", "qty", "unit_price", "discount")},
+                 "invoice_id": x["invoice_id"]}
                 for x in current["lines"]])
             response = await run.client.put(biz(run.business_id, path), json=body, headers=run.owner.headers)
         results.append({"seq": action["seq"], "status_code": response.status_code})
@@ -214,9 +222,105 @@ async def bank_starting_balance(run: GoldenRun, fixture: dict) -> Outcome:
 
 
 async def any_starting_balance(run: GoldenRun, fixture: dict) -> Outcome:
-    if fixture["document"]["fields"].get("starting_balance_kind") == "bank_account":
+    kind = fixture["document"]["fields"].get("starting_balance_kind")
+    if kind == "bank_account":
         return await bank_starting_balance(run, fixture)
+    if kind == "sales_invoice":
+        return await invoice_starting_balance(run, fixture)
     return await starting_balance(run, fixture)
+
+
+def _invoice_id(run: GoldenRun, line: dict) -> dict:
+    """A receipt line naming an invoice (T98); "automatic" = oldest open invoice first (T05)."""
+    invoice = line.get("invoice")
+    return {"invoice_id": run.invoices[invoice]} if invoice and invoice != "automatic" else {}
+
+
+def _trade_lines(run: GoldenRun, lines: list[dict]) -> list[dict]:
+    return [{"account_id": run.accounts.get(x.get("account_key")), "item_id": run.items.get(x.get("item")),
+             "qty": x.get("qty"), "unit_price": x.get("unit_price") or x.get("amount"),
+             "tax_code_id": run.tax_codes.get(x.get("tax_code"))} for x in lines]
+
+
+ROUNDING = {"round_to_nearest": "nearest", "round_down": "down"}
+
+
+def _invoice_body(run: GoldenRun, doc: dict) -> dict:
+    """PR-16..22, PR-31, PR-61: due Net N days, rounding, discount and late-fee terms, starting balance."""
+    fields = doc.get("fields", {})
+    body = {"date": doc["date"], "customer_id": run.parties[fields["party"]], "post": True,
+            "description": fields.get("description"), "amounts_include_tax": fields.get("amounts_include_tax", False),
+            "lines": _trade_lines(run, doc["lines"]), "is_starting_balance": fields.get("is_starting_balance", False)}
+    if fields.get("due", {}).get("kind") == "net_days":
+        body["due_date"] = (date.fromisoformat(doc["date"]) + timedelta(days=fields["due"]["days"])).isoformat()
+    if fields.get("rounding"):
+        body["rounding"] = ROUNDING[fields["rounding"]["method"]]
+    if discount := fields.get("early_payment_discount"):
+        body.update(early_discount_rate=discount["rate"], early_discount_days=discount["days"])
+    if fees := fields.get("late_payment_fees"):
+        body["late_fee_rate"] = fees["monthly_percent"]
+    return body
+
+
+async def sales_invoice(run: GoldenRun, fixture: dict) -> Outcome:
+    """BUG-05 warn (T43): the first post answers credit_limit_warning; the confirmed resend posts."""
+    body = _invoice_body(run, fixture["document"])
+    path = biz(run.business_id, "/sales-invoices")
+    response = await run.client.post(path, headers=run.owner.headers, json=body)
+    if response.status_code == 409 and response.json()["details"].get("code") == "credit_limit_warning":
+        response = await run.client.post(path, headers=run.owner.headers, json={**body, "credit_limit_override": True})
+    outcome = await _with_journal(run, response)
+    if outcome.status_code == 201:
+        run.invoices[fixture["id"]] = outcome.body["id"]
+    return outcome
+
+
+async def credit_note(run: GoldenRun, fixture: dict) -> Outcome:
+    doc = fixture["document"]
+    fields = doc.get("fields", {})
+    linked = fields.get("linked", {}).get("sales_invoice")
+    response = await run.client.post(biz(run.business_id, "/credit-notes"), headers=run.owner.headers, json={
+        "date": doc["date"], "customer_id": run.parties[fields["party"]], "post": True,
+        "description": fields.get("description"), "invoice_id": run.invoices.get(linked),
+        "lines": _trade_lines(run, doc["lines"])})
+    return await _with_journal(run, response)
+
+
+async def late_payment_fee(run: GoldenRun, fixture: dict) -> Outcome:
+    """T37 manual fee; T101 confirmed from the pending proposals (dated the charge date)."""
+    doc = fixture["document"]
+    fields = doc["fields"]
+    invoice_id = run.invoices[fields["linked"]["sales_invoice"]]
+    if fields.get("created_from") == "pending_late_payment_fees_batch":
+        response = await run.client.post(biz(run.business_id, "/late-payment-fees/proposals/confirm"),
+                                         headers=run.owner.headers,
+                                         json={"items": [{"invoice_id": invoice_id, "charge_date": doc["date"]}]})
+        if response.status_code != 201:
+            return Outcome(response.status_code, response.json(), [])
+        created = response.json()["created"][0]
+        assert created["amount"] == fields["amount"], created
+        entries = (await journal(run.client, run.owner, run.business_id, created["id"]))["entries"]
+        return Outcome(201, created, entries)
+    response = await run.client.post(biz(run.business_id, "/late-payment-fees"), headers=run.owner.headers, json={
+        "date": doc["date"], "customer_id": run.parties[fields["party"]], "invoice_id": invoice_id,
+        "amount": fields["amount"], "post": True})
+    return await _with_journal(run, response)
+
+
+async def invoice_starting_balance(run: GoldenRun, fixture: dict) -> Outcome:
+    """T68: paid before the start = an allocation from the invoice's opening document (PR-61, D-36)."""
+    fields = fixture["document"]["fields"]
+    invoice_id = run.invoices[fields["linked"]["sales_invoice"]]
+    response = await run.client.put(biz(run.business_id, f"/starting-balances/sales-invoices/{invoice_id}"),
+                                    headers=run.owner.headers, json={"paid_before_start": fields["amount"]})
+    body = response.json()
+    if response.status_code != 200:
+        return Outcome(response.status_code, body, [])
+    invoice = (await run.client.get(biz(run.business_id, f"/sales-invoices/{invoice_id}"),
+                                    headers=run.owner.headers)).json()
+    assert invoice["display_status"] == "paid" and invoice["balance_due"] == "0.00", invoice
+    entries = (await journal(run.client, run.owner, run.business_id, body["document_id"]))["entries"]
+    return Outcome(201, body, entries)
 
 
 ADAPTERS: dict[str, Adapter] = {
@@ -225,16 +329,23 @@ ADAPTERS: dict[str, Adapter] = {
     "receipt": cash_transaction("receipts"),
     "payment": cash_transaction("payments"),
     "inter_account_transfer": inter_account_transfer,
+    "sales_invoice": sales_invoice,
+    "credit_note": credit_note,
+    "late_payment_fee": late_payment_fee,
 }
-# Starting-balance kinds with an adapter (invoices: B4/B5, items: B6).
-STARTING_BALANCE_KINDS = {"balance_sheet_account", "bank_account"}
+# Starting-balance kinds with an adapter (purchase invoices: B5, items: B6).
+STARTING_BALANCE_KINDS = {"balance_sheet_account", "bank_account", "sales_invoice"}
 # Setup record kinds the runner can create; a fixture needing another kind waits for its phase
 # (T86 divisions: B15).
-SUPPORTED_SETUP = {"accounts", "settings", "account_groups", "bank_accounts", "parties"}
-# Party kinds the runner can create (customers B4, suppliers B5, employees B10, special accounts B11).
-SUPPORTED_PARTY_KINDS = {"capital_account"}
-# Base-currency bank accounts only until B8.
-FOREIGN_FIELDS = {"currency", "exchange_rate", "currency_amount", "debit_currency_amount"}
+SUPPORTED_SETUP = {"accounts", "settings", "account_groups", "bank_accounts", "parties", "tax_codes", "items"}
+# Party kinds the runner can create (suppliers B5, employees B10, special accounts B11).
+SUPPORTED_PARTY_KINDS = {"capital_account", "customer"}
+# Item kinds the runner can create (inventory items and kits: B6).
+SUPPORTED_ITEM_KINDS = {"non_inventory"}
+# Tax code types the runner can create (multi-rate and reverse charge: B7).
+SUPPORTED_TAX_CODES = {"single_rate"}
+# Base-currency bank accounts only until B8; withholding tax arrives in B7.
+FOREIGN_FIELDS = {"currency", "exchange_rate", "currency_amount", "debit_currency_amount", "withholding_tax"}
 
 
 def adapter_for(document_type: str) -> Adapter | None:
@@ -250,8 +361,13 @@ def _kind_supported(document: dict) -> bool:
 
 
 def _parties_supported(fixture: dict) -> bool:
-    specs = load_golden_file()["master_data"]["parties"]
-    return all(specs[p]["kind"] in SUPPORTED_PARTY_KINDS for p in fixture.get("setup", {}).get("parties", []))
+    data = load_golden_file()["master_data"]
+    setup = fixture.get("setup", {})
+    return (all(data["parties"][p]["kind"] in SUPPORTED_PARTY_KINDS and "currency" not in data["parties"][p]
+                for p in setup.get("parties", []))
+            and all(data["items"][i]["kind"] in SUPPORTED_ITEM_KINDS for i in setup.get("items", []))
+            and all(data["tax_codes"][t]["type"] in SUPPORTED_TAX_CODES and not data["tax_codes"][t].get("reverse_charge")
+                    for t in setup.get("tax_codes", [])))
 
 
 def runner_supports(fixture: dict) -> bool:
