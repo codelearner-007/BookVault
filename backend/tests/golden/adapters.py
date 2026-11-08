@@ -399,8 +399,6 @@ SUPPORTED_TAX_CODES = {"single_rate"}
 # Settings the runner can apply; others belong to later phases (stock B6, WHT B7, currencies B8,
 # billable expenses B12).
 SUPPORTED_SETTINGS = {"books_start_date", "lock_date", "credit_limit_policy"}
-# Receipts and payments without a bank or cash account (Suspense, T102/T103) are not B5's.
-CASH_TYPES = {"receipt", "payment"}
 # Base-currency bank accounts only until B8; withholding tax arrives in B7.
 FOREIGN_FIELDS = {"currency", "exchange_rate", "currency_amount", "debit_currency_amount", "withholding_tax"}
 
@@ -411,8 +409,6 @@ def adapter_for(document_type: str) -> Adapter | None:
 
 def _kind_supported(document: dict) -> bool:
     if set(document.get("fields", {})) & FOREIGN_FIELDS:
-        return False
-    if document["type"] in CASH_TYPES and "bank_account" not in document.get("fields", {}):
         return False
     if document["type"] != "starting_balance":
         return True
