@@ -6,18 +6,42 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { COLUMN_KIND, ListTable } from '@/components/common/list-table';
+import { Quantity } from '@/components/common/business-format';
+import { Money } from '@/components/common/money';
 import { ListCard, MoreMenu, PageHeader } from '@/components/common/page';
 import { ConfirmDialog, ListPagination } from '@/components/super-admin/platform-parts';
 import { inventoryItemsService, listItemMovements } from '@/lib/services/inventory.service';
-import { formatMoney } from '@/lib/utils/money';
 import { BackButton, ErrorAlert, useTabNavigate } from '../ledger/ledger-parts';
-import { DocumentSkeleton, InactiveBadge, useLoad } from '../banking/banking-parts';
-import { plainNumber } from '../sales/sales-documents';
+import { DOCUMENT_TYPE_LABELS, DocumentSkeleton, InactiveBadge, documentHref, useLoad } from '../banking/banking-parts';
 import { Field } from '../sales/sales-parts';
-import { INVENTORY_TABS, stockDocumentHref, stockDocumentLabel } from './inventory-documents';
+import { INVENTORY_TABS } from './inventory-documents';
 
 const SKELETON_ROWS = 4;
+
+const LOCATION_COLUMNS = [
+  { key: 'location_name', label: 'Inventory location', card: 'title' },
+  { key: 'qty_on_hand', label: 'Qty on hand', kind: COLUMN_KIND.qty, card: 'end' },
+];
+
+const MOVEMENT_COLUMNS = [
+  { key: 'date', label: 'Date', kind: COLUMN_KIND.date },
+  {
+    key: 'document',
+    label: 'Document',
+    card: 'title',
+    render: (movement) => (
+      <Link href={documentHref(movement.document_type, movement.document_id)} className="hover:text-link hover:underline">
+        {[DOCUMENT_TYPE_LABELS[movement.document_type], movement.reference].filter(Boolean).join(' ')}
+      </Link>
+    ),
+  },
+  { key: 'location_name', label: 'Inventory location' },
+  { key: 'description', label: 'Description', muted: true, truncate: true },
+  { key: 'qty_owned', label: 'Qty owned', kind: COLUMN_KIND.qty },
+  { key: 'qty_on_hand', label: 'Qty on hand', kind: COLUMN_KIND.qty },
+  { key: 'amount', label: 'Amount', kind: COLUMN_KIND.money, card: 'end' },
+];
 
 function ItemFields({ item }) {
   return (
@@ -27,14 +51,14 @@ function ItemFields({ item }) {
         <Field label="Item name">{item.name}</Field>
         <Field label="Unit name">{item.unit_name}</Field>
         <Field label="Valuation method">{item.valuation_method_name}</Field>
-        <Field label="Qty desired"><span className="tabular-nums">{plainNumber(item.qty_desired)}</span></Field>
+        <Field label="Qty desired"><Quantity value={item.qty_desired} /></Field>
         <Field label="Income account">{item.income_account_name ?? 'Inventory - sales'}</Field>
         <Field label="Expense account">{item.expense_account_name ?? 'Inventory - cost'}</Field>
-        <Field label="Purchase unit price"><span className="tabular-nums">{formatMoney(item.purchase_unit_price)}</span></Field>
-        <Field label="Sales unit price"><span className="tabular-nums">{formatMoney(item.sales_unit_price)}</span></Field>
+        <Field label="Purchase unit price"><Money value={item.purchase_unit_price} /></Field>
+        <Field label="Sales unit price"><Money value={item.sales_unit_price} /></Field>
         <Field label="Tax code">{item.tax_code_name}</Field>
-        <Field label="Average cost"><span className="tabular-nums">{formatMoney(item.average_cost)}</span></Field>
-        <Field label="Total cost"><span className="tabular-nums">{formatMoney(item.total_cost)}</span></Field>
+        <Field label="Average cost"><Money value={item.average_cost} /></Field>
+        <Field label="Total cost"><Money value={item.total_cost} /></Field>
         {item.description && <Field label="Description" className="sm:col-span-2 lg:col-span-3">{item.description}</Field>}
       </dl>
     </Card>
@@ -57,28 +81,12 @@ function LocationsTable({ item }) {
         {item.locations.length === 0 ? (
           <p className="px-4 py-6 text-sm text-muted-foreground">Nothing on hand yet.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>Inventory location</TableHead>
-                <TableHead className="text-end">Qty on hand</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {item.locations.map((location) => (
-                <TableRow key={location.location_id}>
-                  <TableCell data-card="title">{location.location_name}</TableCell>
-                  <TableCell className="num" data-card="end">{plainNumber(location.qty_on_hand)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-            <TableFooter>
-              <TableRow className="hover:bg-transparent">
-                <TableCell>Total</TableCell>
-                <TableCell className="num">{plainNumber(item.qty_on_hand)}</TableCell>
-              </TableRow>
-            </TableFooter>
-          </Table>
+          <ListTable
+            columns={LOCATION_COLUMNS}
+            rows={item.locations}
+            rowKey={(location) => location.location_id}
+            totals={{ qty_on_hand: item.qty_on_hand }}
+          />
         )}
       </ListCard>
     </Section>
@@ -100,36 +108,9 @@ function Movements({ businessId, itemId, page, onPage }) {
         )}
         {data && items.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground">No movements yet.</p>}
         {items.length > 0 && (
-          <Table data-testid="inventory-item-movements">
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>Date</TableHead>
-                <TableHead>Document</TableHead>
-                <TableHead>Inventory location</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-end">Qty owned</TableHead>
-                <TableHead className="text-end">Qty on hand</TableHead>
-                <TableHead className="text-end">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((movement) => (
-                <TableRow key={movement.id}>
-                  <TableCell className="num whitespace-nowrap" data-label="Date">{movement.date}</TableCell>
-                  <TableCell data-card="title">
-                    <Link href={stockDocumentHref(movement.document_type, movement.document_id)} className="hover:text-link hover:underline">
-                      {[stockDocumentLabel(movement.document_type), movement.reference].filter(Boolean).join(' ')}
-                    </Link>
-                  </TableCell>
-                  <TableCell data-label="Location">{movement.location_name}</TableCell>
-                  <TableCell className="max-w-md truncate text-muted-foreground">{movement.description}</TableCell>
-                  <TableCell className="num" data-label="Qty owned">{plainNumber(movement.qty_owned)}</TableCell>
-                  <TableCell className="num" data-label="Qty on hand">{plainNumber(movement.qty_on_hand)}</TableCell>
-                  <TableCell className="num" data-card="end">{formatMoney(movement.amount)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div data-testid="inventory-item-movements">
+            <ListTable columns={MOVEMENT_COLUMNS} rows={items} />
+          </div>
         )}
       </ListCard>
     </Section>

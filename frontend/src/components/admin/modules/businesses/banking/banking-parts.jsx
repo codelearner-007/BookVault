@@ -40,6 +40,9 @@ const DOCUMENT_TABS = {
   purchase_invoice: 'purchase-invoices',
   debit_note: 'debit-notes',
   goods_receipt: 'goods-receipts',
+  inventory_transfer: 'inventory-transfers',
+  inventory_write_off: 'inventory-write-offs',
+  production_order: 'production-orders',
 };
 export const DOCUMENT_TYPE_LABELS = {
   receipt: 'Receipt',
@@ -58,6 +61,9 @@ export const DOCUMENT_TYPE_LABELS = {
   purchase_invoice: 'Purchase Invoice',
   debit_note: 'Debit Note',
   goods_receipt: 'Goods Receipt',
+  inventory_transfer: 'Inventory Transfer',
+  inventory_write_off: 'Inventory Write-off',
+  production_order: 'Production Order',
 };
 const STARTING_BALANCES_HREF = '?tab=settings&page=starting-balances';
 

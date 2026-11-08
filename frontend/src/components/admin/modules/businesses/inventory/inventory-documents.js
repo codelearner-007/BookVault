@@ -1,5 +1,4 @@
 import { stockDocumentsService } from '@/lib/services/inventory.service';
-import { DOCUMENT_TYPE_LABELS, documentHref } from '../banking/banking-parts';
 import { plainNumber } from '../sales/sales-documents';
 
 /*
@@ -77,18 +76,6 @@ export const STOCK_DOCUMENTS = {
     ],
   },
 };
-
-const STOCK_TABS_BY_TYPE = Object.fromEntries(Object.values(STOCK_DOCUMENTS).map((config) => [config.type, config.tab]));
-
-// Where a document of a stock movement opens: the stock documents' own tabs, else the shared ledger map.
-export function stockDocumentHref(documentType, documentId) {
-  const tab = STOCK_TABS_BY_TYPE[documentType];
-  return tab ? `?tab=${tab}&view=${documentId}` : documentHref(documentType, documentId);
-}
-
-export function stockDocumentLabel(documentType) {
-  return STOCK_DOCUMENTS[documentType]?.title ?? DOCUMENT_TYPE_LABELS[documentType] ?? documentType;
-}
 
 // "W1 · Widget" for an item, location or account record ({ code, name }).
 export function recordLabel(record) {

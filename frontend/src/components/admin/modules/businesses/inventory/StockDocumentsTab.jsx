@@ -27,6 +27,7 @@ export default function StockDocumentsTab({ business, type }) {
       search={(route.active && searchParams.get('q')) || ''}
       active={route.active}
       canCreate={rights.create}
+      canEdit={rights.edit}
     />
   );
 }

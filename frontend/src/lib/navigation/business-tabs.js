@@ -141,6 +141,10 @@ export const NEW_ACTIONS = [
   { tab: 'purchase-invoices', label: 'Purchase Invoice', href: '?tab=purchase-invoices&new=1', icon: FileInput },
   { tab: 'debit-notes', label: 'Debit Note', href: '?tab=debit-notes&new=1', icon: FilePlus },
   { tab: 'goods-receipts', label: 'Goods Receipt', href: '?tab=goods-receipts&new=1', icon: PackageOpen },
+  { tab: 'inventory-items', label: 'Inventory Item', href: '?tab=inventory-items&new=1', icon: Boxes },
+  { tab: 'inventory-transfers', label: 'Inventory Transfer', href: '?tab=inventory-transfers&new=1', icon: Repeat },
+  { tab: 'inventory-write-offs', label: 'Inventory Write-off', href: '?tab=inventory-write-offs&new=1', icon: PackageX },
+  { tab: 'production-orders', label: 'Production Order', href: '?tab=production-orders&new=1', icon: Factory },
   { tab: 'journal-entries', label: 'Journal Entry', href: '?tab=journal-entries&new=1', icon: BookOpen },
 ];
 

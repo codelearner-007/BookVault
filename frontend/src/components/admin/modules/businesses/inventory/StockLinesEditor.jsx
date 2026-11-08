@@ -5,10 +5,10 @@ import { Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { AccountPicker } from '@/components/common/account-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FieldLabel, NumberCell } from '../banking/CashLinesEditor';
-import { NONE } from '../sales/sales-parts';
-import { inventoryItemLabel, recordLabel } from './inventory-documents';
+import { inventoryItemLabel } from './inventory-documents';
 import { emptyStockLine } from './stock-form-model';
 
 const COLUMN_WIDTHS = {
@@ -17,17 +17,16 @@ const COLUMN_WIDTHS = {
 const HEAD_LABELS = { item: 'Item', description: 'Description', qty: 'Qty', account: 'Account', amount: 'Amount', remove: '' };
 const NUMERIC = new Set(['qty', 'amount']);
 
-// placeholder: the "none" entry when the field may stay empty (allowNone), else the empty-select text.
-function SelectCell({ label, number, value, options, optionLabel, onChange, disabled, allowNone, placeholder }) {
+// The item picker of a line: a Select over the inventory items, each with what is on hand.
+function SelectCell({ label, number, value, options, optionLabel, onChange, disabled, placeholder }) {
   return (
     <div className="col-span-2 grid gap-1.5 md:col-span-1 md:block">
       <FieldLabel>{label}</FieldLabel>
-      <Select value={value || (allowNone ? NONE : '')} onValueChange={(next) => onChange(next === NONE ? '' : next)} disabled={disabled}>
+      <Select value={value || ''} onValueChange={onChange} disabled={disabled}>
         <SelectTrigger aria-label={`${label}, line ${number}`} className="w-full min-w-0">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
-          {allowNone && <SelectItem value={NONE}>{placeholder}</SelectItem>}
           {options.map((option) => <SelectItem key={option.id} value={option.id}>{optionLabel(option)}</SelectItem>)}
         </SelectContent>
       </Select>
@@ -45,10 +44,13 @@ function LineRow({ line, number, columns, catalogs, accountPlaceholder, lineNoun
       />
     ),
     account: (
-      <SelectCell
-        label="Account" number={number} value={line.account_id} options={catalogs.accounts} optionLabel={recordLabel}
-        allowNone={!!accountPlaceholder} placeholder={accountPlaceholder ?? 'Select account'} onChange={(id) => change({ account_id: id })} disabled={disabled}
-      />
+      <div className="col-span-2 grid gap-1.5 md:col-span-1 md:block">
+        <FieldLabel>Account</FieldLabel>
+        <AccountPicker
+          value={line.account_id} accounts={catalogs.accounts} label={`Account, line ${number}`} noneLabel={accountPlaceholder}
+          onChange={(id) => change({ account_id: id })} disabled={disabled} className="w-full"
+        />
+      </div>
     ),
     description: (
       <div className="col-span-2 grid gap-1.5 md:col-span-1 md:block">

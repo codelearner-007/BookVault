@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { AccountPicker } from '@/components/common/account-picker';
 import { PageHeader } from '@/components/common/page';
 import { amountOrNull, inventoryItemFormSchema } from '@/lib/schemas/inventory.schema';
 import { isVersionConflict } from '@/lib/services/api-client';
@@ -121,6 +122,25 @@ function SelectField({ control, name, label, options, noneLabel, disabled }) {
   );
 }
 
+// An account field on the shared picker (names and head groups, no codes); '' is noneLabel.
+function AccountFormField({ control, name, label, accounts, noneLabel, disabled }) {
+  return (
+    <FormField
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <FormControl>
+            <AccountPicker value={field.value} accounts={accounts} onChange={field.onChange} noneLabel={noneLabel} label={label} disabled={disabled} className="w-full" />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
+
 function ItemFields({ control, catalogs, isEdit, disabled }) {
   return (
     <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
@@ -132,8 +152,8 @@ function ItemFields({ control, catalogs, isEdit, disabled }) {
         <Input id="inventory-item-valuation" value={VALUATION_METHOD} readOnly disabled />
       </div>
       <TextField control={control} name="qty_desired" label="Qty desired" inputMode="decimal" inputClassName="num" disabled={disabled} />
-      <SelectField control={control} name="income_account_id" label="Custom income account" options={catalogs.income} noneLabel="Inventory - sales" disabled={disabled} />
-      <SelectField control={control} name="expense_account_id" label="Custom expense account" options={catalogs.expense} noneLabel="Inventory - cost" disabled={disabled} />
+      <AccountFormField control={control} name="income_account_id" label="Custom income account" accounts={catalogs.income} noneLabel="Inventory - sales" disabled={disabled} />
+      <AccountFormField control={control} name="expense_account_id" label="Custom expense account" accounts={catalogs.expense} noneLabel="Inventory - cost" disabled={disabled} />
       <TextField control={control} name="purchase_unit_price" label="Purchase unit price" inputMode="decimal" inputClassName="num" disabled={disabled} />
       <TextField control={control} name="sales_unit_price" label="Sales unit price" inputMode="decimal" inputClassName="num" disabled={disabled} />
       <SelectField control={control} name="tax_code_id" label="Tax code" options={catalogs.taxCodes} noneLabel="No tax" disabled={disabled} />

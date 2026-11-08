@@ -30,6 +30,7 @@ export default function InventoryItemsTab({ business }) {
       search={param('q') ?? ''}
       active={route.active}
       canCreate={rights.create}
+      canEdit={rights.edit}
     />
   );
 }

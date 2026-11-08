@@ -7,14 +7,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { getCoaTree } from '@/lib/services/coa.service';
 import { inventoryItemsService, inventoryKitsService } from '@/lib/services/inventory.service';
 import { taxCodesService } from '@/lib/services/settings-catalog.service';
-import { formatMoney } from '@/lib/utils/money';
+import { COLUMN_KIND } from '@/components/common/list-table';
 import { toInputAmount } from '../coa/coa-tree';
 import { parseAmount } from '../ledger/JournalLinesEditor';
 import { todayIso } from '../ledger/ledger-parts';
 import { useLoad } from '../banking/banking-parts';
 import { optionalNumber } from '../banking/CashLinesEditor';
 import CatalogSettingsPage, { accountsUnder } from '../sales/CatalogSettingsPage';
-import { CatalogDialog, InactiveSwitch, RecordSelect, TextInput, useCatalogSave } from '../sales/catalog-dialog';
+import { AccountField, CatalogDialog, InactiveSwitch, RecordSelect, TextInput, useCatalogSave } from '../sales/catalog-dialog';
 import { plainNumber } from '../sales/sales-documents';
 import { INVENTORY_AREAS } from './inventory-documents';
 import StockLinesEditor from './StockLinesEditor';
@@ -26,7 +26,7 @@ const NO_CATALOGS = { items: [], income: [], taxCodes: [] };
 // Manager's columns: Item name, Sales price.
 const COLUMNS = [
   { key: 'name', label: 'Item name', render: (kit) => kit.name },
-  { key: 'price', label: 'Sales price', numeric: true, render: (kit) => formatMoney(kit.sales_unit_price) },
+  { key: 'price', label: 'Sales price', kind: COLUMN_KIND.money, value: (kit) => kit.sales_unit_price },
 ];
 
 function formFrom(kit) {
@@ -100,7 +100,7 @@ function KitDialog({ businessId, record, onClose, onSaved }) {
         <Label htmlFor="kit-description">Description</Label>
         <Textarea id="kit-description" rows={2} value={form.description} onChange={(e) => setField('description', e.target.value)} disabled={saving} />
       </div>
-      <RecordSelect id="kit-income" label="Custom income account" value={form.incomeAccountId} options={options.income} noneLabel="Inventory - sales" onChange={(id) => setField('incomeAccountId', id)} disabled={busy} />
+      <AccountField id="kit-income" label="Custom income account" value={form.incomeAccountId} accounts={options.income} noneLabel="Inventory - sales" onChange={(id) => setField('incomeAccountId', id)} disabled={busy} />
       <RecordSelect id="kit-tax" label="Tax code" value={form.taxCodeId} options={options.taxCodes} noneLabel="No tax" onChange={(id) => setField('taxCodeId', id)} disabled={busy} />
       <div className="grid gap-2">
         <p className="text-sm font-medium">Components</p>

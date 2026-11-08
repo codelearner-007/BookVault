@@ -2,24 +2,23 @@
 
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getDocumentJournal } from '@/lib/services/journal-entries.service';
-import { formatMoney } from '@/lib/utils/money';
+import { FormattedDate, Quantity } from '@/components/common/business-format';
+import { Money } from '@/components/common/money';
 import { cn } from '@/lib/utils';
 import TransactionJournal from '../ledger/TransactionJournal';
 import { ErrorAlert, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from '../banking/AttachmentsPanel';
 import { DocumentSkeleton, useLoad } from '../banking/banking-parts';
 import DocumentViewFrame from '../banking/DocumentViewFrame';
-import { plainNumber } from '../sales/sales-documents';
 import { Field, STICKY_CELL, StatusPill } from '../sales/sales-parts';
 
 const CELLS = {
   code: (line) => line.item_code,
   item: (line) => line.item_name,
   description: (line) => line.description,
-  qty: (line) => plainNumber(line.qty),
+  qty: (line) => <Quantity value={line.qty} />,
   account: (line) => line.account_name,
-  amount: (line) => formatMoney(line.amount),
+  amount: (line) => <Money value={line.amount} />,
 };
 const NUMERIC = new Set(['qty', 'amount']);
 // Manager's line columns per document; a column no line uses (description) is hidden.
@@ -57,7 +56,7 @@ function LinesTable({ label, lines, columns, total }) {
         <TableFooter>
           <TableRow className="hover:bg-transparent">
             <TableCell colSpan={shown.length - 1} className="text-end">Total cost</TableCell>
-            <TableCell className="num">{formatMoney(total)}</TableCell>
+            <TableCell className="num"><Money value={total} /></TableCell>
           </TableRow>
         </TableFooter>
       )}
@@ -68,7 +67,7 @@ function LinesTable({ label, lines, columns, total }) {
 function HeaderFields({ doc, config }) {
   return (
     <dl className="mt-6 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-      <Field label="Date"><span className="tabular-nums">{doc.date}</span></Field>
+      <Field label="Date"><FormattedDate value={doc.date} /></Field>
       <Field label="Reference">{doc.reference}</Field>
       {config.locations === 'pair' ? (
         <>
@@ -78,7 +77,7 @@ function HeaderFields({ doc, config }) {
       ) : (
         <Field label="Inventory location">{doc.location_name}</Field>
       )}
-      {config.production && <Field label="Finished item"><span className="tabular-nums">{plainNumber(doc.qty)}</span> × {doc.finished_item_name}</Field>}
+      {config.production && <Field label="Finished item"><Quantity value={doc.qty} /> × {doc.finished_item_name}</Field>}
     </dl>
   );
 }
@@ -120,12 +119,12 @@ export default function StockDocumentView({ business, config, docId, rights }) {
   const navigate = useTabNavigate(config.tab);
   const { service } = config;
   const { data, error, reload } = useLoad(
-    () => Promise.all([service.get(business.id, docId), config.posts ? getDocumentJournal(business.id, docId) : null]),
+    () => service.get(business.id, docId),
     [business.id, config.type, docId],
   );
 
   if (!data) return error ? <ErrorAlert>{error}</ErrorAlert> : <DocumentSkeleton />;
-  const [doc, journal] = data;
+  const doc = data;
 
   return (
     <DocumentViewFrame
@@ -141,7 +140,7 @@ export default function StockDocumentView({ business, config, docId, rights }) {
       voidCopy={config.voidCopy}
     >
       <StockDocument doc={doc} config={config} businessName={business.name} />
-      {config.posts && <TransactionJournal journal={journal} />}
+      {config.posts && <TransactionJournal businessId={business.id} documentId={doc.id} version={doc.version} />}
       <AttachmentsPanel businessId={business.id} documentId={doc.id} canEdit={rights.edit && !doc.is_locked} />
     </DocumentViewFrame>
   );

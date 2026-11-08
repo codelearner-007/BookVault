@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { DatePicker } from '@/components/common/date-picker';
 import { PageHeader } from '@/components/common/page';
 import { isVersionConflict } from '@/lib/services/api-client';
 import { getCoaTree } from '@/lib/services/coa.service';
@@ -71,7 +73,10 @@ function HeaderFields({ config, form, setField, loaded, disabled }) {
   const bind = (field) => ({ value: form[field], onChange: (value) => setField(field, value), disabled });
   return (
     <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
-      <TextInput id="stock-date" label="Date" type="date" {...bind('date')} />
+      <div className="grid gap-2">
+        <Label htmlFor="stock-date">Date</Label>
+        <DatePicker id="stock-date" value={form.date} onChange={(value) => setField('date', value)} disabled={disabled} required />
+      </div>
       <TextInput id="stock-reference" label="Reference" placeholder="Automatic" {...bind('reference')} />
       <LocationFields config={config} form={form} setField={setField} locations={loaded.locations} disabled={disabled} />
       <div className="sm:col-span-2">

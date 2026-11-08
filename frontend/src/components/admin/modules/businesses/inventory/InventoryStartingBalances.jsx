@@ -13,7 +13,9 @@ import { can } from '@/lib/navigation/access';
 import {
   inventoryLocationsService, listInventoryStartingBalances, setInventoryStartingBalance,
 } from '@/lib/services/inventory.service';
-import { formatMoney, sumMoney } from '@/lib/utils/money';
+import { sumMoney } from '@/lib/utils/money';
+import { Quantity } from '@/components/common/business-format';
+import { Money } from '@/components/common/money';
 import { MONEY_INPUT, isZeroAmount, toInputAmount } from '../coa/coa-tree';
 import { ErrorAlert } from '../ledger/ledger-parts';
 import { useLoad } from '../banking/banking-parts';
@@ -32,7 +34,7 @@ function onHandAt(item, locationId) {
 // Display-only preview of what the server will value each unit at; the stored cost is computed server-side.
 function averageCostPreview(qtys, totalCost) {
   const qty = Number(sumMoney(qtys));
-  return qty > 0 && MONEY_INPUT.test(totalCost) ? formatMoney(Number(totalCost) / qty) : '—';
+  return qty > 0 && MONEY_INPUT.test(totalCost) ? <Money value={Number(totalCost) / qty} /> : '—';
 }
 
 function validate(rows, totalCost) {
@@ -98,8 +100,8 @@ function ItemRow({ item, canEdit, onEdit }) {
         <p className="break-words font-medium">{name}</p>
         <p className="mt-0.5 text-sm text-muted-foreground">{where || 'No starting balance'}</p>
       </div>
-      <span className="text-sm text-muted-foreground">Qty <span className="num text-foreground">{plainNumber(item.qty)}</span></span>
-      <span className="text-sm text-muted-foreground">Total cost <span className="num text-foreground">{formatMoney(item.total_cost)}</span></span>
+      <span className="text-sm text-muted-foreground">Qty <Quantity value={item.qty} className="text-foreground" /></span>
+      <span className="text-sm text-muted-foreground">Total cost <Money value={item.total_cost} className="text-foreground" /></span>
       {canEdit && <Button size="sm" variant="secondary" onClick={() => onEdit(item)} aria-label={`Edit starting balance, ${name}`}>Edit</Button>}
     </li>
   );

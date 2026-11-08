@@ -19,7 +19,7 @@ import { Money } from './money';
     onView(row)   row click and the View action; onEdit(row) with canEdit(row): the Edit action (only where the
                   user has the edit right; callers also leave out records that cannot be edited, such as Void).
     menu(row)     an optional More menu after them (Delete).
-    totals        { [column key]: amount }: a totals row on its own rule.
+    totals        { [column key]: amount }: a totals row on its own rule (qty columns total as quantities).
 */
 export const COLUMN_KIND = { text: 'text', date: 'date', money: 'money', qty: 'qty' };
 const END_KINDS = new Set([COLUMN_KIND.money, COLUMN_KIND.qty]);
@@ -101,7 +101,9 @@ function TotalsRow({ columns, totals, withActions }) {
           if (amount !== undefined) {
             return (
               <TableCell key={column.key} className={KIND_CELL[COLUMN_KIND.money]} data-label={several ? column.label : undefined}>
-                <Money value={amount} tone={typeof column.tone === 'function' ? undefined : column.tone} zero={column.zero === 'blank' ? 'show' : column.zero} />
+                {column.kind === COLUMN_KIND.qty ? <Quantity value={amount} /> : (
+                  <Money value={amount} tone={typeof column.tone === 'function' ? undefined : column.tone} zero={column.zero === 'blank' ? 'show' : column.zero} />
+                )}
               </TableCell>
             );
           }
