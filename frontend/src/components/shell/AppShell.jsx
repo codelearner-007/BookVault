@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import {
   DESKTOP_QUERY, SIDEBAR_COOKIE, SIDEBAR_COOKIE_MAX_AGE, nextSidebarState,
 } from '@/lib/navigation/sidebar-state';
+import { BalancesProvider } from '@/components/common/balances';
 import { ShellProvider } from './ShellContext';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -137,10 +138,13 @@ function ShellFrame({ initialSidebar, children }) {
 }
 
 // One shell for the whole signed-in app: workspace pages, the business area and the Admin Panel.
-export default function AppShell({ role, initialSidebar, children }) {
+// initialBalancesHidden: the user's "hide balances" choice read from its cookie by the server (no flash).
+export default function AppShell({ role, userId, initialSidebar, initialBalancesHidden, children }) {
   return (
     <ShellProvider role={role}>
-      <ShellFrame initialSidebar={initialSidebar}>{children}</ShellFrame>
+      <BalancesProvider initialHidden={initialBalancesHidden} userId={userId}>
+        <ShellFrame initialSidebar={initialSidebar}>{children}</ShellFrame>
+      </BalancesProvider>
     </ShellProvider>
   );
 }

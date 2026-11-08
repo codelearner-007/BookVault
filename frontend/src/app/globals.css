@@ -101,6 +101,11 @@
   --neutral: oklch(0.42 0.02 255);
   --neutral-soft: oklch(0.3 0.03 255 / 0.07);
 
+  /* logo mark (concept B, dial o): the app-icon tile, the same in both themes */
+  --logo-tile: oklch(0.22 0.022 255);
+  --logo-dial: oklch(0.8 0.11 255);
+  --logo-hub: oklch(0.955 0.008 255);
+
   /* density: calm desktop; 44px touch below lg (media block below) */
   --control-h: 2.5rem;
   --control-h-sm: 2.125rem;
@@ -310,6 +315,9 @@
   --color-info-soft: var(--info-soft);
   --color-neutral: var(--neutral);
   --color-neutral-soft: var(--neutral-soft);
+  --color-logo-tile: var(--logo-tile);
+  --color-logo-dial: var(--logo-dial);
+  --color-logo-hub: var(--logo-hub);
 
   /* type scale (fixed rem, ratio ~1.18); body is text-base (14px) */
   --text-2xs: 0.6875rem;
@@ -441,6 +449,8 @@
     font-feature-settings: "cv11", "ss01";
     line-height: 1.5;
     min-height: 100dvh;
+    /* Room for the cookie notice while it shows (Cookies.jsx sets the height), so it never covers content. */
+    padding-bottom: var(--cookie-banner-space, 0);
   }
   ::selection {
     background: var(--selection);
@@ -523,8 +533,10 @@
   .table-cards td[data-card~="hide"] { display: none; }
   .table-cards td[data-label]::before { content: attr(data-label) " "; color: var(--muted-foreground); }
   .table-cards td[data-label]:empty { display: none; }
-  .table-cards tfoot tr { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.875rem 0.75rem 0; }
+  .table-cards tfoot tr { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.25rem 0.75rem; padding: 0.875rem 0.75rem 0; }
   .table-cards tfoot td { height: auto; padding: 0; border: 0; }
+  /* Several totals (each labelled): one line per total under "Total", the label at the start, the amount at the end. */
+  .table-cards tfoot td[data-label] { display: flex; flex-basis: 100%; justify-content: space-between; gap: 0.75rem; font-weight: 500; }
   .table-cards tfoot td:empty, .table-cards tfoot td[data-card~="hide"] { display: none; }
 }
 

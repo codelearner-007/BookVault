@@ -2,9 +2,12 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { KeyRound, LogOut, PanelLeft, Plus, Search, UserRound } from 'lucide-react';
+import { useTheme } from 'next-themes';
+import { Eye, EyeOff, KeyRound, LogOut, Moon, PanelLeft, Plus, Search, UserRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { HideBalancesToggle, useGlobalBalances } from '@/components/common/balances';
+import { MONEY_COPY } from '@/lib/copy/money';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -73,6 +76,25 @@ function NewMenu() {
   );
 }
 
+// Phones have no room for the eye and theme buttons in the bar: they sit at the top of the account menu.
+function PhoneMenuItems() {
+  const [hidden, toggleBalances] = useGlobalBalances();
+  const { resolvedTheme, setTheme } = useTheme();
+  return (
+    <>
+      <DropdownMenuItem className="md:hidden" onSelect={toggleBalances}>
+        {hidden ? <Eye aria-hidden="true" /> : <EyeOff aria-hidden="true" />}
+        {hidden ? MONEY_COPY.showBalances : MONEY_COPY.hideBalances}
+      </DropdownMenuItem>
+      <DropdownMenuItem className="md:hidden" onSelect={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}>
+        <Moon aria-hidden="true" />
+        {SHELL_COPY.switchTheme}
+      </DropdownMenuItem>
+      <DropdownMenuSeparator className="md:hidden" />
+    </>
+  );
+}
+
 function UserMenu() {
   const { user } = useGlobal();
   const { logout } = useAuth();
@@ -91,6 +113,7 @@ function UserMenu() {
           <span className="truncate text-sm font-semibold">{email}</span>
         </div>
         <DropdownMenuSeparator />
+        <PhoneMenuItems />
         <DropdownMenuItem asChild>
           <Link href="/admin/profile"><UserRound aria-hidden="true" />{SHELL_COPY.account}</Link>
         </DropdownMenuItem>
@@ -107,7 +130,7 @@ function UserMenu() {
   );
 }
 
-// The floating pill top bar: sidebar toggle, crumbs, search / Ctrl+K, New, theme, account.
+// The floating pill top bar: sidebar toggle, crumbs, search / Ctrl+K, New, hide balances, theme, account.
 export function Topbar({ sidebar, onOpenPalette }) {
   return (
     <header className="sticky top-0 z-40 flex min-h-topbar items-center gap-2 border-b border-sidebar-border bg-topbar px-2 backdrop-blur-xl backdrop-saturate-150 md:top-shell-gap md:rounded-full md:border md:shadow-card">
@@ -126,7 +149,8 @@ export function Topbar({ sidebar, onOpenPalette }) {
         <Kbd className="max-lg:hidden lg:ms-auto">Ctrl K</Kbd>
       </Button>
       <NewMenu />
-      <ThemeToggle />
+      <HideBalancesToggle className="max-md:hidden" />
+      <ThemeToggle className="max-md:hidden" />
       <UserMenu />
     </header>
   );

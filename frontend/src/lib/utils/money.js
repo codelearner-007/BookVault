@@ -23,10 +23,25 @@ const NUMBER_FORMAT_LOCALES = {
   "1'234.56": 'de-CH',
 };
 
+/** The Intl locale that writes a business number format pattern ("1.234,56" -> de-DE). */
+export function numberLocale(pattern) {
+  return NUMBER_FORMAT_LOCALES[pattern] ?? DEFAULT_LOCALE;
+}
+
 /** A formatter for one business's amounts: its number format and its base currency's decimal places. */
 export function businessMoneyFormatter({ number_format: pattern, decimal_places: decimals }) {
-  const locale = NUMBER_FORMAT_LOCALES[pattern] ?? DEFAULT_LOCALE;
+  const locale = numberLocale(pattern);
   return (value) => formatMoney(value, locale, decimals ?? MONEY_DECIMALS);
+}
+
+/** True when an API amount is below zero (string check, no arithmetic). */
+export function isNegativeAmount(value) {
+  return String(value ?? '').trim().startsWith('-');
+}
+
+/** The amount without its sign, for figures whose direction is told in words ("150.00 to allocate"). */
+export function absoluteAmount(value) {
+  return String(value ?? '').trim().replace(/^[-+]/, '');
 }
 
 const API_SCALE = 4; // money columns are numeric(19,4)

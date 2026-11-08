@@ -12,6 +12,7 @@ export const SHELL_COPY = {
   account: 'Account',
   security: 'Security and 2FA',
   logout: 'Log out',
+  switchTheme: 'Switch theme',
   signedInAs: 'Signed in as',
   members: 'Members',
   customizeTabs: 'Customize tabs',

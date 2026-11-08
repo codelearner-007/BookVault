@@ -9,6 +9,7 @@ import {
   listBusinessTabs,
 } from '@/lib/services/business.service';
 import { rememberLastBusiness } from '@/lib/navigation/last-business';
+import { FormatProvider } from '@/components/common/business-format';
 
 const BUSINESS_PATH = /^\/admin\/businesses\/([^/]+)/;
 const SUPER_ADMIN_ROLE = 'super_admin';
@@ -91,7 +92,10 @@ export function ShellProvider({ role, children }) {
   return (
     <ShellContext.Provider
       value={{ isSuperAdmin: role === SUPER_ADMIN_ROLE, canCreateBusiness: role !== MEMBER_ROLE, workspace, ...list }}
-    >{children}</ShellContext.Provider>
+    >
+      {/* Dates and amounts inside a business follow its own format (GET /businesses/{id} `format`). */}
+      <FormatProvider format={workspace.business?.format}>{children}</FormatProvider>
+    </ShellContext.Provider>
   );
 }
 

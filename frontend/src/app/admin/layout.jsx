@@ -5,6 +5,7 @@ import AppShell from '@/components/shell/AppShell';
 import { AdminClaimsProvider } from '@/components/admin/AdminClaimsContext';
 import { getMe, getUserClaims } from '@/lib/server/me';
 import { SIDEBAR_COOKIE, readSidebarState } from '@/lib/navigation/sidebar-state';
+import { HIDE_BALANCES_COOKIE, readBalancesHidden } from '@/lib/navigation/balances-state';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +17,9 @@ export default async function Layout({ children }) {
   }
 
   const claims = getUserClaims(user);
-  const sidebar = readSidebarState((await cookies()).get(SIDEBAR_COOKIE)?.value);
+  const cookieStore = await cookies();
+  const sidebar = readSidebarState(cookieStore.get(SIDEBAR_COOKIE)?.value);
+  const balancesHidden = readBalancesHidden(cookieStore.get(HIDE_BALANCES_COOKIE)?.value, user.id);
 
   return (
     <Providers
@@ -32,7 +35,7 @@ export default async function Layout({ children }) {
       }}
     >
       <AdminClaimsProvider claims={claims}>
-        <AppShell role={claims.user_role} initialSidebar={sidebar}>
+        <AppShell role={claims.user_role} userId={user.id} initialSidebar={sidebar} initialBalancesHidden={balancesHidden}>
           {children}
         </AppShell>
       </AdminClaimsProvider>
