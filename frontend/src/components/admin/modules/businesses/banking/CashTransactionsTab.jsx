@@ -21,5 +21,5 @@ export default function CashTransactionsTab({ business, kind }) {
     return <CashTransactionForm key={route.editId} businessId={business.id} direction={direction} docId={route.editId} allowed={rights.edit} />;
   }
   if (route.viewId) return <CashTransactionView key={route.viewId} business={business} direction={direction} docId={route.viewId} rights={rights} />;
-  return <CashTransactionsList businessId={business.id} direction={direction} page={route.page} active={route.active} canCreate={rights.create} />;
+  return <CashTransactionsList businessId={business.id} direction={direction} page={route.page} active={route.active} canCreate={rights.create} canEdit={rights.edit} />;
 }

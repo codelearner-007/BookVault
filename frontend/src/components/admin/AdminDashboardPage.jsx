@@ -48,19 +48,20 @@ function Greeting({ user }) {
   );
 }
 
+// One primary: back to the business you were in; creating another business is the quieter, rarer action.
 function QuickActions({ businesses, canCreate }) {
   const lastId = useLastBusinessId();
   const last = businesses.find((b) => b.id === lastId);
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {last && (
-        <Button variant="secondary" asChild>
-          <Link href={businessHref(last.id)}>{COPY.openBusiness(last.name)}</Link>
+      {canCreate && (
+        <Button variant={last ? 'ghost' : 'default'} asChild>
+          <Link href={CREATE_HREF}><Plus aria-hidden="true" />{COPY.createBusiness}</Link>
         </Button>
       )}
-      {canCreate && (
+      {last && (
         <Button asChild>
-          <Link href={CREATE_HREF}><Plus aria-hidden="true" />{COPY.createBusiness}</Link>
+          <Link href={businessHref(last.id)}>{COPY.openBusiness(last.name)}</Link>
         </Button>
       )}
     </div>

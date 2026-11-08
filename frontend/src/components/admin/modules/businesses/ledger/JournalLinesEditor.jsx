@@ -5,9 +5,9 @@ import { Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AccountPicker } from '@/components/common/account-picker';
+import { Money } from '@/components/common/money';
 import { computeJournalTotals } from '@/lib/services/journal-entries.service';
-import { formatMoney } from '@/lib/utils/money';
 
 const TOTALS_DEBOUNCE_MS = 300;
 const MIN_LINES = 2;
@@ -58,23 +58,6 @@ function FieldLabel({ children }) {
   return <span className="text-sm text-muted-foreground md:hidden" aria-hidden="true">{children}</span>;
 }
 
-function AccountSelect({ value, accounts, onChange, disabled, label }) {
-  return (
-    <Select value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger aria-label={label} className="w-full min-w-0">
-        <SelectValue placeholder="Select account" />
-      </SelectTrigger>
-      <SelectContent>
-        {accounts.map((account) => (
-          <SelectItem key={account.id} value={account.id}>
-            {account.code ? `${account.code} · ${account.name}` : account.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
 function LineRow({ line, number, accounts, disabled, canRemove, onChange, onRemove }) {
   const set = (field) => (event) => onChange(line.key, field, event.target.value);
   const amountInput = (field, label) => (
@@ -97,12 +80,13 @@ function LineRow({ line, number, accounts, disabled, canRemove, onChange, onRemo
     <li className={cn('grid grid-cols-2 gap-3 rounded-card border border-card-border p-4 md:items-center md:rounded-none md:border-0 md:p-0 md:py-1.5', LINE_GRID)}>
       <div className="col-span-2 grid gap-1.5 md:col-span-1 md:block">
         <FieldLabel>Account</FieldLabel>
-        <AccountSelect
+        <AccountPicker
           value={line.account_id}
           accounts={accounts}
           onChange={(value) => onChange(line.key, 'account_id', value)}
           disabled={disabled}
           label={`Account, line ${number}`}
+          className="w-full"
         />
       </div>
       <div className="col-span-2 grid gap-1.5 md:col-span-1 md:block">
@@ -131,7 +115,7 @@ function LineRow({ line, number, accounts, disabled, canRemove, onChange, onRemo
 }
 
 function TotalsRow({ totals, invalid }) {
-  const show = (value) => (totals ? formatMoney(value) : '—');
+  const show = (value) => (totals ? <Money value={value} /> : '—');
   const unbalanced = totals && Number(totals.difference) !== 0;
   const item = 'flex flex-col md:block md:text-end md:row-start-1';
   return (

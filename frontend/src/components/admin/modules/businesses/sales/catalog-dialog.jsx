@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { AccountPicker } from '@/components/common/account-picker';
 import { useIdempotencyKey } from '../banking/banking-parts';
 import { NONE } from './sales-parts';
 
@@ -81,6 +82,16 @@ export function RecordSelect({ id, label, value, options, onChange, disabled, no
           ))}
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+// An account field: the shared searchable picker (names and head groups, no codes).
+export function AccountField({ id, label, value, accounts, onChange, disabled, noneLabel }) {
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <AccountPicker id={id} value={value} accounts={accounts} onChange={onChange} disabled={disabled} noneLabel={noneLabel} className="w-full" />
     </div>
   );
 }

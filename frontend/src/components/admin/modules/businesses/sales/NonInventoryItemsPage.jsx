@@ -6,14 +6,14 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { getCoaTree } from '@/lib/services/coa.service';
 import { nonInventoryItemsService, taxCodesService } from '@/lib/services/settings-catalog.service';
-import { formatMoney } from '@/lib/utils/money';
+import { COLUMN_KIND } from '@/components/common/list-table';
 import { toInputAmount } from '../coa/coa-tree';
 import { parseAmount } from '../ledger/JournalLinesEditor';
 import { todayIso } from '../ledger/ledger-parts';
 import { useLoad } from '../banking/banking-parts';
 import { optionalNumber } from '../banking/CashLinesEditor';
 import CatalogSettingsPage, { accountsUnder } from './CatalogSettingsPage';
-import { CatalogDialog, InactiveSwitch, RecordSelect, TextInput, useCatalogSave } from './catalog-dialog';
+import { AccountField, CatalogDialog, InactiveSwitch, RecordSelect, TextInput, useCatalogSave } from './catalog-dialog';
 
 const AREA = 'non_inventory_items';
 const INCOME_ROOTS = ['income'];
@@ -23,7 +23,7 @@ const COLUMNS = [
   { key: 'name', label: 'Name', render: (item) => item.name },
   { key: 'code', label: 'Code', render: (item) => item.code },
   { key: 'unit', label: 'Unit name', render: (item) => item.unit_name },
-  { key: 'price', label: 'Sales price', numeric: true, render: (item) => formatMoney(item.sales_unit_price) },
+  { key: 'price', label: 'Sales price', kind: COLUMN_KIND.money, value: (item) => item.sales_unit_price },
   { key: 'income', label: 'Income account', render: (item) => item.income_account_name },
   { key: 'tax', label: 'Tax code', render: (item) => item.tax_code_name },
 ];
@@ -98,8 +98,8 @@ function ItemDialog({ businessId, record, onClose, onSaved }) {
         <TextInput id="item-sales-price" label="Sales unit price" inputMode="decimal" className="num" value={form.salesPrice} onChange={(v) => setField('salesPrice', v)} disabled={saving} />
         <TextInput id="item-purchase-price" label="Purchase unit price" inputMode="decimal" className="num" value={form.purchasePrice} onChange={(v) => setField('purchasePrice', v)} disabled={saving} />
       </div>
-      <RecordSelect id="item-income" label="Income account" value={form.incomeAccountId} options={options.income} onChange={(id) => setField('incomeAccountId', id)} disabled={saving || loading} />
-      <RecordSelect id="item-expense" label="Expense account" value={form.expenseAccountId} options={options.expense} noneLabel="None" onChange={(id) => setField('expenseAccountId', id)} disabled={saving || loading} />
+      <AccountField id="item-income" label="Income account" value={form.incomeAccountId} accounts={options.income} onChange={(id) => setField('incomeAccountId', id)} disabled={saving || loading} />
+      <AccountField id="item-expense" label="Expense account" value={form.expenseAccountId} accounts={options.expense} noneLabel="None" onChange={(id) => setField('expenseAccountId', id)} disabled={saving || loading} />
       <RecordSelect id="item-tax" label="Tax code" value={form.taxCodeId} options={options.taxCodes} noneLabel="No tax" onChange={(id) => setField('taxCodeId', id)} disabled={saving || loading} />
       {record && <InactiveSwitch id="item-inactive" checked={form.isInactive} onChange={(on) => setField('isInactive', on)} disabled={saving} />}
     </CatalogDialog>

@@ -11,7 +11,8 @@ import { EmptyState, ListCard, PageHeader } from '@/components/common/page';
 import {
   listBankStartingBalances, listStartingBalances, setBankStartingBalance, setStartingBalance,
 } from '@/lib/services/starting-balances.service';
-import { formatMoney } from '@/lib/utils/money';
+import { FormattedDate } from '@/components/common/business-format';
+import { Money } from '@/components/common/money';
 import { MONEY_INPUT, SIDES, SIDE_SHORT, isZeroAmount, normalSide, toInputAmount } from '../coa/coa-tree';
 import { ErrorAlert } from '../ledger/ledger-parts';
 import StartingBalanceInvoices from '../sales/StartingBalanceInvoices';
@@ -47,8 +48,9 @@ function StartingBalancesSkeleton() {
   );
 }
 
+// Names only: codes show in the Chart of Accounts and on the Summary with "Show account codes".
 function accountName(item) {
-  return item.account_code ? `${item.account_code} · ${item.account_name}` : item.account_name;
+  return item.account_name;
 }
 
 // One account: Debit/Credit + amount, saved on its own (blank or 0 removes the opening balance).
@@ -111,10 +113,13 @@ function StartingBalanceRow({ item, name, subtitle, defaultSide, onSave, onSaved
 }
 
 function RetainedEarningsEffect({ effect }) {
-  const label = effect?.side ? `${formatMoney(effect.amount)} ${SIDE_SHORT[effect.side]}` : formatMoney('0');
   return (
     <p>
-      Retained earnings opening: <span className="num font-semibold text-foreground">{label}</span>
+      Retained earnings opening:{' '}
+      <span className="font-semibold text-foreground">
+        <Money value={effect?.side ? effect.amount : '0'} />
+        {effect?.side && ` ${SIDE_SHORT[effect.side]}`}
+      </span>
     </p>
   );
 }
@@ -156,7 +161,7 @@ export default function BusinessStartingBalances({ business }) {
     <>
       <PageHeader
         title="Starting Balances"
-        description={data?.accounts.opening_date ? `Opening balances dated ${data.accounts.opening_date}` : undefined}
+        description={data?.accounts.opening_date ? <>Opening balances dated <FormattedDate value={data.accounts.opening_date} /></> : undefined}
         back={(
           <Button variant="ghost" size="icon" asChild>
             <Link href="?tab=settings" aria-label="Back to settings"><ArrowLeft /></Link>

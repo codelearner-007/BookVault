@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, ListCard } from '@/components/common/page';
 import { listStartingBalanceInvoices, setPaidBeforeStart } from '@/lib/services/starting-balances.service';
-import { formatMoney } from '@/lib/utils/money';
+import { FormattedDate } from '@/components/common/business-format';
+import { Money } from '@/components/common/money';
 import { MONEY_INPUT, toInputAmount } from '../coa/coa-tree';
 import { ErrorAlert } from '../ledger/ledger-parts';
 import { documentHref, useLoad, useTabRights } from '../banking/banking-parts';
@@ -41,7 +42,7 @@ function InvoiceRow({ businessId, side, item, onSaved, canEdit }) {
       <div className="min-w-0 flex-1 basis-48">
         <Link href={documentHref(side.invoiceType, item.invoice_id)} className="font-medium hover:text-link hover:underline">{name}</Link>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          {item[side.partyNameField]} · <span className="num">{item.date}</span> · total <span className="num">{formatMoney(item.total)}</span> · outstanding <span className="num">{formatMoney(item.outstanding)}</span>
+          {item[side.partyNameField]} · <FormattedDate value={item.date} className="tabular-nums" /> · total <Money value={item.total} /> · outstanding <Money value={item.outstanding} />
         </p>
       </div>
       <Input

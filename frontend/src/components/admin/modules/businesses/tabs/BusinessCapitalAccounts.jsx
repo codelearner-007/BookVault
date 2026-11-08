@@ -1,17 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Pencil, PiggyBank, Plus, Trash2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { PiggyBank, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { COLUMN_KIND, ListTable, RecordTitle } from '@/components/common/list-table';
 import { EmptyState, ListCard, MoreMenu, PageHeader } from '@/components/common/page';
 import { ConfirmDialog, ListPagination } from '@/components/super-admin/platform-parts';
 import { isVersionConflict } from '@/lib/services/api-client';
 import {
   createCapitalAccount, deleteCapitalAccount, listCapitalAccounts, updateCapitalAccount,
 } from '@/lib/services/capital-accounts.service';
-import { formatMoney } from '@/lib/utils/money';
 import { BANKING_TABS, InactiveBadge, TableSkeleton, useDocumentRoute, useLoad, useTabRights } from '../banking/banking-parts';
 import NamedAccountDialog from '../banking/NamedAccountDialog';
 import { ErrorAlert, useTabNavigate } from '../ledger/ledger-parts';
@@ -19,41 +17,16 @@ import { ErrorAlert, useTabNavigate } from '../ledger/ledger-parts';
 const IN_USE = 'capital_account_in_use';
 const IN_USE_MESSAGE = 'This capital account has transactions, so it cannot be deleted. Mark it Inactive instead.';
 
-function CapitalTable({ rows, rights, onEdit, onDelete }) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow className="hover:bg-transparent">
-          <TableHead>Name</TableHead>
-          <TableHead>Code</TableHead>
-          <TableHead className="text-end">Balance</TableHead>
-          {(rights.edit || rights.delete) && <TableHead><span className="sr-only">Actions</span></TableHead>}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.id} className={cn(row.is_inactive && 'text-muted-foreground')}>
-            <TableCell data-card="title">
-              <span className="flex items-center gap-2">{row.name}{row.is_inactive && <InactiveBadge />}</span>
-            </TableCell>
-            <TableCell className="num" data-label="Code">{row.code}</TableCell>
-            <TableCell className="num" data-card="end">{formatMoney(row.balance)}</TableCell>
-            {(rights.edit || rights.delete) && (
-              <TableCell className="w-12" data-card="actions">
-                <MoreMenu
-                  items={[
-                    rights.edit && { label: 'Edit', icon: Pencil, onSelect: () => onEdit(row) },
-                    rights.delete && { label: 'Delete', icon: Trash2, destructive: true, onSelect: () => onDelete(row) },
-                  ]}
-                />
-              </TableCell>
-            )}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
+// Name and Balance (signed, from the API); codes show only in the Chart of Accounts.
+const COLUMNS = [
+  {
+    key: 'name',
+    label: 'Name',
+    card: 'title',
+    render: (row) => <RecordTitle text={row.name}>{row.is_inactive && <InactiveBadge />}</RecordTitle>,
+  },
+  { key: 'balance', label: 'Balance', kind: COLUMN_KIND.money, card: 'end' },
+];
 
 // ?tab=capital-accounts[&p=N]: owners' capital accounts with their balances (signed, from the API).
 export default function BusinessCapitalAccounts({ business }) {
@@ -69,7 +42,7 @@ export default function BusinessCapitalAccounts({ business }) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
 
-  if (!data && !loadError) return <TableSkeleton columns={3} />;
+  if (!data && !loadError) return <TableSkeleton columns={COLUMNS.length} actions />;
 
   async function save(body) {
     if (dialog.account) await updateCapitalAccount(business.id, dialog.account.id, body);
@@ -129,7 +102,18 @@ export default function BusinessCapitalAccounts({ business }) {
         {items.length === 0 ? (
           <EmptyState icon={PiggyBank} title="No capital accounts yet" />
         ) : (
-          <CapitalTable rows={items} rights={rights} onEdit={(account) => setDialog({ account })} onDelete={setToDelete} />
+          <ListTable
+            columns={COLUMNS}
+            rows={items}
+            onEdit={rights.edit ? (account) => setDialog({ account }) : null}
+            menu={rights.delete ? (account) => (
+              <MoreMenu
+                label={`Actions for ${account.name}`}
+                items={[{ label: 'Delete', icon: Trash2, destructive: true, onSelect: () => setToDelete(account) }]}
+              />
+            ) : undefined}
+            rowClassName={(account) => account.is_inactive && 'text-muted-foreground'}
+          />
         )}
       </ListCard>
     </div>

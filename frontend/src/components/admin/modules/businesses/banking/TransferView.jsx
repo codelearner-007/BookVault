@@ -2,9 +2,9 @@
 
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getDocumentJournal } from '@/lib/services/journal-entries.service';
 import { getTransfer, postTransfer, voidTransfer } from '@/lib/services/inter-account-transfers.service';
-import { formatMoney } from '@/lib/utils/money';
+import { FormattedDate } from '@/components/common/business-format';
+import { Money } from '@/components/common/money';
 import TransactionJournal from '../ledger/TransactionJournal';
 import { ErrorAlert, JE_STATUS, StatusBadge, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from './AttachmentsPanel';
@@ -34,7 +34,7 @@ function TransferDocument({ doc, businessName }) {
         <p className="font-semibold">{businessName}</p>
       </div>
       <dl className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2">
-        <div><dt className="text-sm text-muted-foreground">Date</dt><dd className="mt-1 tabular-nums">{doc.date}</dd></div>
+        <div><dt className="text-sm text-muted-foreground">Date</dt><dd className="mt-1 tabular-nums"><FormattedDate value={doc.date} /></dd></div>
         <div><dt className="text-sm text-muted-foreground">Reference</dt><dd className="mt-1">{doc.reference || '—'}</dd></div>
       </dl>
       {doc.description && <p className="mt-6 font-semibold whitespace-pre-wrap">{doc.description}</p>}
@@ -52,8 +52,8 @@ function TransferDocument({ doc, businessName }) {
               <TableCell>
                 <span className="flex items-center gap-2">{row.name}{isPending(doc, row.side) && <PendingBadge />}</span>
               </TableCell>
-              <TableCell className="num w-32">{formatMoney(row.outflow)}</TableCell>
-              <TableCell className="num w-32">{formatMoney(row.inflow)}</TableCell>
+              <TableCell className="num w-32"><Money value={row.outflow} tone="out" /></TableCell>
+              <TableCell className="num w-32"><Money value={row.inflow} tone="in" /></TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -66,12 +66,12 @@ function TransferDocument({ doc, businessName }) {
 export default function TransferView({ business, docId, rights }) {
   const navigate = useTabNavigate(BANKING_TABS.transfers);
   const { data, error, reload } = useLoad(
-    () => Promise.all([getTransfer(business.id, docId), getDocumentJournal(business.id, docId)]),
+    () => getTransfer(business.id, docId),
     [business.id, docId],
   );
 
   if (!data) return error ? <ErrorAlert>{error}</ErrorAlert> : <DocumentSkeleton />;
-  const [doc, journal] = data;
+  const doc = data;
 
   return (
     <DocumentViewFrame
@@ -86,7 +86,7 @@ export default function TransferView({ business, docId, rights }) {
       onChanged={reload}
     >
       <TransferDocument doc={doc} businessName={business.name} />
-      <TransactionJournal journal={journal} />
+      <TransactionJournal businessId={business.id} documentId={doc.id} version={doc.version} />
       <AttachmentsPanel businessId={business.id} documentId={doc.id} canEdit={rights.edit && !doc.is_locked} />
     </DocumentViewFrame>
   );

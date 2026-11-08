@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { formatMoney } from '@/lib/utils/money';
+import { AccountPicker } from '@/components/common/account-picker';
+import { Money } from '@/components/common/money';
 import { parseAmount } from '../ledger/JournalLinesEditor';
 import ReceiptInvoiceField from '../sales/ReceiptInvoiceField';
 import { sideOfPartyKind } from '../sales/sales-documents';
@@ -79,14 +79,14 @@ function AccountCell({ line, number, accounts, businessId, disabled, onChange, p
   return (
     <div className="col-span-2 grid gap-1.5 md:col-span-1">
       <FieldLabel>Account</FieldLabel>
-      <Select value={line.account_id} onValueChange={(value) => onChange({ account_id: value, party: null, invoice: null })} disabled={disabled}>
-        <SelectTrigger aria-label={`Account, line ${number}`} className="w-full min-w-0">
-          <SelectValue placeholder="Select account" />
-        </SelectTrigger>
-        <SelectContent>
-          {accounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.code ? `${a.code} · ${a.name}` : a.name}</SelectItem>)}
-        </SelectContent>
-      </Select>
+      <AccountPicker
+        value={line.account_id}
+        accounts={accounts}
+        onChange={(value) => onChange({ account_id: value, party: null, invoice: null })}
+        disabled={disabled}
+        label={`Account, line ${number}`}
+        className="w-full"
+      />
       {partyKind && (
         <PartyPicker
           businessId={businessId}
@@ -153,7 +153,7 @@ function LineRow({ line, number, columns, accounts, businessId, amount, disabled
       {columns.discount && <NumberCell line={line} field="discount" label="Discount" number={number} disabled={disabled} onChange={change} />}
       <div className="grid gap-1.5 md:flex md:h-control md:items-center md:justify-end md:pe-3.5">
         <FieldLabel>Line total</FieldLabel>
-        <span className="num">{amount === undefined ? '—' : formatMoney(amount)}</span>
+        <span className="num">{amount === undefined ? '—' : <Money value={amount} />}</span>
       </div>
       <Button
         variant="ghost"
@@ -245,7 +245,7 @@ export default function CashLinesEditor({
       >
         <span className="text-sm text-muted-foreground">Total</span>
         <span className="num font-semibold">
-          {invalid ? 'Check amounts' : totals ? formatMoney(totals.total) : '—'}
+          {invalid ? 'Check amounts' : totals ? <Money value={totals.total} /> : '—'}
         </span>
       </div>
       <Button variant="secondary" size="sm" onClick={() => setLines((prev) => [...prev, emptyCashLine()])} disabled={disabled}>

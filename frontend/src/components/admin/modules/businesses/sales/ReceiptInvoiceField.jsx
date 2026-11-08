@@ -1,6 +1,7 @@
 'use client';
 
-import { formatMoney } from '@/lib/utils/money';
+import { FormattedDate } from '@/components/common/business-format';
+import { Money } from '@/components/common/money';
 import { useLoad } from '../banking/banking-parts';
 import { InvoiceSelect } from './sales-parts';
 
@@ -38,8 +39,8 @@ export default function ReceiptInvoiceField({ businessId, side, partyId, date, v
       />
       {discount && (
         <p className="text-sm text-muted-foreground">
-          Discount available until {discount.until}: <span className="num">{formatMoney(discount.amount)}</span>.
-          {' '}Paying <span className="num font-medium text-foreground">{formatMoney(discount.settle_amount)}</span> settles {target.reference || 'the invoice'} in full.
+          Discount available until <FormattedDate value={discount.until} />: <Money value={discount.amount} />.
+          {' '}Paying <Money value={discount.settle_amount} className="font-medium text-foreground" /> settles {target.reference || 'the invoice'} in full.
         </p>
       )}
     </div>

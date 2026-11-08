@@ -3,6 +3,8 @@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FormattedDate } from '@/components/common/business-format';
+import { DatePicker } from '@/components/common/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { DOC_TYPES, ROLES } from './sales-documents';
@@ -16,6 +18,15 @@ function TextField({ id, label, value, onChange, disabled, type = 'text', placeh
     <div className={className ?? 'grid gap-2'}>
       <Label htmlFor={id}>{label}</Label>
       <Input id={id} type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} disabled={disabled} />
+    </div>
+  );
+}
+
+function DateField({ id, label, value, onChange, disabled }) {
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <DatePicker id={id} value={value} onChange={onChange} disabled={disabled} />
     </div>
   );
 }
@@ -53,7 +64,7 @@ function DueDateField({ form, setField, disabled }) {
             <span className="text-sm text-muted-foreground">days</span>
           </div>
         ) : (
-          <Input aria-label="Due date" type="date" className="w-44" value={form.dueDate} onChange={(e) => setField('dueDate', e.target.value)} disabled={disabled} />
+          <DatePicker aria-label="Due date" className="w-44" value={form.dueDate} onChange={(value) => setField('dueDate', value)} disabled={disabled} />
         )}
       </div>
     </div>
@@ -65,9 +76,9 @@ export function TradeHeaderFields({ businessId, config, form, setField, onParty,
   const isRole = (role) => config.role === role;
   return (
     <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
-      <TextField id="trade-date" label={config.dateLabel} type="date" value={form.date} onChange={(v) => setField('date', v)} disabled={disabled} />
+      <DateField id="trade-date" label={config.dateLabel} value={form.date} onChange={(v) => setField('date', v)} disabled={disabled} />
       {isType(DOC_TYPES.quote) && (
-        <TextField id="trade-expiry" label="Expiry date" type="date" value={form.expiryDate} onChange={(v) => setField('expiryDate', v)} disabled={disabled} />
+        <DateField id="trade-expiry" label="Expiry date" value={form.expiryDate} onChange={(v) => setField('expiryDate', v)} disabled={disabled} />
       )}
       {isRole(ROLES.invoice) && !form.isStartingBalance && <DueDateField form={form} setField={setField} disabled={disabled} />}
       <TextField id="trade-reference" label="Reference" placeholder="Automatic" value={form.reference} onChange={(v) => setField('reference', v)} disabled={disabled} />
@@ -162,7 +173,7 @@ export function StartingBalanceFields({ config, form, setField, booksStartDate, 
   return (
     <div className="grid gap-2 rounded-card border border-card-border p-4 sm:max-w-md">
       <p className="text-sm text-muted-foreground">
-        Starting-balance invoice{booksStartDate ? `: date it before ${booksStartDate}, when the books start.` : '.'} It posts no {config.side.ledgerEffect}.
+        Starting-balance invoice{booksStartDate ? <>: date it before <FormattedDate value={booksStartDate} />, when the books start.</> : '.'} It posts no {config.side.ledgerEffect}.
       </p>
       <Label htmlFor="trade-paid-before-start">Paid before start</Label>
       <Input

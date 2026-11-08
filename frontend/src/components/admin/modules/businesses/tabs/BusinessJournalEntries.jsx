@@ -32,5 +32,5 @@ export default function BusinessJournalEntries({ business }) {
   if (param('new')) return <JournalEntryForm businessId={business.id} allowed={rights.create} />;
   if (editId) return <JournalEntryForm key={editId} businessId={business.id} entryId={editId} allowed={rights.edit} />;
   if (viewId) return <JournalEntryView key={viewId} businessId={business.id} entryId={viewId} rights={rights} />;
-  return <JournalEntriesList businessId={business.id} page={active ? page : 1} canCreate={rights.create} />;
+  return <JournalEntriesList businessId={business.id} page={active ? page : 1} active={active} canCreate={rights.create} canEdit={rights.edit} />;
 }

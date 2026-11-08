@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ListCard } from '@/components/common/page';
 import { ACTIVITY_ENTITIES, ACTIVITY_VERBS, WORKSPACE_COPY as COPY, activityActor } from '@/lib/copy/workspace';
-import { businessMoneyFormatter } from '@/lib/utils/money';
+import { FormatProvider } from '@/components/common/business-format';
+import { useMoneyFormatter } from '@/components/common/money';
 import { relativeTime } from '@/lib/utils/relative-time';
 import { ATTENTION_KINDS, activityHref, businessHref } from './workspace-links';
 
@@ -85,8 +86,10 @@ export function ActivitySkeleton() {
   );
 }
 
-function attentionDetail({ kind, business, amount, count }) {
-  const money = `${business.currency_code ?? ''} ${businessMoneyFormatter(business)(amount)}`.trim();
+// Suspense is told as the amount to allocate (its ledger sign is credit-positive, so never shown signed).
+function AttentionDetail({ kind, business, amount, count }) {
+  const format = useMoneyFormatter();
+  const money = `${business.currency_code ?? ''} ${format(amount, { absolute: kind !== ATTENTION_KINDS.overdue })}`.trim();
   return kind === ATTENTION_KINDS.overdue ? COPY.overdueDetail(count, money) : COPY.suspenseDetail(money);
 }
 
@@ -101,7 +104,9 @@ export function AttentionList({ items }) {
               <Badge variant="warn">{item.kind === ATTENTION_KINDS.overdue ? COPY.overduePill : COPY.suspensePill}</Badge>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{item.business.name}</p>
-                <p className="mt-0.5 text-sm text-muted-foreground">{attentionDetail(item)}</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  <FormatProvider format={item.business}><AttentionDetail {...item} /></FormatProvider>
+                </p>
               </div>
               <ChevronRight className="size-4 shrink-0 text-muted-foreground rtl:rotate-180" aria-hidden="true" />
             </Link>

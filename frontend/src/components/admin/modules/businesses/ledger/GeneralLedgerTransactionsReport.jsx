@@ -3,29 +3,25 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ListTree } from 'lucide-react';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { AccountPicker } from '@/components/common/account-picker';
+import { FormattedDate } from '@/components/common/business-format';
+import { DatePicker } from '@/components/common/date-picker';
+import { COLUMN_KIND, ListTable } from '@/components/common/list-table';
 import { EmptyState, ListCard, ListToolbar, PageHeader } from '@/components/common/page';
 import { ListPagination } from '@/components/super-admin/platform-parts';
-import { listCoaAccounts } from '@/lib/services/coa.service';
+import { getCoaTree } from '@/lib/services/coa.service';
 import { listGeneralLedgerTransactions } from '@/lib/services/ledger-reports.service';
-import { formatMoney } from '@/lib/utils/money';
+import { accountsFromTree } from '../coa/coa-tree';
 import {
   BackButton, ErrorAlert, PAGE_PARAM, REPORTS_TAB, accountLabel, todayIso, usePageParam, useTabNavigate,
 } from './ledger-parts';
 import { REPORTS } from './ReportsIndex';
 
-const ALL_ACCOUNTS = 'all';
-const TOTAL_ACCOUNT_TYPE = 'total';
+const ALL_ACCOUNTS = 'All accounts';
 const SKELETON_ROWS = 8;
-
-function amount(value) {
-  return Number(value) === 0 ? '' : formatMoney(value);
-}
 
 function startOfYear(isoDate) {
   return `${isoDate.slice(0, 4)}-01-01`;
@@ -48,8 +44,8 @@ function useAccounts(businessId) {
   const [accounts, setAccounts] = useState([]);
   useEffect(() => {
     let active = true;
-    listCoaAccounts(businessId)
-      .then((coa) => { if (active) setAccounts(coa.items.filter((a) => a.type !== TOTAL_ACCOUNT_TYPE)); })
+    getCoaTree(businessId, todayIso())
+      .then((tree) => { if (active) setAccounts(accountsFromTree(tree)); })
       .catch(() => {});
     return () => { active = false; };
   }, [businessId]);
@@ -61,23 +57,20 @@ function Filters({ filters, accounts, onChange }) {
     <ListToolbar className="justify-start gap-x-5">
       <div className="flex items-center gap-2">
         <Label htmlFor="gl-from" className="text-muted-foreground">From</Label>
-        <Input id="gl-from" type="date" value={filters.from} onChange={(e) => e.target.value && onChange({ from: e.target.value })} className="w-44" />
+        <DatePicker id="gl-from" value={filters.from} onChange={(value) => value && onChange({ from: value })} className="w-44" />
       </div>
       <div className="flex items-center gap-2">
         <Label htmlFor="gl-to" className="text-muted-foreground">To</Label>
-        <Input id="gl-to" type="date" value={filters.to} onChange={(e) => e.target.value && onChange({ to: e.target.value })} className="w-44" />
+        <DatePicker id="gl-to" value={filters.to} onChange={(value) => value && onChange({ to: value })} className="w-44" />
       </div>
-      <Select value={filters.accountId || ALL_ACCOUNTS} onValueChange={(v) => onChange({ account: v === ALL_ACCOUNTS ? '' : v })}>
-        <SelectTrigger aria-label="Account" className="w-64 max-md:w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL_ACCOUNTS}>All accounts</SelectItem>
-          {accounts.map((a) => (
-            <SelectItem key={a.id} value={a.id}>{a.code ? `${a.code} · ${a.name}` : a.name}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <AccountPicker
+        label="Account"
+        value={filters.accountId}
+        accounts={accounts}
+        noneLabel={ALL_ACCOUNTS}
+        onChange={(id) => onChange({ account: id })}
+        className="w-64 max-md:w-full"
+      />
       <div className="flex items-center gap-2">
         <Switch id="gl-reversed" checked={filters.includeReversed} onCheckedChange={(on) => onChange({ reversed: on ? '1' : '' })} />
         <Label htmlFor="gl-reversed">Show reversed</Label>
@@ -86,34 +79,14 @@ function Filters({ filters, accounts, onChange }) {
   );
 }
 
-function TransactionsTable({ items }) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow className="hover:bg-transparent">
-          <TableHead>Date</TableHead>
-          <TableHead>Reference</TableHead>
-          <TableHead>Description</TableHead>
-          <TableHead>Account</TableHead>
-          <TableHead className="text-end">Debit</TableHead>
-          <TableHead className="text-end">Credit</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {items.map((line) => (
-          <TableRow key={line.journal_line_id}>
-            <TableCell className="tabular-nums whitespace-nowrap" data-label="Date">{line.date}</TableCell>
-            <TableCell data-card="title">{line.reference}</TableCell>
-            <TableCell className="text-muted-foreground" data-label="Description">{line.description}</TableCell>
-            <TableCell data-label="Account">{accountLabel(line)}</TableCell>
-            <TableCell className="num" data-label="Debit">{amount(line.debit)}</TableCell>
-            <TableCell className="num" data-label="Credit">{amount(line.credit)}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
+const COLUMNS = [
+  { key: 'date', label: 'Date', kind: COLUMN_KIND.date },
+  { key: 'reference', label: 'Reference', card: 'title' },
+  { key: 'description', label: 'Description', muted: true, truncate: true },
+  { key: 'account', label: 'Account', value: accountLabel },
+  { key: 'debit', label: 'Debit', kind: COLUMN_KIND.money, zero: 'blank' },
+  { key: 'credit', label: 'Credit', kind: COLUMN_KIND.money, zero: 'blank' },
+];
 
 // ?tab=reports&report=general-ledger-transactions[&from&to&account&reversed=1&p]
 export default function GeneralLedgerTransactionsReport({ businessId }) {
@@ -151,7 +124,7 @@ export default function GeneralLedgerTransactionsReport({ businessId }) {
     <div>
       <PageHeader
         title="General Ledger Transactions"
-        description={`${filters.from} to ${filters.to}`}
+        description={<><FormattedDate value={filters.from} /> to <FormattedDate value={filters.to} /></>}
         back={<BackButton onClick={() => navigate({})} label="Back to reports" />}
       />
       <Filters filters={filters} accounts={accounts} onChange={update} />
@@ -173,7 +146,9 @@ export default function GeneralLedgerTransactionsReport({ businessId }) {
           </div>
         )}
         {!loading && data?.items.length === 0 && <EmptyState icon={ListTree} title="No transactions in this period" />}
-        {!loading && data?.items.length > 0 && <TransactionsTable items={data.items} />}
+        {!loading && data?.items.length > 0 && (
+          <ListTable columns={COLUMNS} rows={data.items} rowKey={(line) => line.journal_line_id} />
+        )}
       </ListCard>
     </div>
   );

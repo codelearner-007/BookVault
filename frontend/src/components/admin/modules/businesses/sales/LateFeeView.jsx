@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
-import { getDocumentJournal } from '@/lib/services/journal-entries.service';
 import { latePaymentFeesService } from '@/lib/services/late-payment-fees.service';
-import { formatMoney } from '@/lib/utils/money';
+import { FormattedDate } from '@/components/common/business-format';
+import { Money } from '@/components/common/money';
 import TransactionJournal from '../ledger/TransactionJournal';
 import { ErrorAlert, JE_STATUS, StatusBadge, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from '../banking/AttachmentsPanel';
@@ -17,12 +17,12 @@ import { Field } from './sales-parts';
 export default function LateFeeView({ business, feeId, rights }) {
   const navigate = useTabNavigate(SALES_TABS.lateFees);
   const { data, error, reload } = useLoad(
-    () => Promise.all([latePaymentFeesService.get(business.id, feeId), getDocumentJournal(business.id, feeId)]),
+    () => latePaymentFeesService.get(business.id, feeId),
     [business.id, feeId],
   );
 
   if (!data) return error ? <ErrorAlert>{error}</ErrorAlert> : <DocumentSkeleton />;
-  const [fee, journal] = data;
+  const fee = data;
 
   return (
     <DocumentViewFrame
@@ -45,16 +45,16 @@ export default function LateFeeView({ business, feeId, rights }) {
           <p className="font-semibold">{business.name}</p>
         </div>
         <dl className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Date"><span className="tabular-nums">{fee.date}</span></Field>
+          <Field label="Date"><FormattedDate value={fee.date} className="tabular-nums" /></Field>
           <Field label="Customer">{fee.customer_name}</Field>
           <Field label="Sales invoice">
             <Link href={documentHref(DOC_TYPES.invoice, fee.invoice_id)} className="hover:text-link hover:underline">{fee.invoice_reference}</Link>
           </Field>
-          <Field label="Amount"><span className="num font-semibold">{formatMoney(fee.amount)}</span></Field>
+          <Field label="Amount"><Money value={fee.amount} className="font-semibold" /></Field>
         </dl>
         {fee.description && <p className="mt-6 whitespace-pre-wrap">{fee.description}</p>}
       </Card>
-      <TransactionJournal journal={journal} />
+      <TransactionJournal businessId={business.id} documentId={fee.id} version={fee.version} />
       <AttachmentsPanel businessId={business.id} documentId={fee.id} canEdit={rights.edit && !fee.is_locked} />
     </DocumentViewFrame>
   );

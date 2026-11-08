@@ -8,14 +8,15 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, ListCard, PageHeader } from '@/components/common/page';
 import { isVersionConflict } from '@/lib/services/api-client';
-import { listCoaAccounts } from '@/lib/services/coa.service';
+import { getCoaTree } from '@/lib/services/coa.service';
+import { DatePicker } from '@/components/common/date-picker';
+import { accountsFromTree } from '../coa/coa-tree';
 import {
   createJournalEntry, getJournalEntry, postJournalEntry, updateJournalEntry,
 } from '@/lib/services/journal-entries.service';
 import JournalLinesEditor, { emptyLine, parseAmount } from './JournalLinesEditor';
 import { BackButton, ErrorAlert, JE_STATUS, JE_TAB, todayIso, useTabNavigate } from './ledger-parts';
 
-const TOTAL_ACCOUNT_TYPE = 'total';
 const UNBALANCED = 'journal_unbalanced';
 const SKELETON_LINES = 2;
 
@@ -37,13 +38,13 @@ function FormSkeleton() {
   );
 }
 
-// Accounts a line may use: active, non-total; plus any account a saved line already uses.
+// Accounts a line may use: active ones, with their head group; plus any account a saved line already uses.
 function lineAccounts(accounts, entry) {
-  const usable = accounts.filter((a) => a.type !== TOTAL_ACCOUNT_TYPE && a.is_active);
+  const usable = accounts.filter((a) => a.is_active);
   const known = new Set(usable.map((a) => a.id));
   const used = (entry?.lines ?? [])
     .filter((line) => !known.has(line.account_id))
-    .map((line) => ({ id: line.account_id, code: line.account_code, name: line.account_name }));
+    .map((line) => ({ id: line.account_id, name: line.account_name, headGroup: null }));
   return [...usable, ...new Map(used.map((a) => [a.id, a])).values()];
 }
 
@@ -99,10 +100,10 @@ function useFormData(businessId, entryId) {
   useEffect(() => {
     let active = true;
     Promise.all([
-      listCoaAccounts(businessId),
+      getCoaTree(businessId, todayIso()),
       entryId ? getJournalEntry(businessId, entryId) : Promise.resolve(null),
     ])
-      .then(([coa, entry]) => { if (active) setState({ loading: false, entry, accounts: coa.items, error: null }); })
+      .then(([tree, entry]) => { if (active) setState({ loading: false, entry, accounts: accountsFromTree(tree), error: null }); })
       .catch((err) => {
         if (active) setState({ loading: false, entry: null, accounts: [], error: err?.message ?? 'Failed to load.' });
       });
@@ -112,12 +113,12 @@ function useFormData(businessId, entryId) {
   return { ...state, reload: () => setReloadKey((k) => k + 1) };
 }
 
-function TopFields({ form, setField, disabled }) {
+function TopFields({ form, setField, setValue, disabled }) {
   return (
     <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
       <div className="grid gap-2">
         <Label htmlFor="je-date">Date</Label>
-        <Input id="je-date" type="date" value={form.date} onChange={setField('date')} disabled={disabled} required />
+        <DatePicker id="je-date" value={form.date} onChange={(value) => setValue('date', value)} disabled={disabled} required />
       </div>
       <div className="grid gap-2">
         <Label htmlFor="je-reference">Reference</Label>
@@ -201,7 +202,8 @@ export default function JournalEntryForm({ businessId, entryId, allowed }) {
     );
   }
 
-  const setField = (field) => (event) => setForm((prev) => ({ ...prev, [field]: event.target.value }));
+  const setValue = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
+  const setField = (field) => (event) => setValue(field, event.target.value);
   const setLines = (update) => setForm((prev) => ({ ...prev, lines: update(prev.lines) }));
 
   // Same body and action as the last submit -> same Idempotency-Key, so a retry never double-posts.
@@ -243,7 +245,7 @@ export default function JournalEntryForm({ businessId, entryId, allowed }) {
       <PageHeader title={title} back={<BackButton onClick={back} disabled={saving} />} />
       {error && <ErrorAlert action={reloadAction}>{error.message}</ErrorAlert>}
       <div className="space-y-8">
-        <TopFields form={form} setField={setField} disabled={saving} />
+        <TopFields form={form} setField={setField} setValue={setValue} disabled={saving} />
         <JournalLinesEditor
           businessId={businessId}
           lines={form.lines}

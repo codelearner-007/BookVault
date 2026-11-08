@@ -2,8 +2,8 @@
 
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getDocumentJournal } from '@/lib/services/journal-entries.service';
-import { formatMoney } from '@/lib/utils/money';
+import { FormattedDate, Quantity } from '@/components/common/business-format';
+import { Money } from '@/components/common/money';
 import TransactionJournal from '../ledger/TransactionJournal';
 import { ErrorAlert, JE_STATUS, StatusBadge, accountLabel, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from './AttachmentsPanel';
@@ -18,10 +18,6 @@ function Field({ label, children }) {
       <dd className="mt-1">{children || '—'}</dd>
     </div>
   );
-}
-
-function qty(value) {
-  return value === null || value === undefined ? '' : formatMoney(value).replace(/\.00$/, '');
 }
 
 function lineAccount(line) {
@@ -41,11 +37,11 @@ function CashDocument({ doc, direction, businessName }) {
         <p className="font-semibold">{businessName}</p>
       </div>
       <dl className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="Date"><span className="tabular-nums">{doc.date}</span></Field>
+        <Field label="Date"><FormattedDate value={doc.date} className="tabular-nums" /></Field>
         <Field label="Reference">{doc.reference}</Field>
         <Field label={direction.bankLabel}>{doc.bank_account_name ?? NO_BANK_LABEL}</Field>
         <Field label={direction.counterpartyLabel}>{doc.counterparty}</Field>
-        {doc.clears_later && <Field label="Cleared">{doc.cleared_on ?? 'Not cleared yet'}</Field>}
+        {doc.clears_later && <Field label="Cleared">{doc.cleared_on ? <FormattedDate value={doc.cleared_on} /> : 'Not cleared yet'}</Field>}
       </dl>
       {doc.description && <p className="mt-6 font-semibold whitespace-pre-wrap">{doc.description}</p>}
       <Table className="mt-4" cards={false}>
@@ -63,16 +59,16 @@ function CashDocument({ doc, direction, businessName }) {
             <TableRow key={line.id}>
               <TableCell>{lineAccount(line)}</TableCell>
               <TableCell className="text-muted-foreground">{line.description}</TableCell>
-              <TableCell className="num w-20">{qty(line.qty)}</TableCell>
-              <TableCell className="num w-32">{formatMoney(line.unit_price)}</TableCell>
-              <TableCell className="num w-32">{formatMoney(line.amount)}</TableCell>
+              <TableCell className="num w-20"><Quantity value={line.qty} /></TableCell>
+              <TableCell className="num w-32"><Money value={line.unit_price} /></TableCell>
+              <TableCell className="num w-32"><Money value={line.amount} /></TableCell>
             </TableRow>
           ))}
         </TableBody>
         <TableFooter>
           <TableRow className="hover:bg-transparent">
             <TableCell colSpan={4} className="text-end">Total</TableCell>
-            <TableCell className="num" data-testid="document-total">{formatMoney(doc.total)}</TableCell>
+            <TableCell className="num" data-testid="document-total"><Money value={doc.total} /></TableCell>
           </TableRow>
         </TableFooter>
       </Table>
@@ -85,12 +81,12 @@ export default function CashTransactionView({ business, direction, docId, rights
   const navigate = useTabNavigate(direction.tab);
   const { service } = direction;
   const { data, error, reload } = useLoad(
-    () => Promise.all([service.get(business.id, docId), getDocumentJournal(business.id, docId)]),
+    () => service.get(business.id, docId),
     [business.id, direction.tab, docId],
   );
 
   if (!data) return error ? <ErrorAlert>{error}</ErrorAlert> : <DocumentSkeleton />;
-  const [doc, journal] = data;
+  const doc = data;
 
   return (
     <DocumentViewFrame
@@ -106,7 +102,7 @@ export default function CashTransactionView({ business, direction, docId, rights
     >
       <CashDocument doc={doc} direction={direction} businessName={business.name} />
       <ReceiptAllocations doc={doc} side={direction.side} />
-      <TransactionJournal journal={journal} />
+      <TransactionJournal businessId={business.id} documentId={doc.id} version={doc.version} />
       <AttachmentsPanel businessId={business.id} documentId={doc.id} canEdit={rights.edit && !doc.is_locked} />
     </DocumentViewFrame>
   );

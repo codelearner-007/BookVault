@@ -7,7 +7,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { EmptyState, ListCard, PageHeader } from '@/components/common/page';
 import { latePaymentFeesService } from '@/lib/services/late-payment-fees.service';
-import { formatMoney } from '@/lib/utils/money';
+import { FormattedDate } from '@/components/common/business-format';
+import { Money } from '@/components/common/money';
 import { BackButton, ErrorAlert, todayIso, useTabNavigate } from '../ledger/ledger-parts';
 import { TableSkeleton, useIdempotencyKey, useLoad } from '../banking/banking-parts';
 import { SALES_TABS, plainNumber } from './sales-documents';
@@ -43,12 +44,12 @@ function ProposalsTable({ rows, selected, toggle, toggleAll, disabled }) {
                 <Checkbox aria-label={`Charge ${row.invoice_reference} on ${row.charge_date}`} checked={selected.has(rowKey(row))} onCheckedChange={() => toggle(rowKey(row))} disabled={disabled} />
               )}
             </TableCell>
-            <TableCell className="num whitespace-nowrap" data-label="Charge date">{row.charge_date}</TableCell>
+            <TableCell className="whitespace-nowrap tabular-nums" data-label="Charge date"><FormattedDate value={row.charge_date} /></TableCell>
             <TableCell data-card="title">{row.customer_name}</TableCell>
             <TableCell data-label="Sales Invoice">{row.invoice_reference}</TableCell>
-            <TableCell className="num" data-label="Balance due">{formatMoney(row.balance_due)}</TableCell>
+            <TableCell className="num" data-label="Balance due"><Money value={row.balance_due} /></TableCell>
             <TableCell className="num" data-label="Rate">{plainNumber(row.rate)}%</TableCell>
-            <TableCell className="num" data-card="end">{formatMoney(row.amount)}</TableCell>
+            <TableCell className="num" data-card="end"><Money value={row.amount} /></TableCell>
           </TableRow>
         ))}
       </TableBody>

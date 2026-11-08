@@ -4,10 +4,11 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { BalanceSection, SectionBalancesToggle } from '@/components/common/balances';
+import { FormatProvider } from '@/components/common/business-format';
+import { Money } from '@/components/common/money';
 import { Monogram } from '@/components/shell/BusinessSwitcher';
 import { WORKSPACE_COPY as COPY } from '@/lib/copy/workspace';
-import { cn } from '@/lib/utils';
-import { businessMoneyFormatter } from '@/lib/utils/money';
 import { relativeTime } from '@/lib/utils/relative-time';
 import { businessHref } from './workspace-links';
 
@@ -20,7 +21,6 @@ function businessMeta(business) {
 }
 
 function Figures({ business }) {
-  const format = businessMoneyFormatter(business);
   const shown = FIGURE_KEYS.filter((key) => business.figures[key] !== null);
   if (shown.length === 0) return <p className="text-sm text-muted-foreground">{COPY.noFigures}</p>;
   return (
@@ -30,8 +30,8 @@ function Figures({ business }) {
         return (
           <div key={key} className="min-w-0">
             <dt className="truncate text-xs text-muted-foreground">{COPY.figures[key]}</dt>
-            <dd className={cn('num mt-1 truncate text-start text-md font-semibold', Number(value) === 0 && 'text-muted-foreground')}>
-              {format(value)}
+            <dd className="mt-1 truncate text-md font-semibold">
+              <Money value={value} zero="muted" tone="auto" />
             </dd>
           </div>
         );
@@ -50,28 +50,36 @@ function CardFootnote({ business }) {
   );
 }
 
-// One business: identity, role, up to four ledger figures in its own currency; the whole card opens it.
+// One business: identity, role, up to four ledger figures in its own number format; the whole card opens it
+// (a stretched link), and its eye shows or hides just this card's figures.
 export function BusinessCard({ business, showFootnote = false }) {
   return (
-    <Link
-      href={businessHref(business.id)}
-      className="group block rounded-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-    >
-      <Card className="@container flex h-full flex-col transition-[background-color,box-shadow] duration-150 ease-out group-hover:bg-secondary-hover">
-        <div className="flex items-start gap-3 p-card pb-5">
-          <Monogram name={business.name} className="size-mono rounded-mono text-sm" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-md font-semibold tracking-tight">{business.name}</p>
-            <p className="mt-0.5 truncate text-sm text-muted-foreground">{businessMeta(business)}</p>
+    <FormatProvider format={business}>
+      <BalanceSection>
+        <Card className="group relative @container flex h-full flex-col transition-[background-color,box-shadow] duration-150 ease-out has-[a:hover]:bg-secondary-hover">
+          <div className="flex items-start gap-3 p-card pb-5">
+            <Monogram name={business.name} className="size-mono rounded-mono text-sm" />
+            <div className="min-w-0 flex-1">
+              <Link
+                href={businessHref(business.id)}
+                className="block truncate text-md font-semibold tracking-tight after:absolute after:inset-0 after:rounded-card after:content-[''] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-ring"
+              >
+                {business.name}
+              </Link>
+              <p className="mt-0.5 truncate text-sm text-muted-foreground">{businessMeta(business)}</p>
+            </div>
+            <div className="relative z-1 flex items-center gap-1">
+              <SectionBalancesToggle name={business.name} />
+              <Badge variant="role">{business.is_owner ? COPY.owner : COPY.member}</Badge>
+            </div>
           </div>
-          <Badge variant="role">{business.is_owner ? COPY.owner : COPY.member}</Badge>
-        </div>
-        <div className="px-card pb-card">
-          <Figures business={business} />
-        </div>
-        {showFootnote && <CardFootnote business={business} />}
-      </Card>
-    </Link>
+          <div className="px-card pb-card">
+            <Figures business={business} />
+          </div>
+          {showFootnote && <CardFootnote business={business} />}
+        </Card>
+      </BalanceSection>
+    </FormatProvider>
   );
 }
 

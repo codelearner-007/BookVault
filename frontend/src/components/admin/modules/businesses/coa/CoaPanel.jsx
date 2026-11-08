@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { MoreMenu } from '@/components/common/page';
 import { cn } from '@/lib/utils';
-import { formatMoney } from '@/lib/utils/money';
+import { Money } from '@/components/common/money';
 import { isVersionConflict } from '@/lib/services/api-client';
 import {
   createCoaAccount, createCoaGroup, deleteCoaAccount, deleteCoaGroup, reorderCoaAccounts, reorderCoaGroups,
@@ -18,7 +18,7 @@ import CoaAccountDialog from './CoaAccountDialog';
 import CoaGroupDialog from './CoaGroupDialog';
 import { DeleteAccountDialog, DeleteGroupDialog } from './CoaDeleteDialogs';
 import ReorderModal from './ReorderModal';
-import { STATEMENT_TITLES, flattenGroups, isZeroAmount } from './coa-tree';
+import { STATEMENT_TITLES, flattenGroups } from './coa-tree';
 
 const DIALOG = {
   group: 'group',
@@ -47,7 +47,7 @@ function NameCell({ depth, className, children }) {
 }
 
 function BalanceCell({ balance }) {
-  return <TableCell className={cn('num w-px', isZeroAmount(balance) && 'text-muted-foreground')}>{formatMoney(balance)}</TableCell>;
+  return <TableCell className="num w-px"><Money value={balance} zero="muted" /></TableCell>;
 }
 
 function ActionsCell({ name, items }) {

@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { FormattedDate } from '@/components/common/business-format';
 import GroupSelect from './GroupSelect';
 import {
   ACCOUNT_TYPE_LABELS, CASH_FLOW_OPTIONS, MONEY_INPUT, ROOT_ACCOUNT_TYPE, SIDES, STATEMENTS, isZeroAmount, normalSide, toInputAmount,
@@ -74,7 +75,7 @@ function StartingBalanceFields({ form, set, saving, openingDate }) {
     <fieldset className="space-y-3 rounded-control border border-border p-4">
       <legend className="px-1 text-sm font-semibold">Starting balance</legend>
       <p className="text-sm text-muted-foreground">
-        {openingDate ? `Opening balance dated ${openingDate}.` : 'Opening balance at the books start date.'} Leave blank for none.
+        {openingDate ? <>Opening balance dated <FormattedDate value={openingDate} />.</> : 'Opening balance at the books start date.'} Leave blank for none.
       </p>
       <div className="flex flex-wrap gap-3">
         <Select value={form.side} onValueChange={(side) => set({ side })} disabled={saving}>

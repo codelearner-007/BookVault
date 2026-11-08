@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { formatMoney } from '@/lib/utils/money';
+import { useBusinessFormat } from '@/components/common/business-format';
+import { useMoneyFormatter } from '@/components/common/money';
+import { formatDate } from '@/lib/utils/dates';
 import PartyPicker from '../banking/PartyPicker';
 import { TRADE_SIDES } from './sales-documents';
 
@@ -72,14 +74,16 @@ export function TradePartyPicker({ businessId, side = TRADE_SIDES.sales, value, 
   );
 }
 
-function invoiceOptionLabel(invoice) {
+function invoiceOptionLabel(invoice, money, dateFormat) {
   const reference = invoice.reference || 'Invoice';
-  return `${reference} · ${invoice.date} · ${formatMoney(invoice.balance_due)} due`;
+  return `${reference} · ${formatDate(invoice.date, dateFormat)} · ${money(invoice.balance_due)} due`;
 }
 
 // One of the customer's open invoices, or Automatic (the oldest open invoice first). value: invoice id | ''.
 // current: { id, reference } of a saved link that may no longer be open.
 export function InvoiceSelect({ id, label = 'Sales invoice', invoices, current, value, onChange, disabled, automatic = true }) {
+  const money = useMoneyFormatter();
+  const { dateFormat } = useBusinessFormat();
   const options = current?.id && !invoices.some((invoice) => invoice.invoice_id === current.id)
     ? [...invoices, { invoice_id: current.id, reference: current.reference, date: null }]
     : invoices;
@@ -94,7 +98,7 @@ export function InvoiceSelect({ id, label = 'Sales invoice', invoices, current, 
           {automatic && <SelectItem value={NONE}>Automatic</SelectItem>}
           {options.map((invoice) => (
             <SelectItem key={invoice.invoice_id} value={invoice.invoice_id}>
-              {invoice.date ? invoiceOptionLabel(invoice) : invoice.reference}
+              {invoice.date ? invoiceOptionLabel(invoice, money, dateFormat) : invoice.reference}
             </SelectItem>
           ))}
         </SelectContent>
@@ -103,12 +107,13 @@ export function InvoiceSelect({ id, label = 'Sales invoice', invoices, current, 
   );
 }
 
-// The confirm dialog of a 409 credit_limit_warning (details: credit_limit, available_credit, invoice_total).
-export function creditLimitConfirm(details) {
+// The confirm dialog of a 409 credit_limit_warning (details: credit_limit, available_credit, invoice_total);
+// money: useMoneyFormatter() of the caller.
+export function creditLimitConfirm(details, money) {
   if (!details) return null;
   return {
     title: 'This invoice goes over the credit limit',
-    body: `Credit limit ${formatMoney(details.credit_limit)}, available credit ${formatMoney(details.available_credit)}, invoice total ${formatMoney(details.invoice_total)}.`,
+    body: `Credit limit ${money(details.credit_limit)}, available credit ${money(details.available_credit)}, invoice total ${money(details.invoice_total)}.`,
     note: 'Post it anyway? The invoice keeps a note that it went over the limit.',
     action: 'Post anyway',
   };

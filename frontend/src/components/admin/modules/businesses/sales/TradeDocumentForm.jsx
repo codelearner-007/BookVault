@@ -16,6 +16,7 @@ import { BlockedForm, DocumentFormActions, blockedReason, useDocumentSave } from
 import { CREDIT_LIMIT_WARNING, DOC_TYPES, ROLES, TRADE_DOCUMENTS, TRADE_ERRORS } from './sales-documents';
 import { StartingBalanceFields, TradeHeaderFields, TradeOptions } from './TradeDocumentFields';
 import { creditLimitConfirm } from './sales-parts';
+import { useMoneyFormatter } from '@/components/common/money';
 import TradeLinesEditor from './TradeLinesEditor';
 import { TradeTotalsPanel, totalsOfDoc, useTradeTotals } from './TradeTotals';
 import { DUE_MODES, buildTradeBody, totalsRequest, tradeForm } from './trade-form-model';
@@ -90,6 +91,7 @@ export default function TradeDocumentForm({ businessId, config, docId, allowed, 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [creditPrompt, setCreditPrompt] = useState(null);
+  const money = useMoneyFormatter();
   const override = useRef(false);
   const hasCreditLimit = config.type === DOC_TYPES.invoice;
   const { save, setVersion } = useDocumentSave({
@@ -165,7 +167,7 @@ export default function TradeDocumentForm({ businessId, config, docId, allowed, 
   return (
     <div className="max-w-6xl">
       <ConfirmDialog
-        confirm={creditLimitConfirm(creditPrompt?.details ?? null)}
+        confirm={creditLimitConfirm(creditPrompt?.details ?? null, money)}
         busy={saving}
         onConfirm={() => { const { action } = creditPrompt; setCreditPrompt(null); submit(action, true); }}
         onClose={() => setCreditPrompt(null)}

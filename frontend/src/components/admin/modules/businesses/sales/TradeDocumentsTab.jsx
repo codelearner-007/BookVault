@@ -48,6 +48,7 @@ export default function TradeDocumentsTab({ business, type }) {
       search={search}
       active={route.active}
       canCreate={rights.create}
+      canEdit={rights.edit}
     />
   );
 }

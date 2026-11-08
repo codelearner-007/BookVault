@@ -35,8 +35,10 @@ export function todayIso() {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-export function accountLabel({ account_code: code, account_name: name }) {
-  return code ? `${code} · ${name}` : name;
+// Views and journals name accounts without codes (codes show only in the Chart of Accounts and on the Summary
+// with "Show account codes").
+export function accountLabel({ account_name: name }) {
+  return name;
 }
 
 // Pushes ?tab=<tab> plus `params` (null / '' values dropped): every screen state is in the URL.

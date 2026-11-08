@@ -8,7 +8,7 @@ import { parseAmount } from '../ledger/JournalLinesEditor';
 import { todayIso } from '../ledger/ledger-parts';
 import { useLoad } from '../banking/banking-parts';
 import CatalogSettingsPage, { accountsUnder } from './CatalogSettingsPage';
-import { CatalogDialog, InactiveSwitch, RecordSelect, TextInput, useCatalogSave } from './catalog-dialog';
+import { AccountField, CatalogDialog, InactiveSwitch, TextInput, useCatalogSave } from './catalog-dialog';
 import { plainNumber } from './sales-documents';
 
 const AREA = 'settings.tax_codes';
@@ -54,8 +54,8 @@ function TaxCodeDialog({ businessId, record, onClose, onSaved }) {
       <TextInput id="tax-name" label="Name" value={form.name} onChange={(v) => setField('name', v)} disabled={saving} autoFocus />
       <TextInput id="tax-code" label="Code" value={form.code} onChange={(v) => setField('code', v)} disabled={saving} />
       <TextInput id="tax-rate" label="Rate (%)" inputMode="decimal" className="num w-32" value={form.rate} onChange={(v) => setField('rate', v)} disabled={saving} />
-      <RecordSelect
-        id="tax-account" label="Account" value={form.accountId} options={accounts} noneLabel="Tax payable (default)"
+      <AccountField
+        id="tax-account" label="Account" value={form.accountId} accounts={accounts} noneLabel="Tax payable (default)"
         onChange={(id) => setField('accountId', id)} disabled={saving || !tree.data}
       />
       {record && <InactiveSwitch id="tax-inactive" checked={form.isInactive} onChange={(on) => setField('isInactive', on)} disabled={saving} />}

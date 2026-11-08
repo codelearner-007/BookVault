@@ -8,7 +8,6 @@ import { useBusinessWorkspace } from '@/components/shell/ShellContext';
 import { RIGHT_CREATE } from '@/lib/constants/access-rights';
 import { can } from '@/lib/navigation/access';
 import { tabArea } from '@/lib/navigation/business-tabs';
-import { getDocumentJournal } from '@/lib/services/journal-entries.service';
 import TransactionJournal from '../ledger/TransactionJournal';
 import { ErrorAlert, JE_STATUS, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from '../banking/AttachmentsPanel';
@@ -16,6 +15,7 @@ import { DocumentSkeleton, useLoad } from '../banking/banking-parts';
 import DocumentViewFrame from '../banking/DocumentViewFrame';
 import { CREDIT_LIMIT_WARNING, TRADE_DOCUMENTS, TRADE_ERRORS } from './sales-documents';
 import { creditLimitConfirm } from './sales-parts';
+import { useMoneyFormatter } from '@/components/common/money';
 import TradeDocumentPaper from './TradeDocumentPaper';
 
 // "Copy to" entries the user may use: each opens the target's new form prefilled from this document.
@@ -56,17 +56,17 @@ export default function TradeDocumentView({ business, config, docId, rights }) {
   const navigate = useTabNavigate(config.tab);
   const { service } = config;
   const { data, error, reload } = useLoad(
-    () => Promise.all([service.get(business.id, docId), config.posts ? getDocumentJournal(business.id, docId) : null]),
+    () => service.get(business.id, docId),
     [business.id, config.type, docId],
   );
   const [creditPrompt, setCreditPrompt] = useState(null);
+  const money = useMoneyFormatter();
   const [overriding, setOverriding] = useState(false);
   const [postError, setPostError] = useState(null);
-  const doc = data?.[0];
+  const doc = data;
   const copyItems = useCopyItems(config, doc);
 
   if (!data) return error ? <ErrorAlert>{error}</ErrorAlert> : <DocumentSkeleton />;
-  const journal = data[1];
 
   async function postCall(version, key) {
     try {
@@ -106,7 +106,7 @@ export default function TradeDocumentView({ business, config, docId, rights }) {
       voidCopy={config.voidCopy}
     >
       <ConfirmDialog
-        confirm={creditLimitConfirm(creditPrompt?.details ?? null)}
+        confirm={creditLimitConfirm(creditPrompt?.details ?? null, money)}
         busy={overriding}
         onConfirm={postOverLimit}
         onClose={() => setCreditPrompt(null)}
@@ -115,7 +115,7 @@ export default function TradeDocumentView({ business, config, docId, rights }) {
       {postError && <ErrorAlert>{postError}</ErrorAlert>}
       <Warnings warnings={doc.warnings} />
       <TradeDocumentPaper doc={doc} config={config} businessName={business.name} />
-      {config.posts && <TransactionJournal journal={journal} />}
+      {config.posts && <TransactionJournal businessId={business.id} documentId={doc.id} version={doc.version} />}
       <AttachmentsPanel businessId={business.id} documentId={doc.id} canEdit={rights.edit && !doc.is_locked} />
     </DocumentViewFrame>
   );

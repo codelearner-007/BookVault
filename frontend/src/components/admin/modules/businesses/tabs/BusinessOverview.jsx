@@ -7,15 +7,18 @@ import { ChevronRight, ListTree } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
+import { BalanceSection, SectionBalancesToggle } from '@/components/common/balances';
+import { FormattedDate } from '@/components/common/business-format';
+import { DatePicker } from '@/components/common/date-picker';
+import { Money } from '@/components/common/money';
 import { ListToolbar, PageHeader } from '@/components/common/page';
+import { SUSPENSE_COPY } from '@/lib/copy/money';
 import { getSummary } from '@/lib/services/ledger-reports.service';
 import { getSuspenseBalance } from '@/lib/services/suspense.service';
 import { cn } from '@/lib/utils';
-import { formatMoney } from '@/lib/utils/money';
 import { isZeroAmount } from '../coa/coa-tree';
 import { ErrorAlert, REPORTS_TAB, todayIso, usePageParam, useTabNavigate } from '../ledger/ledger-parts';
 import { REPORTS } from '../ledger/ReportsIndex';
@@ -88,11 +91,11 @@ function OptionsBar({ options, onChange }) {
     <ListToolbar className="justify-start gap-x-5">
       <div className="flex items-center gap-2">
         <Label htmlFor="summary-from" className="text-muted-foreground">From</Label>
-        <Input id="summary-from" type="date" value={options.from} onChange={(e) => e.target.value && onChange({ from: e.target.value })} className="w-44" />
+        <DatePicker id="summary-from" value={options.from} onChange={(value) => value && onChange({ from: value })} className="w-44" />
       </div>
       <div className="flex items-center gap-2">
         <Label htmlFor="summary-to" className="text-muted-foreground">To</Label>
-        <Input id="summary-to" type="date" value={options.to} onChange={(e) => e.target.value && onChange({ to: e.target.value })} className="w-44" />
+        <DatePicker id="summary-to" value={options.to} onChange={(value) => value && onChange({ to: value })} className="w-44" />
       </div>
       {Object.keys(FLAGS).map((key) => (
         <div key={key} className="flex items-center gap-2">
@@ -109,7 +112,10 @@ function SuspenseRow({ balance, onOpen }) {
     <Button variant="ghost" onClick={onOpen} className="mt-3 h-row w-full justify-between rounded-control px-2 text-base font-normal text-foreground">
       <Badge variant="warn">Suspense</Badge>
       <span className="flex items-center gap-2">
-        <span className="num">{formatMoney(balance)}</span>
+        {/* Money waiting for a bank or cash account: the amount to allocate, never a signed balance. */}
+        <span className="num">
+          <Money value={balance} absolute /> {SUSPENSE_COPY.toAllocateSuffix}
+        </span>
         <ChevronRight aria-hidden="true" className="text-muted-foreground" />
       </span>
     </Button>
@@ -208,8 +214,12 @@ export default function BusinessFinancialSummary({ business }) {
   const statementOptions = { ...options, accountHref: (accountId) => transactionsHref(options, accountId) };
 
   return (
-    <>
-      <PageHeader title="Summary" description={`${options.from} to ${options.to}`} />
+    <BalanceSection>
+      <PageHeader
+        title="Summary"
+        description={<><FormattedDate value={options.from} /> to <FormattedDate value={options.to} /></>}
+        actions={<SectionBalancesToggle name="the Summary" />}
+      />
       <OptionsBar options={options} onChange={update} />
       {error && <ErrorAlert>{error}</ErrorAlert>}
       {summary && (
@@ -232,6 +242,6 @@ export default function BusinessFinancialSummary({ business }) {
           </CardFooter>
         </Card>
       )}
-    </>
+    </BalanceSection>
   );
 }

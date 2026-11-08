@@ -1,17 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { COLUMN_KIND, ListTable } from '@/components/common/list-table';
+import { Money } from '@/components/common/money';
 import { EmptyState, ListCard, MoreMenu, PageHeader } from '@/components/common/page';
 import { ConfirmDialog, ListPagination } from '@/components/super-admin/platform-parts';
-import { formatMoney } from '@/lib/utils/money';
 import { BackButton, ErrorAlert, useTabNavigate } from '../ledger/ledger-parts';
-import { DOCUMENT_TYPE_LABELS, DocumentSkeleton, InactiveBadge, documentHref, useLoad } from '../banking/banking-parts';
+import {
+  DOCUMENT_TYPE_LABELS, DocumentSkeleton, InactiveBadge, documentEditHref, documentHref, useDocumentEditRight, useLoad,
+} from '../banking/banking-parts';
 import { PARTY_STATUS, TRADE_SIDES } from './sales-documents';
 import { Field, StatusPill } from './sales-parts';
 
@@ -24,13 +26,13 @@ function Details({ side, party }) {
   return (
     <Card className="p-card">
       <dl className="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label={side.balance.label}><span className="num font-semibold">{formatMoney(party[side.balance.field])}</span></Field>
-        <Field label="Available credit"><span className="num">{formatMoney(party.available_credit)}</span></Field>
-        {isCustomer && <Field label="Uninvoiced"><span className="num">{formatMoney(party.uninvoiced)}</span></Field>}
+        <Field label={side.balance.label}><Money value={party[side.balance.field]} tone="balance" /></Field>
+        <Field label="Available credit"><Money value={party.available_credit} /></Field>
+        {isCustomer && <Field label="Uninvoiced"><Money value={party.uninvoiced} zero="muted" /></Field>}
         <Field label="Status"><StatusPill statuses={PARTY_STATUS} status={party.status} /></Field>
         <Field label="Code">{party.code}</Field>
         <Field label="Email">{party.email}</Field>
-        <Field label="Credit limit"><span className="num">{formatMoney(party.credit_limit)}</span></Field>
+        <Field label="Credit limit"><Money value={party.credit_limit} /></Field>
         {isCustomer && <Field label="Due date">{party.default_due_days === null ? null : `Net ${party.default_due_days} days`}</Field>}
         <Field label={isCustomer ? 'Billing address' : 'Address'} className="sm:col-span-2">{party.billing_address}</Field>
         {isCustomer && <Field label="Delivery address" className="sm:col-span-2">{party.delivery_address}</Field>}
@@ -39,8 +41,22 @@ function Details({ side, party }) {
   );
 }
 
+const TRANSACTION_COLUMNS = [
+  { key: 'date', label: 'Date', kind: COLUMN_KIND.date },
+  {
+    key: 'transaction',
+    label: 'Transaction',
+    card: 'title',
+    value: (row) => [DOCUMENT_TYPE_LABELS[row.document_type] ?? row.document_type, row.reference].filter(Boolean).join(' '),
+  },
+  { key: 'description', label: 'Description', muted: true, truncate: true },
+  { key: 'amount', label: 'Amount', kind: COLUMN_KIND.money, card: 'end' },
+];
+
 // Documents that moved the party's balance (signed effect on the receivable / payable).
 function Transactions({ businessId, side, partyId, page, onPage }) {
+  const router = useRouter();
+  const canEdit = useDocumentEditRight();
   const { data, error } = useLoad(() => side.parties.transactions(businessId, partyId, page), [businessId, side.key, partyId, page]);
   return (
     <section aria-labelledby="party-transactions" className="mt-10">
@@ -54,30 +70,14 @@ function Transactions({ businessId, side, partyId, page, onPage }) {
         )}
         {data && data.items.length === 0 && <EmptyState title="No transactions yet" />}
         {data?.items.length > 0 && (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>Date</TableHead>
-                <TableHead>Transaction</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-end">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.items.map((row) => (
-                <TableRow key={`${row.document_type}-${row.document_id}`}>
-                  <TableCell className="num whitespace-nowrap" data-label="Date">{row.date}</TableCell>
-                  <TableCell data-card="title">
-                    <Link href={documentHref(row.document_type, row.document_id)} className="hover:text-link hover:underline">
-                      {[DOCUMENT_TYPE_LABELS[row.document_type] ?? row.document_type, row.reference].filter(Boolean).join(' ')}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="max-w-md truncate text-muted-foreground" data-label="Description">{row.description}</TableCell>
-                  <TableCell className="num" data-card="end">{formatMoney(row.amount)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <ListTable
+            columns={TRANSACTION_COLUMNS}
+            rows={data.items}
+            rowKey={(row) => `${row.document_type}-${row.document_id}`}
+            onView={(row) => router.push(documentHref(row.document_type, row.document_id))}
+            onEdit={(row) => router.push(documentEditHref(row.document_type, row.document_id))}
+            canEdit={canEdit}
+          />
         )}
       </ListCard>
     </section>

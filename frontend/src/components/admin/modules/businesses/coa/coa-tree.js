@@ -53,6 +53,27 @@ export function toInputAmount(value) {
   return String(value).replace(/(\.\d\d)0+$/, '$1');
 }
 
+// Every account of the tree in chart order with its head group (the name of the root it sits under: Assets,
+// Liabilities, Equity, Income, Expenses), for the account pickers. keep(account, root) filters.
+export function accountsFromTree(tree, keep = () => true) {
+  const accounts = [];
+  tree.roots.forEach((root) => {
+    const walk = (group) => {
+      group.accounts.forEach((account) => {
+        if (keep(account, root)) accounts.push({ ...account, headGroup: root.name });
+      });
+      group.groups.forEach(walk);
+    };
+    walk(root);
+  });
+  return accounts;
+}
+
+// The head group of the account with this system code (the bank control account for bank and cash pickers).
+export function headGroupOf(tree, systemAccountCode) {
+  return accountsFromTree(tree, (account) => account.system_account_code === systemAccountCode)[0]?.headGroup ?? null;
+}
+
 // Groups depth-first as { group, depth, rootKey }, for the group selects.
 export function flattenGroups(roots) {
   const entries = [];

@@ -2,68 +2,41 @@
 
 import { ArrowLeftRight, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { COLUMN_KIND, ListTable, RecordTitle } from '@/components/common/list-table';
 import { EmptyState, ListCard, PageHeader } from '@/components/common/page';
 import { ListPagination } from '@/components/super-admin/platform-parts';
 import { listTransfers } from '@/lib/services/inter-account-transfers.service';
-import { formatMoney } from '@/lib/utils/money';
 import { ErrorAlert, JE_STATUS, StatusBadge, useTabNavigate } from '../ledger/ledger-parts';
-import { BANKING_TABS, TableSkeleton, useLoad } from './banking-parts';
+import { BANKING_TABS, TableSkeleton, isEditableDocument, useLoad } from './banking-parts';
 
-const COLUMN_COUNT = 6;
+const TITLE = 'Inter Account Transfer';
 
-function TransfersTable({ rows, totalAmount, onOpen }) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow className="hover:bg-transparent">
-          <TableHead>Date</TableHead>
-          <TableHead>Reference</TableHead>
-          <TableHead>Paid from</TableHead>
-          <TableHead>Received in</TableHead>
-          <TableHead>Description</TableHead>
-          <TableHead className="text-end">Amount</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.id} className="cursor-pointer" onClick={() => onOpen(row.id)}>
-            <TableCell className="num whitespace-nowrap" data-label="Date">{row.date}</TableCell>
-            <TableCell data-card="title">
-              <span className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant="link"
-                  className="text-foreground hover:text-link"
-                  onClick={(event) => { event.stopPropagation(); onOpen(row.id); }}
-                >
-                  {row.reference || 'Inter Account Transfer'}
-                </Button>
-                {row.status !== JE_STATUS.posted && <StatusBadge status={row.status} />}
-              </span>
-            </TableCell>
-            <TableCell data-label="Paid from">{row.from_bank_account_name}</TableCell>
-            <TableCell data-label="Received in">{row.to_bank_account_name}</TableCell>
-            <TableCell className="max-w-md truncate text-muted-foreground" data-label="Description">{row.description}</TableCell>
-            <TableCell className="num" data-card="end">{formatMoney(row.amount)}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-      <TableFooter>
-        <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={COLUMN_COUNT - 1}>Total</TableCell>
-          <TableCell className="num" data-label="Total">{formatMoney(totalAmount)}</TableCell>
-        </TableRow>
-      </TableFooter>
-    </Table>
-  );
-}
+// Manager's columns: Date, Reference, Paid from, Received in, Description, Amount.
+const COLUMNS = [
+  { key: 'date', label: 'Date', kind: COLUMN_KIND.date },
+  {
+    key: 'reference',
+    label: 'Reference',
+    card: 'title',
+    value: (row) => row.reference || TITLE,
+    render: (row) => (
+      <RecordTitle text={row.reference || TITLE}>
+        {row.status !== JE_STATUS.posted && <StatusBadge status={row.status} />}
+      </RecordTitle>
+    ),
+  },
+  { key: 'from_bank_account_name', label: 'Paid from' },
+  { key: 'to_bank_account_name', label: 'Received in' },
+  { key: 'description', label: 'Description', muted: true, truncate: true },
+  { key: 'amount', label: 'Amount', kind: COLUMN_KIND.money, card: 'end' },
+];
 
 // ?tab=inter-account-transfers[&p=N]: the paginated list with the server's total_amount.
-export default function TransfersList({ businessId, page, active, canCreate }) {
+export default function TransfersList({ businessId, page, active, canCreate, canEdit }) {
   const navigate = useTabNavigate(BANKING_TABS.transfers);
   const { data, error } = useLoad(() => listTransfers(businessId, page), [businessId, page, active]);
 
-  if (!data && !error) return <TableSkeleton columns={COLUMN_COUNT} titleWidth="w-72" />;
+  if (!data && !error) return <TableSkeleton columns={COLUMNS.length} titleWidth="w-72" actions />;
   const items = data?.items ?? [];
 
   return (
@@ -91,7 +64,14 @@ export default function TransfersList({ businessId, page, active, canCreate }) {
         {items.length === 0 ? (
           <EmptyState icon={ArrowLeftRight} title="No inter account transfers yet" />
         ) : (
-          <TransfersTable rows={items} totalAmount={data.total_amount} onOpen={(id) => navigate({ view: id })} />
+          <ListTable
+            columns={COLUMNS}
+            rows={items}
+            totals={{ amount: data.total_amount }}
+            onView={(row) => navigate({ view: row.id })}
+            onEdit={canEdit ? (row) => navigate({ edit: row.id }) : null}
+            canEdit={isEditableDocument}
+          />
         )}
       </ListCard>
     </div>

@@ -6,7 +6,8 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { formatMoney } from '@/lib/utils/money';
+import { AccountPicker } from '@/components/common/account-picker';
+import { Money } from '@/components/common/money';
 import { toInputAmount } from '../coa/coa-tree';
 import { FieldLabel, NumberCell } from '../banking/CashLinesEditor';
 import { NONE } from './sales-parts';
@@ -69,10 +70,13 @@ function LineRow({ line, number, visible, config, catalogs, total, disabled, can
       />
     ),
     account: (
-      <CatalogCell
-        label="Account" number={number} value={line.account_id} options={catalogs.accounts} placeholder="Select account"
-        onChange={(id) => change({ account_id: id })} disabled={disabled} className="col-span-2 md:col-span-1"
-      />
+      <div className="col-span-2 grid gap-1.5 md:col-span-1 md:block">
+        <FieldLabel>Account</FieldLabel>
+        <AccountPicker
+          value={line.account_id} accounts={catalogs.accounts} label={`Account, line ${number}`}
+          onChange={(id) => change({ account_id: id })} disabled={disabled} className="w-full"
+        />
+      </div>
     ),
     description: (
       <div className="col-span-2 grid gap-1.5 md:col-span-1 md:block">
@@ -92,7 +96,7 @@ function LineRow({ line, number, visible, config, catalogs, total, disabled, can
     total: (
       <div className="grid gap-1.5 md:flex md:h-control md:items-center md:justify-end md:pe-3.5">
         <FieldLabel>Total</FieldLabel>
-        <span className="num">{total === undefined ? '—' : formatMoney(total)}</span>
+        <span className="num">{total === undefined ? '—' : <Money value={total} />}</span>
       </div>
     ),
     remove: (

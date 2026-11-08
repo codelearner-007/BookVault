@@ -118,7 +118,7 @@ export default function AttachmentsPanel({ businessId, documentId, canEdit }) {
         <h2 id="attachments" className="text-md font-semibold">Attachments</h2>
         {canEdit && (
           <>
-            <Input ref={fileInput} type="file" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={upload} />
+            <Input ref={fileInput} type="file" className="hidden" tabIndex={-1} aria-hidden="true" onChange={upload} />
             <Button variant="secondary" size="sm" onClick={() => fileInput.current?.click()} disabled={busy}>
               {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Upload />}
               New Attachment

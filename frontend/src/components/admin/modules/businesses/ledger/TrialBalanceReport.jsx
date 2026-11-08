@@ -3,23 +3,21 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Scale } from 'lucide-react';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { FormattedDate } from '@/components/common/business-format';
+import { DatePicker } from '@/components/common/date-picker';
+import { Money } from '@/components/common/money';
 import { EmptyState, ListCard, ListToolbar, PageHeader } from '@/components/common/page';
 import { getTrialBalance } from '@/lib/services/ledger-reports.service';
-import { formatMoney } from '@/lib/utils/money';
 import { BackButton, ErrorAlert, REPORTS_TAB, todayIso, useTabNavigate } from './ledger-parts';
 import { REPORTS } from './ReportsIndex';
 
 const SKELETON_ROWS = 8;
-// On phones the Account column stays put while the figures scroll under it.
+// On phones the Account column stays put while the figures scroll under it. Names only: codes show in the
+// Chart of Accounts and on the Summary with "Show account codes".
 const STICKY_ACCOUNT = 'max-md:sticky max-md:start-0 max-md:z-10 max-md:bg-popover';
-
-function amount(value) {
-  return Number(value) === 0 ? '' : formatMoney(value);
-}
 
 function TableSkeleton() {
   return (
@@ -35,7 +33,6 @@ function TrialBalanceTable({ report }) {
     <Table cards={false} className="min-w-lg">
       <TableHeader>
         <TableRow className="hover:bg-transparent">
-          <TableHead className="max-md:hidden">Account code</TableHead>
           <TableHead className={STICKY_ACCOUNT}>Account</TableHead>
           <TableHead className="text-end">Debit</TableHead>
           <TableHead className="text-end">Credit</TableHead>
@@ -44,22 +41,17 @@ function TrialBalanceTable({ report }) {
       <TableBody>
         {report.rows.map((row) => (
           <TableRow key={row.account_id}>
-            <TableCell className="tabular-nums text-muted-foreground max-md:hidden">{row.account_code}</TableCell>
-            <TableCell className={STICKY_ACCOUNT}>
-              {row.account_code && <span className="me-2 tabular-nums text-muted-foreground md:hidden">{row.account_code}</span>}
-              {row.account_name}
-            </TableCell>
-            <TableCell className="num w-36">{amount(row.debit)}</TableCell>
-            <TableCell className="num w-36">{amount(row.credit)}</TableCell>
+            <TableCell className={STICKY_ACCOUNT}>{row.account_name}</TableCell>
+            <TableCell className="num w-36"><Money value={row.debit} zero="blank" /></TableCell>
+            <TableCell className="num w-36"><Money value={row.credit} zero="blank" /></TableCell>
           </TableRow>
         ))}
       </TableBody>
       <TableFooter>
         <TableRow className="hover:bg-transparent">
-          <TableCell className="max-md:hidden" />
           <TableCell className={STICKY_ACCOUNT}>Total</TableCell>
-          <TableCell className="num">{formatMoney(report.total_debit)}</TableCell>
-          <TableCell className="num">{formatMoney(report.total_credit)}</TableCell>
+          <TableCell className="num"><Money value={report.total_debit} /></TableCell>
+          <TableCell className="num"><Money value={report.total_credit} /></TableCell>
         </TableRow>
       </TableFooter>
     </Table>
@@ -88,16 +80,15 @@ export default function TrialBalanceReport({ businessId }) {
     <div className="max-w-4xl">
       <PageHeader
         title="Trial Balance"
-        description={`As at ${asAt}`}
+        description={<>As at <FormattedDate value={asAt} /></>}
         back={<BackButton onClick={() => navigate({})} label="Back to reports" />}
       />
       <ListToolbar className="justify-start">
         <Label htmlFor="tb-as-at" className="text-muted-foreground">As at</Label>
-        <Input
+        <DatePicker
           id="tb-as-at"
-          type="date"
           value={asAt}
-          onChange={(e) => e.target.value && navigate({ report: REPORTS.trialBalance, as_at: e.target.value }, { replace: true })}
+          onChange={(value) => value && navigate({ report: REPORTS.trialBalance, as_at: value }, { replace: true })}
           className="w-44"
         />
       </ListToolbar>

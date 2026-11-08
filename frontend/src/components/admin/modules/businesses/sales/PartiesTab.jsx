@@ -24,6 +24,7 @@ export default function PartiesTab({ business, side }) {
       search={route.active ? searchParams.get('q') ?? '' : ''}
       active={route.active}
       canCreate={rights.create}
+      canEdit={rights.edit}
     />
   );
 }

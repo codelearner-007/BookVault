@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DatePicker } from '@/components/common/date-picker';
 import { PageHeader } from '@/components/common/page';
 import { isVersionConflict } from '@/lib/services/api-client';
 import { listOpenInvoices } from '@/lib/services/customers.service';
@@ -113,7 +114,7 @@ export default function LateFeeForm({ businessId, feeId, allowed }) {
         <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
           <div className="grid gap-2">
             <Label htmlFor="fee-date">Date</Label>
-            <Input id="fee-date" type="date" value={form.date} onChange={(e) => setField('date', e.target.value)} disabled={saving} required />
+            <DatePicker id="fee-date" value={form.date} onChange={(value) => setField('date', value)} disabled={saving} required />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="fee-reference">Reference</Label>

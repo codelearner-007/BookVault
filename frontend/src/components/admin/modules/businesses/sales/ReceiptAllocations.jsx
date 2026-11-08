@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ListCard } from '@/components/common/page';
-import { formatMoney } from '@/lib/utils/money';
+import { Money } from '@/components/common/money';
 import { isZeroAmount } from '../coa/coa-tree';
 import { documentHref } from '../banking/banking-parts';
 
@@ -11,7 +11,7 @@ function Summary({ label, value }) {
   return (
     <p className="flex justify-between gap-6 px-4 py-2 text-sm">
       <span className="text-muted-foreground">{label}</span>
-      <span className="num">{formatMoney(value)}</span>
+      <Money value={value} className="num" />
     </p>
   );
 }
@@ -52,10 +52,10 @@ export default function ReceiptAllocations({ doc, side }) {
                   </TableCell>
                   {showDiscounts && (
                     <TableCell className="num" data-label="Early payment discount">
-                      {hasAmount(allocation.early_discount) ? formatMoney(allocation.early_discount) : ''}
+                      <Money value={allocation.early_discount} zero="blank" />
                     </TableCell>
                   )}
-                  <TableCell className="num" data-card="end">{formatMoney(allocation.amount)}</TableCell>
+                  <TableCell className="num" data-card="end"><Money value={allocation.amount} /></TableCell>
                 </TableRow>
               ))}
             </TableBody>

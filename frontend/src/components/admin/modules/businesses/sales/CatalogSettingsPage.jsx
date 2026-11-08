@@ -2,18 +2,17 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { COLUMN_KIND, ListTable, RecordTitle } from '@/components/common/list-table';
 import { EmptyState, ListCard, MoreMenu, PageHeader } from '@/components/common/page';
 import { ConfirmDialog } from '@/components/super-admin/platform-parts';
 import { useBusinessWorkspace } from '@/components/shell/ShellContext';
 import { RIGHT_CREATE, RIGHT_DELETE, RIGHT_EDIT } from '@/lib/constants/access-rights';
 import { can } from '@/lib/navigation/access';
-import { cn } from '@/lib/utils';
 import { ErrorAlert } from '../ledger/ledger-parts';
 import { InactiveBadge, TableSkeleton, useLoad } from '../banking/banking-parts';
-import { STICKY_KEY } from './sales-parts';
+import { accountsFromTree } from '../coa/coa-tree';
 
 export function SettingsBackButton() {
   return (
@@ -23,21 +22,30 @@ export function SettingsBackButton() {
   );
 }
 
-// Every account under the given COA roots (e.g. income, expenses), active ones only.
+// Every account under the given COA roots (e.g. income, expenses), active ones only, with its head group.
 export function accountsUnder(tree, rootKeys) {
-  const accounts = [];
-  const walk = (group) => {
-    group.accounts.forEach((account) => { if (account.is_active) accounts.push(account); });
-    group.groups.forEach(walk);
-  };
-  tree.roots.filter((root) => rootKeys.includes(root.root_key)).forEach(walk);
-  return accounts;
+  return accountsFromTree(tree, (account, root) => account.is_active && rootKeys.includes(root.root_key));
+}
+
+// The page's columns as list-table columns: the first is the record's name (with Inactive), numeric ones end-align.
+function listColumns(columns) {
+  return columns.map((column, index) => ({
+    key: column.key,
+    label: column.label,
+    kind: column.kind ?? (column.numeric ? COLUMN_KIND.qty : COLUMN_KIND.text),
+    card: index === 0 ? 'title' : undefined,
+    value: column.value,
+    render: index === 0
+      ? (record) => <RecordTitle text={column.render(record)}>{record.is_inactive && <InactiveBadge />}</RecordTitle>
+      : column.render,
+  }));
 }
 
 /*
   A settings catalog page (tax codes, non-inventory items): the list, New / Edit in a dialog
   (a bottom sheet on phones), Delete with the server's "in use" refusal.
-  columns: [{ key, label, numeric, render(record) }]; the first column is the record's name.
+  columns: [{ key, label, numeric | kind, render(record) | value(record) }]; the first column is the record's name;
+    a 'money' column with value() is formatted by the shared <Money>.
   renderDialog({ record, onClose, onSaved }): the New (record null) / Edit dialog.
 */
 export default function CatalogSettingsPage({ businessId, title, noun, area, service, columns, inUseCode, inUseMessage, icon, renderDialog }) {
@@ -49,7 +57,7 @@ export default function CatalogSettingsPage({ businessId, title, noun, area, ser
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(null);
 
-  if (!data && !error) return <TableSkeleton columns={columns.length + 1} />;
+  if (!data && !error) return <TableSkeleton columns={columns.length} actions />;
 
   async function remove() {
     setBusy(true);
@@ -89,43 +97,17 @@ export default function CatalogSettingsPage({ businessId, title, noun, area, ser
         {items.length === 0 ? (
           <EmptyState icon={icon} title={`No ${title.toLowerCase()} yet`} />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                {columns.map((column, index) => (
-                  <TableHead key={column.key} className={cn(column.numeric && 'text-end', index === 0 && STICKY_KEY)}>{column.label}</TableHead>
-                ))}
-                <TableHead><span className="sr-only">Actions</span></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((record) => (
-                <TableRow key={record.id}>
-                  {columns.map((column, index) => (
-                    <TableCell
-                      key={column.key}
-                      className={cn(column.numeric && 'num', index === 0 && STICKY_KEY)}
-                      data-card={index === 0 ? 'title' : undefined}
-                      data-label={index === 0 ? undefined : column.label}
-                    >
-                      {index === 0 ? (
-                        <span className="flex flex-wrap items-center gap-2">{column.render(record)}{record.is_inactive && <InactiveBadge />}</span>
-                      ) : column.render(record)}
-                    </TableCell>
-                  ))}
-                  <TableCell data-card="actions" className="w-12 text-end">
-                    <MoreMenu
-                      label={`Actions for ${record.name}`}
-                      items={[
-                        rights.edit && { label: 'Edit', icon: Pencil, onSelect: () => setEditing({ record }) },
-                        rights.delete && { label: 'Delete', icon: Trash2, destructive: true, onSelect: () => setDeleting(record) },
-                      ]}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <ListTable
+            columns={listColumns(columns)}
+            rows={items}
+            onEdit={rights.edit ? (record) => setEditing({ record }) : null}
+            menu={rights.delete ? (record) => (
+              <MoreMenu
+                label={`Actions for ${record.name}`}
+                items={[{ label: 'Delete', icon: Trash2, destructive: true, onSelect: () => setDeleting(record) }]}
+              />
+            ) : undefined}
+          />
         )}
       </ListCard>
     </>

@@ -1,16 +1,21 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Inbox } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { COLUMN_KIND, ListTable } from '@/components/common/list-table';
+import { Money } from '@/components/common/money';
 import { EmptyState, ListCard, PageHeader } from '@/components/common/page';
 import { ListPagination } from '@/components/super-admin/platform-parts';
 import { getSuspenseBalance, listSuspenseEntries } from '@/lib/services/suspense.service';
-import { formatMoney } from '@/lib/utils/money';
-import { DOCUMENT_TYPE_LABELS, documentHref, useLoad } from '../banking/banking-parts';
+import { SUSPENSE_COPY as COPY } from '@/lib/copy/money';
+import { isNegativeAmount } from '@/lib/utils/money';
+import {
+  DOCUMENT_TYPE_LABELS, documentEditHref, documentHref, useDocumentEditRight, useLoad,
+} from '../banking/banking-parts';
 import { BackButton, ErrorAlert } from '../ledger/ledger-parts';
+import { isZeroAmount } from '../coa/coa-tree';
 
 const SKELETON_ROWS = 5;
 
@@ -29,39 +34,49 @@ function SuspenseSkeleton() {
   );
 }
 
-function EntriesTable({ entries }) {
+// Suspense is credit-positive in the ledger, so money received without a bank account is negative there.
+// People see the amount to allocate (no sign) and, from the type, which way it went.
+const DIRECTION_TONE = { receipt: 'in', payment: 'out' };
+
+const COLUMNS = [
+  { key: 'date', label: 'Date', kind: COLUMN_KIND.date },
+  {
+    key: 'type',
+    label: 'Type',
+    card: 'title',
+    value: (entry) => DOCUMENT_TYPE_LABELS[entry.document_type] ?? entry.document_type,
+  },
+  { key: 'reference', label: 'Reference', muted: true },
+  { key: 'description', label: 'Description', muted: true, truncate: true },
+  {
+    key: 'amount',
+    label: COPY.column,
+    kind: COLUMN_KIND.money,
+    card: 'end',
+    render: (entry) => <Money value={entry.amount} absolute tone={DIRECTION_TONE[entry.document_type]} />,
+  },
+];
+
+function balanceLabel(balance) {
+  if (isZeroAmount(balance)) return COPY.nothing;
+  return isNegativeAmount(balance) ? COPY.received : COPY.paid;
+}
+
+function BalanceCard({ balance }) {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow className="hover:bg-transparent">
-          <TableHead>Date</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead>Reference</TableHead>
-          <TableHead>Description</TableHead>
-          <TableHead className="text-end">Amount</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {entries.map((entry, index) => (
-          <TableRow key={`${entry.document_id}-${index}`}>
-            <TableCell className="num whitespace-nowrap" data-label="Date">{entry.date}</TableCell>
-            <TableCell data-card="title">
-              <Link href={documentHref(entry.document_type, entry.document_id)} className="hover:text-link">
-                {DOCUMENT_TYPE_LABELS[entry.document_type] ?? entry.document_type}
-              </Link>
-            </TableCell>
-            <TableCell className="text-muted-foreground" data-label="Reference">{entry.reference}</TableCell>
-            <TableCell className="max-w-md truncate text-muted-foreground" data-label="Description">{entry.description}</TableCell>
-            <TableCell className="num" data-card="end">{formatMoney(entry.amount)}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <Card className="mb-6 max-w-md p-card">
+      <p className="text-sm text-muted-foreground">{balanceLabel(balance)}</p>
+      <p className="mt-1 text-title font-bold tracking-title" data-testid="suspense-to-allocate">
+        <Money value={balance} absolute /> <span className="text-lg font-semibold text-muted-foreground">{COPY.toAllocateSuffix}</span>
+      </p>
+    </Card>
   );
 }
 
 // ?tab=summary&suspense=1[&p=N]: the Suspense balance and the ledger lines posted to it, each linking to its document.
 export default function BusinessSuspense({ business, page, onPage, onBack }) {
+  const router = useRouter();
+  const canEdit = useDocumentEditRight();
   const { data, error } = useLoad(
     () => Promise.all([getSuspenseBalance(business.id), listSuspenseEntries(business.id, page)]),
     [business.id, page],
@@ -74,16 +89,11 @@ export default function BusinessSuspense({ business, page, onPage, onBack }) {
     <>
       <PageHeader
         title="Suspense"
-        description="Amounts posted without an account. Edit each document to choose an account and clear the balance."
+        description={COPY.explanation}
         back={<BackButton onClick={onBack} label="Back to summary" />}
       />
       {error && <ErrorAlert>{error}</ErrorAlert>}
-      {balance && (
-        <Card className="mb-6 max-w-sm p-card">
-          <p className="text-sm text-muted-foreground">Suspense balance</p>
-          <p className="num mt-1 text-start text-title font-bold">{formatMoney(balance.suspense_balance)}</p>
-        </Card>
-      )}
+      {balance && <BalanceCard balance={balance.suspense_balance} />}
       {entries && (
         <ListCard
           footer={entries.total > 0 && (
@@ -93,7 +103,14 @@ export default function BusinessSuspense({ business, page, onPage, onBack }) {
           {entries.items.length === 0 ? (
             <EmptyState icon={Inbox} title="Nothing in suspense" />
           ) : (
-            <EntriesTable entries={entries.items} />
+            <ListTable
+              columns={COLUMNS}
+              rows={entries.items}
+              rowKey={(entry) => `${entry.document_id}-${entry.date}-${entry.amount}`}
+              onView={(entry) => router.push(documentHref(entry.document_type, entry.document_id))}
+              onEdit={(entry) => router.push(documentEditHref(entry.document_type, entry.document_id))}
+              canEdit={canEdit}
+            />
           )}
         </ListCard>
       )}

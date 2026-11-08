@@ -4,18 +4,21 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DatePicker } from '@/components/common/date-picker';
 import { PageHeader } from '@/components/common/page';
 import { isVersionConflict } from '@/lib/services/api-client';
 import { listActiveBankAccounts } from '@/lib/services/bank-accounts.service';
+import { getCoaTree } from '@/lib/services/coa.service';
 import {
   createTransfer, getTransfer, postTransfer, updateTransfer,
 } from '@/lib/services/inter-account-transfers.service';
-import { toInputAmount } from '../coa/coa-tree';
+import { headGroupOf, toInputAmount } from '../coa/coa-tree';
 import { parseAmount } from '../ledger/JournalLinesEditor';
 import { BackButton, ErrorAlert, JE_STATUS, todayIso, useTabNavigate } from '../ledger/ledger-parts';
 import {
   BANKING_TABS, BankAccountSelect, ClearedField, FormSkeleton, useLoad, withCurrentAccount,
 } from './banking-parts';
+import { BANK_CONTROL_ACCOUNT } from './cash-directions';
 import { BlockedForm, DocumentFormActions, blockedReason, useDocumentSave } from './document-form';
 
 const NOUN = 'transfer';
@@ -71,7 +74,7 @@ function buildBody(form, canHavePending) {
   };
 }
 
-function SideFields({ side, label, value, banks, onChange, disabled, children }) {
+function SideFields({ side, label, value, banks, headGroup, onChange, disabled, children }) {
   const bank = banks.find((b) => b.id === value.accountId);
   return (
     <fieldset className="grid gap-4 rounded-card border border-card-border p-4">
@@ -79,7 +82,15 @@ function SideFields({ side, label, value, banks, onChange, disabled, children })
       <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor={`transfer-${side}`}>Account</Label>
-          <BankAccountSelect id={`transfer-${side}`} value={value.accountId} accounts={banks} onChange={(accountId) => onChange({ ...value, accountId })} disabled={disabled} />
+          <BankAccountSelect
+            id={`transfer-${side}`}
+            value={value.accountId}
+            accounts={banks}
+            headGroup={headGroup}
+            label={label}
+            onChange={(accountId) => onChange({ ...value, accountId })}
+            disabled={disabled}
+          />
         </div>
         {children}
         {bank?.can_have_pending && (
@@ -100,8 +111,10 @@ function SideFields({ side, label, value, banks, onChange, disabled, children })
 export default function TransferForm({ businessId, docId, allowed }) {
   const navigate = useTabNavigate(BANKING_TABS.transfers);
   const data = useLoad(async () => {
-    const [banks, doc] = await Promise.all([listActiveBankAccounts(businessId), docId ? getTransfer(businessId, docId) : null]);
-    return { banks: banks.items, doc };
+    const [banks, tree, doc] = await Promise.all([
+      listActiveBankAccounts(businessId), getCoaTree(businessId, todayIso()), docId ? getTransfer(businessId, docId) : null,
+    ]);
+    return { banks: banks.items, headGroup: headGroupOf(tree, BANK_CONTROL_ACCOUNT), doc };
   }, [businessId, docId]);
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -159,7 +172,7 @@ export default function TransferForm({ businessId, docId, allowed }) {
         <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
           <div className="grid gap-2">
             <Label htmlFor="transfer-date">Date</Label>
-            <Input id="transfer-date" type="date" value={form.date} onChange={(e) => setField('date', e.target.value)} disabled={saving} required />
+            <DatePicker id="transfer-date" value={form.date} onChange={(value) => setField('date', value)} disabled={saving} required />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="transfer-reference">Reference</Label>
@@ -171,7 +184,7 @@ export default function TransferForm({ businessId, docId, allowed }) {
           </div>
         </div>
         {SIDES.map(({ key, label }) => (
-          <SideFields key={key} side={key} label={label} value={form[key]} banks={banks} onChange={(value) => setField(key, value)} disabled={saving}>
+          <SideFields key={key} side={key} label={label} value={form[key]} banks={banks} headGroup={data.data.headGroup} onChange={(value) => setField(key, value)} disabled={saving}>
             {key === 'from' && (
               <div className="grid gap-2">
                 <Label htmlFor="transfer-amount">Amount</Label>

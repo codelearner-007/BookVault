@@ -4,7 +4,9 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { formatMoney } from '@/lib/utils/money';
+import { FormattedDate, useBusinessFormat } from '@/components/common/business-format';
+import { Money } from '@/components/common/money';
+import { formatDate } from '@/lib/utils/dates';
 import { cn } from '@/lib/utils';
 import { isZeroAmount } from '../coa/coa-tree';
 import { accountLabel } from '../ledger/ledger-parts';
@@ -15,11 +17,12 @@ import { Field, STICKY_CELL, StatusPill } from './sales-parts';
 // Applied receipts / payments / notes reduce what the invoice is owed: shown with a minus like Manager. Text only.
 function asReduction(value) {
   const text = String(value);
-  return text.startsWith('-') ? formatMoney(text) : `-${formatMoney(text)}`;
+  return text.startsWith('-') ? text : `-${text}`;
 }
 
-function documentLabel({ document_type: type, reference, date }) {
-  return [DOCUMENT_TYPE_LABELS[type] ?? type, reference, date].filter(Boolean).join(' — ');
+function DocumentLabel({ entry: { document_type: type, reference, date } }) {
+  const { dateFormat } = useBusinessFormat();
+  return [DOCUMENT_TYPE_LABELS[type] ?? type, reference, date && formatDate(date, dateFormat)].filter(Boolean).join(' — ');
 }
 
 function DocLink({ entry, children }) {
@@ -49,7 +52,7 @@ function cellValue(key, line) {
   if (key === 'description') return line.description;
   if (key === 'qty') return plainNumber(line.qty);
   if (key === 'tax') return line.tax_code_name;
-  return formatMoney(line[key]);
+  return <Money value={line[key]} />;
 }
 
 function SummaryRow({ span, label, value, strong, children }) {
@@ -67,31 +70,31 @@ function TotalsRows({ doc, config, span }) {
   const showSubtotal = breakdown.length > 0;
   return (
     <>
-      {showSubtotal && <SummaryRow span={span} label="Subtotal" value={formatMoney(doc.subtotal)} />}
+      {showSubtotal && <SummaryRow span={span} label="Subtotal" value={<Money value={doc.subtotal} />} />}
       {breakdown.map((tax) => (
-        <SummaryRow key={tax.tax_code_id} span={span} label={`${tax.name} ${plainNumber(tax.rate)}%`} value={formatMoney(tax.amount)} />
+        <SummaryRow key={tax.tax_code_id} span={span} label={`${tax.name} ${plainNumber(tax.rate)}%`} value={<Money value={tax.amount} />} />
       ))}
-      {!isZeroAmount(doc.rounding) && <SummaryRow span={span} label="Rounding" value={formatMoney(doc.rounding)} />}
-      <SummaryRow span={span} label="Total" value={formatMoney(doc.total)} strong />
+      {!isZeroAmount(doc.rounding) && <SummaryRow span={span} label="Rounding" value={<Money value={doc.rounding} />} />}
+      <SummaryRow span={span} label="Total" value={<Money value={doc.total} />} strong />
       {config.role === ROLES.invoice && (
         <>
           {(doc.applied ?? []).map((entry) => (
-            <SummaryRow key={`a-${entry.document_id}`} span={span} value={asReduction(entry.amount)}>
-              <DocLink entry={entry}>{documentLabel(entry)}</DocLink>
+            <SummaryRow key={`a-${entry.document_id}`} span={span} value={<Money value={asReduction(entry.amount)} />}>
+              <DocLink entry={entry}><DocumentLabel entry={entry} /></DocLink>
               {entry.early_discount && !isZeroAmount(entry.early_discount) && (
-                <span className="text-muted-foreground"> (early payment discount {formatMoney(entry.early_discount)})</span>
+                <span className="text-muted-foreground"> (early payment discount <Money value={entry.early_discount} />)</span>
               )}
             </SummaryRow>
           ))}
           {(doc.late_fees ?? []).map((fee) => {
             const entry = { ...fee, document_type: LATE_FEE_TYPE };
             return (
-              <SummaryRow key={`f-${fee.document_id}`} span={span} value={formatMoney(fee.amount)}>
-                <DocLink entry={entry}>{documentLabel(entry)}</DocLink>
+              <SummaryRow key={`f-${fee.document_id}`} span={span} value={<Money value={fee.amount} />}>
+                <DocLink entry={entry}><DocumentLabel entry={entry} /></DocLink>
               </SummaryRow>
             );
           })}
-          {doc.balance_due !== null && <SummaryRow span={span} label="Balance due" value={formatMoney(doc.balance_due)} strong />}
+          {doc.balance_due !== null && <SummaryRow span={span} label="Balance due" value={<Money value={doc.balance_due} />} strong />}
         </>
       )}
     </>
@@ -134,9 +137,9 @@ function HeaderFields({ doc, config }) {
   const isRole = (role) => config.role === role;
   return (
     <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-      <Field label={config.dateLabel}><span className="tabular-nums">{doc.date}</span></Field>
-      {isType(DOC_TYPES.quote) && doc.expiry_date && <Field label="Expiry date"><span className="tabular-nums">{doc.expiry_date}</span></Field>}
-      {isRole(ROLES.invoice) && <Field label="Due date"><span className="tabular-nums">{doc.due_date}</span></Field>}
+      <Field label={config.dateLabel}><FormattedDate value={doc.date} className="tabular-nums" /></Field>
+      {isType(DOC_TYPES.quote) && doc.expiry_date && <Field label="Expiry date"><FormattedDate value={doc.expiry_date} className="tabular-nums" /></Field>}
+      {isRole(ROLES.invoice) && <Field label="Due date"><FormattedDate value={doc.due_date} className="tabular-nums" /></Field>}
       <Field label={isRole(ROLES.invoice) ? 'Invoice number' : 'Reference'}>{doc.reference}</Field>
       {isRole(ROLES.note) && <Field label={config.side.invoiceLabel}>{doc.invoice_reference ?? 'Automatic'}</Field>}
       {isType(DOC_TYPES.order) && (
@@ -188,11 +191,11 @@ export default function TradeDocumentPaper({ doc, config, businessName }) {
       {doc.description && <p className="mt-6 font-semibold whitespace-pre-wrap">{doc.description}</p>}
       <LinesTable doc={doc} config={config} />
       {doc.is_starting_balance && (
-        <p className="mt-4 text-sm text-muted-foreground">Paid before start: <span className="num">{formatMoney(doc.paid_before_start)}</span></p>
+        <p className="mt-4 text-sm text-muted-foreground">Paid before start: <Money value={doc.paid_before_start} /></p>
       )}
       {doc.early_discount && (
         <p className="mt-4 text-sm text-muted-foreground">
-          Early payment discount of {formatMoney(doc.early_discount.amount)} if paid by {doc.early_discount.until}.
+          Early payment discount of <Money value={doc.early_discount.amount} /> if paid by <FormattedDate value={doc.early_discount.until} />.
         </p>
       )}
       {doc.acts_as_stock_movement && config.stockMovementLabel && (
@@ -202,7 +205,7 @@ export default function TradeDocumentPaper({ doc, config, businessName }) {
         <ul className="mt-4 space-y-1 text-sm text-muted-foreground">
           {doc.applied.map((entry) => (
             <li key={entry.document_id}>
-              Applied to <DocLink entry={entry}>{documentLabel(entry)}</DocLink>: <span className="num">{formatMoney(entry.amount)}</span>
+              Applied to <DocLink entry={entry}><DocumentLabel entry={entry} /></DocLink>: <Money value={entry.amount} />
             </li>
           ))}
         </ul>

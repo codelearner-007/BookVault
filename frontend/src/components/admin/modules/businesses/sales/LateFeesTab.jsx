@@ -18,5 +18,5 @@ export default function LateFeesTab({ business }) {
   if (route.editId) return <LateFeeForm key={route.editId} businessId={business.id} feeId={route.editId} allowed={rights.edit} />;
   if (route.viewId) return <LateFeeView key={route.viewId} business={business} feeId={route.viewId} rights={rights} />;
   if (route.active && searchParams.get('proposals') && rights.create) return <LateFeeProposals businessId={business.id} />;
-  return <LateFeesList businessId={business.id} page={route.page} active={route.active} canCreate={rights.create} />;
+  return <LateFeesList businessId={business.id} page={route.page} active={route.active} canCreate={rights.create} canEdit={rights.edit} />;
 }

@@ -2,6 +2,7 @@ import { PARTY_KINDS } from '@/lib/services/parties.service';
 import { paymentsService } from '@/lib/services/payments.service';
 import { receiptsService } from '@/lib/services/receipts.service';
 import { TRADE_SIDES } from '../sales/sales-documents';
+import { accountsFromTree } from '../coa/coa-tree';
 import { BANKING_TABS } from './banking-parts';
 
 // Control accounts whose lines need a sub-ledger party (system_account_code -> party kind).
@@ -21,6 +22,7 @@ export const CASH_DIRECTIONS = {
     noun: 'receipt',
     bankLabel: 'Received in',
     counterpartyLabel: 'Paid by',
+    tone: 'in',
     partyAccounts: RECEIPT_PARTIES,
     side: TRADE_SIDES.sales,
   },
@@ -32,6 +34,7 @@ export const CASH_DIRECTIONS = {
     noun: 'payment',
     bankLabel: 'Paid from',
     counterpartyLabel: 'Payee',
+    tone: 'out',
     partyAccounts: PAYMENT_PARTIES,
     side: TRADE_SIDES.purchases,
   },
@@ -55,19 +58,12 @@ export const BANK_CONTROL_ACCOUNT = 'cash_control';
 
 // Accounts a line may use, from the COA tree: active, not the bank control; plus any a saved line already uses.
 export function lineAccountsFromTree(tree, savedLines = []) {
-  const accounts = [];
-  const walk = (group) => {
-    group.accounts.forEach((account) => {
-      if (account.is_active && account.system_account_code !== BANK_CONTROL_ACCOUNT) accounts.push(account);
-    });
-    group.groups.forEach(walk);
-  };
-  tree.roots.forEach(walk);
+  const accounts = accountsFromTree(tree, (account) => account.is_active && account.system_account_code !== BANK_CONTROL_ACCOUNT);
   const known = new Set(accounts.map((account) => account.id));
   for (const line of savedLines) {
     if (known.has(line.account_id)) continue;
     known.add(line.account_id);
-    accounts.push({ id: line.account_id, code: line.account_code, name: line.account_name, system_account_code: null });
+    accounts.push({ id: line.account_id, name: line.account_name, system_account_code: null, headGroup: null });
   }
   return accounts;
 }

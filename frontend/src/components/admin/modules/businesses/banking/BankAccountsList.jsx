@@ -2,117 +2,104 @@
 
 import { useState } from 'react';
 import { Landmark, Plus } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { BalanceSection, SectionBalancesToggle } from '@/components/common/balances';
+import { COLUMN_KIND, ListTable, RecordTitle } from '@/components/common/list-table';
+import { Money } from '@/components/common/money';
 import { EmptyState, ListCard, PageHeader } from '@/components/common/page';
 import { ListPagination } from '@/components/super-admin/platform-parts';
-import { createBankAccount, listBankAccounts } from '@/lib/services/bank-accounts.service';
-import { formatMoney } from '@/lib/utils/money';
+import { createBankAccount, listBankAccounts, updateBankAccount } from '@/lib/services/bank-accounts.service';
 import { ErrorAlert, useTabNavigate } from '../ledger/ledger-parts';
 import { BANKING_TABS, InactiveBadge, TableSkeleton, useLoad } from './banking-parts';
 import NamedAccountDialog from './NamedAccountDialog';
 
+// Manager's four balances; the actual balance is the account's balance (emphasized, red when negative).
 export const BALANCE_COLUMNS = [
   ['cleared_balance', 'Cleared balance'],
   ['pending_deposits', 'Pending deposits'],
   ['pending_withdrawals', 'Pending withdrawals'],
   ['actual_balance', 'Actual balance'],
 ];
+const BALANCE_TONES = { pending_deposits: 'in', pending_withdrawals: 'out', actual_balance: 'balance' };
+const SECTION_NAME = 'Bank and Cash Accounts';
 
-// The balance that opens the account's register (every posted movement up to today).
-const REGISTER_COLUMN = 'actual_balance';
-
-function AccountsTable({ accounts, totals, onOpen, onOpenRegister }) {
-  const showCode = accounts.some((account) => account.code);
+// The actual balance opens the account's register (every posted movement up to today).
+function RegisterLink({ account, onOpenRegister }) {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow className="hover:bg-transparent">
-          {showCode && <TableHead>Code</TableHead>}
-          <TableHead>Name</TableHead>
-          {BALANCE_COLUMNS.map(([key, label]) => <TableHead key={key} className="text-end">{label}</TableHead>)}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {accounts.map((account) => (
-          <TableRow
-            key={account.id}
-            className={cn('cursor-pointer', account.is_inactive && 'text-muted-foreground')}
-            onClick={() => onOpen(account.id)}
-          >
-            {showCode && <TableCell className="num whitespace-nowrap" data-label="Code">{account.code}</TableCell>}
-            <TableCell data-card="title">
-              <span className="flex items-center gap-2">
-                <Button
-                  variant="link"
-                  className="h-auto p-0 text-inherit hover:text-link"
-                  onClick={(event) => { event.stopPropagation(); onOpen(account.id); }}
-                >
-                  {account.name}
-                </Button>
-                {account.is_inactive && <InactiveBadge />}
-              </span>
-            </TableCell>
-            {BALANCE_COLUMNS.map(([key, label]) => (
-              <TableCell key={key} className="num" data-label={label} data-card={key === 'actual_balance' ? 'end' : undefined}>
-                {key === REGISTER_COLUMN ? (
-                  <Button
-                    variant="link"
-                    className="num h-auto p-0 text-inherit hover:text-link"
-                    aria-label={`Open the register of ${account.name}`}
-                    onClick={(event) => { event.stopPropagation(); onOpenRegister(account.id); }}
-                  >
-                    {formatMoney(account[key])}
-                  </Button>
-                ) : formatMoney(account[key])}
-              </TableCell>
-            ))}
-          </TableRow>
-        ))}
-      </TableBody>
-      {totals && (
-        <TableFooter>
-          <TableRow className="hover:bg-transparent">
-            <TableCell colSpan={showCode ? 2 : 1}>Total</TableCell>
-            {BALANCE_COLUMNS.map(([key, label]) => (
-              <TableCell key={key} className="num" data-label={label}>{formatMoney(totals[key])}</TableCell>
-            ))}
-          </TableRow>
-        </TableFooter>
-      )}
-    </Table>
+    <Button
+      variant="link"
+      className="num h-auto p-0 text-inherit hover:text-link"
+      aria-label={`Open the register of ${account.name}`}
+      onClick={(event) => { event.stopPropagation(); onOpenRegister(account.id); }}
+    >
+      <Money value={account.actual_balance} tone="balance" />
+    </Button>
   );
 }
 
-// ?tab=bank-and-cash-accounts[&p=N]: accounts with Manager's four balances and the totals row.
-export default function BankAccountsList({ businessId, page, active, canCreate }) {
-  const navigate = useTabNavigate(BANKING_TABS.bank);
-  const [creating, setCreating] = useState(false);
-  // `active` in the deps: coming back to the tab reloads, so balances moved by other tabs show.
-  const { data, error } = useLoad(() => listBankAccounts(businessId, page), [businessId, page, active]);
+function accountColumns(onOpenRegister) {
+  return [
+    {
+      key: 'name',
+      label: 'Name',
+      card: 'title',
+      render: (account) => <RecordTitle text={account.name}>{account.is_inactive && <InactiveBadge />}</RecordTitle>,
+    },
+    ...BALANCE_COLUMNS.map(([key, label]) => ({
+      key,
+      label,
+      kind: COLUMN_KIND.money,
+      tone: BALANCE_TONES[key],
+      zero: key === 'actual_balance' ? 'show' : 'muted',
+      card: key === 'actual_balance' ? 'end' : undefined,
+      render: key === 'actual_balance' ? (account) => <RegisterLink account={account} onOpenRegister={onOpenRegister} /> : undefined,
+    })),
+  ];
+}
 
-  if (!data && !error) return <TableSkeleton columns={5} titleWidth="w-72" />;
+// ?tab=bank-and-cash-accounts[&p=N]: accounts with Manager's four balances and the totals row.
+export default function BankAccountsList({ businessId, page, active, canCreate, canEdit }) {
+  const navigate = useTabNavigate(BANKING_TABS.bank);
+  const [dialog, setDialog] = useState(null);
+  // `active` in the deps: coming back to the tab reloads, so balances moved by other tabs show.
+  const { data, error, reload } = useLoad(() => listBankAccounts(businessId, page), [businessId, page, active]);
+  const columns = accountColumns((id) => navigate({ register: id }));
+
+  if (!data && !error) return <TableSkeleton columns={columns.length} titleWidth="w-72" actions />;
 
   async function create(body) {
     const account = await createBankAccount(businessId, body);
-    setCreating(false);
+    setDialog(null);
     navigate({ view: account.id });
+  }
+
+  async function update(body) {
+    await updateBankAccount(businessId, dialog.account.id, body);
+    setDialog(null);
+    reload();
   }
 
   const items = data?.items ?? [];
   return (
-    <div>
-      {creating && (
-        <NamedAccountDialog title="New Bank or Cash Account" bank onSubmit={create} onClose={() => setCreating(false)} />
+    <BalanceSection>
+      {dialog?.mode === 'new' && (
+        <NamedAccountDialog title="New Bank or Cash Account" bank onSubmit={create} onClose={() => setDialog(null)} />
+      )}
+      {dialog?.mode === 'edit' && (
+        <NamedAccountDialog title="Edit Bank or Cash Account" bank account={dialog.account} onSubmit={update} onClose={() => setDialog(null)} />
       )}
       <PageHeader
         title="Bank and Cash Accounts"
-        actions={canCreate && (
-          <Button onClick={() => setCreating(true)}>
-            <Plus />
-            New Bank or Cash Account
-          </Button>
+        actions={(
+          <>
+            <SectionBalancesToggle name={SECTION_NAME} />
+            {canCreate && (
+              <Button onClick={() => setDialog({ mode: 'new' })}>
+                <Plus />
+                New Bank or Cash Account
+              </Button>
+            )}
+          </>
         )}
       />
       {error && <ErrorAlert>{error}</ErrorAlert>}
@@ -129,14 +116,16 @@ export default function BankAccountsList({ businessId, page, active, canCreate }
         {items.length === 0 ? (
           <EmptyState icon={Landmark} title="No bank or cash accounts yet" />
         ) : (
-          <AccountsTable
-            accounts={items}
-            totals={data.totals}
-            onOpen={(id) => navigate({ view: id })}
-            onOpenRegister={(id) => navigate({ register: id })}
+          <ListTable
+            columns={columns}
+            rows={items}
+            totals={data.totals ?? undefined}
+            onView={(account) => navigate({ view: account.id })}
+            onEdit={canEdit ? (account) => setDialog({ mode: 'edit', account }) : null}
+            rowClassName={(account) => account.is_inactive && 'text-muted-foreground'}
           />
         )}
       </ListCard>
-    </div>
+    </BalanceSection>
   );
 }

@@ -1,18 +1,23 @@
 'use client';
 
 import { Percent } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { COLUMN_KIND, ListTable } from '@/components/common/list-table';
 import { EmptyState, ListCard, PageHeader } from '@/components/common/page';
 import { ListPagination } from '@/components/super-admin/platform-parts';
 import { listEarlyPaymentDiscounts } from '@/lib/services/trade-documents.service';
-import { formatMoney } from '@/lib/utils/money';
 import { BackButton, ErrorAlert, todayIso, useTabNavigate } from '../ledger/ledger-parts';
-import { TableSkeleton, useLoad } from '../banking/banking-parts';
+import { TableSkeleton, useLoad, useTabRights } from '../banking/banking-parts';
 import { SALES_TABS } from './sales-documents';
-import { STICKY_KEY } from './sales-parts';
 
-const COLUMN_COUNT = 7;
+const COLUMNS = [
+  { key: 'reference', label: 'Sales invoice', card: 'title', value: (row) => row.reference || 'Sales Invoice' },
+  { key: 'customer_name', label: 'Customer' },
+  { key: 'date', label: 'Issue date', kind: COLUMN_KIND.date },
+  { key: 'balance_due', label: 'Balance due', kind: COLUMN_KIND.money },
+  { key: 'discount', label: 'Discount', kind: COLUMN_KIND.money },
+  { key: 'until', label: 'Until', kind: COLUMN_KIND.date },
+  { key: 'settle_amount', label: 'Settle amount', kind: COLUMN_KIND.money, card: 'end' },
+];
 
 /*
   ?tab=sales-invoices&discounts=1: invoices whose early payment discount can still be taken (informational;
@@ -20,9 +25,10 @@ const COLUMN_COUNT = 7;
 */
 export default function EarlyPaymentDiscounts({ businessId, page }) {
   const navigate = useTabNavigate(SALES_TABS.invoices);
+  const rights = useTabRights(SALES_TABS.invoices);
   const { data, error } = useLoad(() => listEarlyPaymentDiscounts(businessId, todayIso(), page), [businessId, page]);
 
-  if (!data && !error) return <TableSkeleton columns={COLUMN_COUNT} />;
+  if (!data && !error) return <TableSkeleton columns={COLUMNS.length} actions />;
   const items = data?.items ?? [];
 
   return (
@@ -41,36 +47,13 @@ export default function EarlyPaymentDiscounts({ businessId, page }) {
         {items.length === 0 ? (
           <EmptyState icon={Percent} title="No early payment discounts available" />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className={STICKY_KEY}>Sales invoice</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Issue date</TableHead>
-                <TableHead className="text-end">Balance due</TableHead>
-                <TableHead className="text-end">Discount</TableHead>
-                <TableHead>Until</TableHead>
-                <TableHead className="text-end">Settle amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((row) => (
-                <TableRow key={row.invoice_id}>
-                  <TableCell data-card="title" className={STICKY_KEY}>
-                    <Button variant="link" className="text-foreground hover:text-link" onClick={() => navigate({ view: row.invoice_id })}>
-                      {row.reference || 'Sales Invoice'}
-                    </Button>
-                  </TableCell>
-                  <TableCell data-label="Customer">{row.customer_name}</TableCell>
-                  <TableCell className="num" data-label="Issue date">{row.date}</TableCell>
-                  <TableCell className="num" data-label="Balance due">{formatMoney(row.balance_due)}</TableCell>
-                  <TableCell className="num" data-label="Discount">{formatMoney(row.discount)}</TableCell>
-                  <TableCell className="num" data-label="Until">{row.until}</TableCell>
-                  <TableCell className="num" data-card="end">{formatMoney(row.settle_amount)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <ListTable
+            columns={COLUMNS}
+            rows={items}
+            rowKey={(row) => row.invoice_id}
+            onView={(row) => navigate({ view: row.invoice_id })}
+            onEdit={rights.edit ? (row) => navigate({ edit: row.invoice_id }) : null}
+          />
         )}
       </ListCard>
     </div>

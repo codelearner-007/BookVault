@@ -4,17 +4,20 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DatePicker } from '@/components/common/date-picker';
 import { PageHeader } from '@/components/common/page';
 import { isVersionConflict } from '@/lib/services/api-client';
 import { listActiveBankAccounts } from '@/lib/services/bank-accounts.service';
 import { getCoaTree } from '@/lib/services/coa.service';
-import { toInputAmount } from '../coa/coa-tree';
+import { headGroupOf, toInputAmount } from '../coa/coa-tree';
 import { parseAmount } from '../ledger/JournalLinesEditor';
 import { BackButton, ErrorAlert, JE_STATUS, todayIso, useTabNavigate } from '../ledger/ledger-parts';
 import {
   BankAccountSelect, ClearedField, FormSkeleton, useLoad, withCurrentAccount,
 } from './banking-parts';
-import { CASH_ERRORS, COUNTERPARTY, COUNTERPARTY_OPTIONS, lineAccountsFromTree } from './cash-directions';
+import {
+  BANK_CONTROL_ACCOUNT, CASH_ERRORS, COUNTERPARTY, COUNTERPARTY_OPTIONS, lineAccountsFromTree,
+} from './cash-directions';
 import CashLinesEditor, { emptyCashLine, isInvalidLine, optionalNumber } from './CashLinesEditor';
 import CounterpartyField from './CounterpartyField';
 import { BlockedForm, DocumentFormActions, blockedReason, useDocumentSave } from './document-form';
@@ -121,13 +124,13 @@ function useFormData(businessId, service, docId) {
   }, [businessId, docId]);
 }
 
-function HeaderFields({ businessId, direction, form, setField, banks, disabled }) {
+function HeaderFields({ businessId, direction, form, setField, banks, bankHeadGroup, disabled }) {
   const bank = banks.find((b) => b.id === form.bankAccountId);
   return (
     <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
       <div className="grid gap-2">
         <Label htmlFor="cash-date">Date</Label>
-        <Input id="cash-date" type="date" value={form.date} onChange={(e) => setField('date', e.target.value)} disabled={disabled} required />
+        <DatePicker id="cash-date" value={form.date} onChange={(value) => setField('date', value)} disabled={disabled} required />
       </div>
       <div className="grid gap-2">
         <Label htmlFor="cash-reference">Reference</Label>
@@ -141,6 +144,8 @@ function HeaderFields({ businessId, direction, form, setField, banks, disabled }
           accounts={banks}
           onChange={(id) => setField('bankAccountId', id)}
           disabled={disabled}
+          headGroup={bankHeadGroup}
+          label={direction.bankLabel}
           allowNone
         />
         {!form.bankAccountId && (
@@ -231,7 +236,15 @@ export default function CashTransactionForm({ businessId, direction, docId, allo
       <PageHeader title={title} back={<BackButton onClick={back} disabled={saving} />} />
       {error && <ErrorAlert action={reloadAction}>{error.message}</ErrorAlert>}
       <div className="space-y-8">
-        <HeaderFields businessId={businessId} direction={direction} form={form} setField={setField} banks={banks} disabled={saving} />
+        <HeaderFields
+          businessId={businessId}
+          direction={direction}
+          form={form}
+          setField={setField}
+          banks={banks}
+          bankHeadGroup={headGroupOf(data.data.tree, BANK_CONTROL_ACCOUNT)}
+          disabled={saving}
+        />
         <CashLinesEditor
           businessId={businessId}
           service={service}

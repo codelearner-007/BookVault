@@ -10,9 +10,10 @@ import { MoreMenu, PageHeader } from '@/components/common/page';
 import { ConfirmDialog } from '@/components/super-admin/platform-parts';
 import { isVersionConflict } from '@/lib/services/api-client';
 import {
-  getDocumentJournal, getJournalEntry, postJournalEntry, voidJournalEntry,
+  getJournalEntry, postJournalEntry, voidJournalEntry,
 } from '@/lib/services/journal-entries.service';
-import { formatMoney } from '@/lib/utils/money';
+import { FormattedDate } from '@/components/common/business-format';
+import { Money } from '@/components/common/money';
 import TransactionJournal from './TransactionJournal';
 import {
   BackButton, ErrorAlert, JE_STATUS, JE_TAB, StatusBadge, accountLabel, useTabNavigate,
@@ -36,21 +37,16 @@ function ViewSkeleton() {
         </div>
       </div>
       <Skeleton className="h-72 rounded-card" />
-      <Skeleton className="mt-10 h-6 w-48" />
-      <Skeleton className="mt-3 h-48 rounded-card" />
+      <Skeleton className="mt-8 h-control w-48 rounded-full" />
     </div>
   );
-}
-
-function amount(value) {
-  return Number(value) === 0 ? '' : formatMoney(value);
 }
 
 function EntryDocument({ entry }) {
   return (
     <Card className="p-card">
       <dl className="grid gap-x-8 gap-y-5 sm:grid-cols-3">
-        <div><dt className="text-sm text-muted-foreground">Date</dt><dd className="mt-1 tabular-nums">{entry.date}</dd></div>
+        <div><dt className="text-sm text-muted-foreground">Date</dt><dd className="mt-1 tabular-nums"><FormattedDate value={entry.date} /></dd></div>
         <div><dt className="text-sm text-muted-foreground">Reference</dt><dd className="mt-1">{entry.reference || '—'}</dd></div>
         <div><dt className="text-sm text-muted-foreground">Status</dt><dd className="mt-1"><StatusBadge status={entry.status} /></dd></div>
       </dl>
@@ -69,16 +65,16 @@ function EntryDocument({ entry }) {
             <TableRow key={line.id}>
               <TableCell>{accountLabel(line)}</TableCell>
               <TableCell className="text-muted-foreground">{line.description}</TableCell>
-              <TableCell className="num w-32">{amount(line.debit)}</TableCell>
-              <TableCell className="num w-32">{amount(line.credit)}</TableCell>
+              <TableCell className="num w-32"><Money value={line.debit} zero="blank" /></TableCell>
+              <TableCell className="num w-32"><Money value={line.credit} zero="blank" /></TableCell>
             </TableRow>
           ))}
         </TableBody>
         <TableFooter>
           <TableRow className="hover:bg-transparent">
             <TableCell colSpan={2}><span className="sr-only">Total</span></TableCell>
-            <TableCell className="num">{formatMoney(entry.total_debit)}</TableCell>
-            <TableCell className="num">{formatMoney(entry.total_credit)}</TableCell>
+            <TableCell className="num"><Money value={entry.total_debit} /></TableCell>
+            <TableCell className="num"><Money value={entry.total_credit} /></TableCell>
           </TableRow>
         </TableFooter>
       </Table>
@@ -86,14 +82,14 @@ function EntryDocument({ entry }) {
   );
 }
 
-function useEntryAndJournal(businessId, entryId) {
-  const [state, setState] = useState({ entry: null, journal: null, error: null });
+function useEntry(businessId, entryId) {
+  const [state, setState] = useState({ entry: null, error: null });
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
-    Promise.all([getJournalEntry(businessId, entryId), getDocumentJournal(businessId, entryId)])
-      .then(([entry, journal]) => { if (active) setState({ entry, journal, error: null }); })
+    getJournalEntry(businessId, entryId)
+      .then((entry) => { if (active) setState({ entry, error: null }); })
       .catch((err) => { if (active) setState((prev) => ({ ...prev, error: err?.message ?? 'Failed to load the entry.' })); });
     return () => { active = false; };
   }, [businessId, entryId, reloadKey]);
@@ -104,7 +100,7 @@ function useEntryAndJournal(businessId, entryId) {
 // ?tab=journal-entries&view=<id>: the entry, its actions and its Transaction Journal.
 export default function JournalEntryView({ businessId, entryId, rights }) {
   const navigate = useTabNavigate(JE_TAB);
-  const { entry, journal, error: loadError, reload } = useEntryAndJournal(businessId, entryId);
+  const { entry, error: loadError, reload } = useEntry(businessId, entryId);
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
   const [confirmVoid, setConfirmVoid] = useState(false);
@@ -185,7 +181,7 @@ export default function JournalEntryView({ businessId, entryId, rights }) {
         </p>
       )}
       <EntryDocument entry={entry} />
-      <TransactionJournal journal={journal} />
+      <TransactionJournal businessId={businessId} documentId={entry.id} version={entry.version} />
     </div>
   );
 }

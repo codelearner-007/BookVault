@@ -3,15 +3,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AccountPicker } from '@/components/common/account-picker';
+import { DatePicker } from '@/components/common/date-picker';
 import { useBusinessWorkspace } from '@/components/shell/ShellContext';
 import { RIGHT_CREATE, RIGHT_DELETE, RIGHT_EDIT } from '@/lib/constants/access-rights';
 import { can } from '@/lib/navigation/access';
 import { tabArea } from '@/lib/navigation/business-tabs';
-import { usePageParam } from '../ledger/ledger-parts';
+import { JE_STATUS, usePageParam } from '../ledger/ledger-parts';
 
 /* Pieces shared by the banking tabs: bank accounts, receipts, payments, transfers, capital accounts, suspense. */
 
@@ -59,6 +60,25 @@ export const DOCUMENT_TYPE_LABELS = {
   goods_receipt: 'Goods Receipt',
 };
 const STARTING_BALANCES_HREF = '?tab=settings&page=starting-balances';
+
+// The tab a ledger document lives in, or null (opening balances live in Settings > Starting balances).
+export function documentTab(documentType) {
+  return DOCUMENT_TABS[documentType] ?? null;
+}
+
+// The edit form of a ledger document (only documents with their own tab have one).
+export function documentEditHref(documentType, documentId) {
+  return `?tab=${documentTab(documentType)}&edit=${documentId}`;
+}
+
+// Whether I may edit a ledger document from a mixed list (register, Suspense): its tab's edit right.
+export function useDocumentEditRight() {
+  const { access } = useBusinessWorkspace();
+  return (row) => {
+    const tab = documentTab(row.document_type);
+    return Boolean(tab) && can(access, tabArea(tab), RIGHT_EDIT);
+  };
+}
 
 // Where a ledger document opens: its own tab's view, or Settings > Starting balances.
 export function documentHref(documentType, documentId) {
@@ -112,16 +132,17 @@ export function useIdempotencyKey() {
   };
 }
 
+// Whether a list row may offer Edit (with the edit right): not void and not in a locked period.
+export function isEditableDocument(row) {
+  return row.status !== JE_STATUS.void && !row.is_locked;
+}
+
 export function PendingBadge() {
   return <Badge variant="info">Pending</Badge>;
 }
 
 export function InactiveBadge() {
   return <Badge variant="outline">Inactive</Badge>;
-}
-
-export function bankAccountLabel(account) {
-  return account.code ? `${account.code} · ${account.name}` : account.name;
 }
 
 // The active bank accounts plus, when editing, the one a saved document already uses.
@@ -133,27 +154,23 @@ export function withCurrentAccount(accounts, id, name) {
 // Where a receipt or payment without a bank or cash account is shown as sitting (PR-78).
 export const NO_BANK_LABEL = 'Suspense';
 
-// Radix Select cannot hold an empty value, so "no account" has its own option value.
-const NO_ACCOUNT = '__none__';
+const NO_BANK_ACCOUNT = 'No bank account';
 
-// allowNone: receipts and payments may have no account (the bank side then posts to Suspense, PR-78).
-export function BankAccountSelect({ id, value, accounts, onChange, disabled, allowNone = false }) {
+// The bank or cash account picker (searchable, names only). headGroup: the chart root of the bank control
+// account, shown muted on the right like every account picker. allowNone: receipts and payments may have no
+// account (the bank side then posts to Suspense, PR-78).
+export function BankAccountSelect({ id, value, accounts, onChange, disabled, allowNone = false, headGroup = null, label }) {
   return (
-    <Select
-      value={allowNone && !value ? NO_ACCOUNT : value}
-      onValueChange={(next) => onChange(next === NO_ACCOUNT ? '' : next)}
+    <AccountPicker
+      id={id}
+      value={value}
+      accounts={accounts.map((account) => ({ id: account.id, name: account.name, headGroup }))}
+      onChange={onChange}
       disabled={disabled}
-    >
-      <SelectTrigger id={id} className="w-full">
-        <SelectValue placeholder="Select account" />
-      </SelectTrigger>
-      <SelectContent>
-        {allowNone && <SelectItem value={NO_ACCOUNT}>No bank account</SelectItem>}
-        {accounts.map((account) => (
-          <SelectItem key={account.id} value={account.id}>{bankAccountLabel(account)}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+      label={label}
+      noneLabel={allowNone ? NO_BANK_ACCOUNT : undefined}
+      className="w-full"
+    />
   );
 }
 
@@ -179,11 +196,10 @@ export function ClearedField({ id, label = 'Cleared', clearsLater, clearedOn, on
           </SelectContent>
         </Select>
         {clearsLater && (
-          <Input
-            type="date"
+          <DatePicker
             aria-label={`${label} date (optional)`}
             value={clearedOn}
-            onChange={(event) => onChange({ clearsLater, clearedOn: event.target.value })}
+            onChange={(next) => onChange({ clearsLater, clearedOn: next })}
             disabled={disabled}
             className="w-44"
           />
@@ -193,8 +209,9 @@ export function ClearedField({ id, label = 'Cleared', clearsLater, clearedOn, on
   );
 }
 
-// A list card skeleton: header, column heads and rows.
-export function TableSkeleton({ columns, rows = 6, titleWidth = 'w-56' }) {
+// A list card skeleton: header, column heads and rows (`actions`: the View / Edit column at the start).
+export function TableSkeleton({ columns: dataColumns, rows = 6, titleWidth = 'w-56', actions = false }) {
+  const columns = dataColumns + (actions ? 1 : 0);
   return (
     <div aria-busy="true">
       <div className="mb-8 flex items-end justify-between gap-4 max-md:mb-6">
@@ -223,8 +240,7 @@ export function DocumentSkeleton() {
         </div>
       </div>
       <Skeleton className="h-80 rounded-card" />
-      <Skeleton className="mt-10 h-6 w-48" />
-      <Skeleton className="mt-3 h-40 rounded-card" />
+      <Skeleton className="mt-8 h-control w-48 rounded-full" />
       <Skeleton className="mt-10 h-6 w-32" />
       <Skeleton className="mt-3 h-24 rounded-card" />
     </div>

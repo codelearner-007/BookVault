@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { formatMoney } from '@/lib/utils/money';
+import { Money } from '@/components/common/money';
 import { isZeroAmount } from '../coa/coa-tree';
 
 /*
@@ -34,7 +34,7 @@ function NameCell({ depth, className, children }) {
 }
 
 function Figure({ value, className }) {
-  return <TableCell className={cn(CELL, 'num w-px pe-2', isZeroAmount(value) && 'text-muted-foreground', className)}>{formatMoney(value)}</TableCell>;
+  return <TableCell className={cn(CELL, 'num w-px pe-2', className)}><Money value={value} zero="muted" /></TableCell>;
 }
 
 function AccountRow({ account, depth, options }) {
@@ -53,7 +53,7 @@ function AccountRow({ account, depth, options }) {
             isZeroAmount(account.amount) && 'text-muted-foreground',
           )}
         >
-          {formatMoney(account.amount)}
+          <Money value={account.amount} />
         </Link>
       </TableCell>
     </TableRow>

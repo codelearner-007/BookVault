@@ -2,99 +2,49 @@
 
 import { FileText, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { COLUMN_KIND, ListTable } from '@/components/common/list-table';
 import { EmptyState, ListCard, ListToolbar, PageHeader, SearchInput } from '@/components/common/page';
 import { ListPagination } from '@/components/super-admin/platform-parts';
 import { listEarlyPaymentDiscounts } from '@/lib/services/trade-documents.service';
-import { formatMoney } from '@/lib/utils/money';
-import { cn } from '@/lib/utils';
 import { ErrorAlert, todayIso, useTabNavigate } from '../ledger/ledger-parts';
-import { TableSkeleton, useLoad } from '../banking/banking-parts';
+import { TableSkeleton, isEditableDocument, useLoad } from '../banking/banking-parts';
 import { DOC_TYPES, ORDER_DELIVERY_STATUS, ORDER_INVOICE_STATUS } from './sales-documents';
-import { STICKY_KEY, StatusPill, useUrlSearch } from './sales-parts';
+import { StatusPill, useUrlSearch } from './sales-parts';
 
-const MONEY_COLUMNS = new Set(['total', 'balanceDue']);
 const hasReference = (config) => config.columns.some(([key]) => key === 'reference');
 
-function OpenLink({ onOpen, children }) {
-  return (
-    <Button variant="link" className="text-inherit hover:text-link" onClick={(event) => { event.stopPropagation(); onOpen(); }}>
-      {children}
-    </Button>
-  );
-}
-
-// One list cell per column key (config.columns), with the card-layout hints used on phones. The reference
-// opens the document; types listed without a reference (debit notes, goods receipts) open from the party.
-function cell([key, label], row, config, onOpen) {
-  const open = () => onOpen(row.id);
-  const partyName = row[config.side.partyNameField];
+// One column definition per config.columns key, with the phone-card slots. The reference is the record's title;
+// types listed without a reference (debit notes, goods receipts) are titled by their party.
+function tradeColumn([key, label], config) {
+  const partyName = (row) => row[config.side.partyNameField];
   switch (key) {
-    case 'date': return <TableCell key={key} className="num whitespace-nowrap" data-label={label}>{row.date}</TableCell>;
-    case 'reference':
-      return (
-        <TableCell key={key} data-card="title" className={STICKY_KEY}>
-          <OpenLink onOpen={open}>{row.reference || config.title}</OpenLink>
-        </TableCell>
-      );
+    case 'date': return { key, label, kind: COLUMN_KIND.date };
+    case 'reference': return { key, label, card: 'title', value: (row) => row.reference || config.title };
     case 'party':
-      if (hasReference(config)) return <TableCell key={key} data-label={label}>{partyName}</TableCell>;
-      return (
-        <TableCell key={key} data-card="title" className={STICKY_KEY}>
-          <OpenLink onOpen={open}>{partyName || config.title}</OpenLink>
-        </TableCell>
-      );
-    case 'source': return <TableCell key={key} className="text-muted-foreground" data-label={label}>{row.source_reference}</TableCell>;
-    case 'invoice': return <TableCell key={key} className="text-muted-foreground" data-label={label}>{row.invoice_reference}</TableCell>;
-    case 'description': return <TableCell key={key} className="max-w-md truncate text-muted-foreground" data-label="Description">{row.description}</TableCell>;
-    case 'total': return <TableCell key={key} className="num" data-card="end">{formatMoney(row.total)}</TableCell>;
-    case 'balanceDue': return <TableCell key={key} className="num" data-label={label}>{formatMoney(row.balance_due)}</TableCell>;
-    case 'status': return <TableCell key={key} data-label="Status"><StatusPill statuses={config.statuses} status={row.display_status} /></TableCell>;
-    case 'invoiceStatus': return <TableCell key={key} data-label={label}><StatusPill statuses={ORDER_INVOICE_STATUS} status={row.invoice_status} /></TableCell>;
-    case 'deliveryStatus': return <TableCell key={key} data-label={label}><StatusPill statuses={ORDER_DELIVERY_STATUS} status={row.delivery_status} /></TableCell>;
+      return hasReference(config)
+        ? { key, label, value: partyName }
+        : { key, label, card: 'title', value: (row) => partyName(row) || config.title };
+    case 'source': return { key, label, muted: true, value: (row) => row.source_reference };
+    case 'invoice': return { key, label, muted: true, value: (row) => row.invoice_reference };
+    case 'description': return { key, label: 'Description', muted: true, truncate: true };
+    case 'total': return { key, label, kind: COLUMN_KIND.money, card: 'end' };
+    case 'balanceDue': return { key, label, kind: COLUMN_KIND.money, value: (row) => row.balance_due };
+    case 'status':
+      return { key, label: 'Status', render: (row) => <StatusPill statuses={config.statuses} status={row.display_status} /> };
+    case 'invoiceStatus':
+      return { key, label, render: (row) => <StatusPill statuses={ORDER_INVOICE_STATUS} status={row.invoice_status} /> };
+    case 'deliveryStatus':
+      return { key, label, render: (row) => <StatusPill statuses={ORDER_DELIVERY_STATUS} status={row.delivery_status} /> };
     default: return null;
   }
 }
 
 // Totals row: the server's total_amount (and total_balance_due on invoices) under their columns.
-function TotalsRow({ columns, data }) {
-  const totals = { total: data.total_amount, balanceDue: data.total_balance_due };
-  if (!columns.some(([key]) => MONEY_COLUMNS.has(key))) return null;
-  return (
-    <TableFooter>
-      <TableRow className="hover:bg-transparent">
-        {columns.map(([key, label], index) => (
-          <TableCell key={key} className={cn(MONEY_COLUMNS.has(key) && 'num', !MONEY_COLUMNS.has(key) && index > 0 && 'max-md:hidden')} data-label={MONEY_COLUMNS.has(key) ? label : undefined}>
-            {index === 0 ? 'Total' : MONEY_COLUMNS.has(key) ? formatMoney(totals[key]) : null}
-          </TableCell>
-        ))}
-      </TableRow>
-    </TableFooter>
-  );
-}
-
-function DocumentsTable({ config, data, onOpen }) {
-  const { columns } = config;
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow className="hover:bg-transparent">
-          {columns.map(([key, label]) => (
-            <TableHead key={key} className={cn(MONEY_COLUMNS.has(key) && 'text-end', key === (hasReference(config) ? 'reference' : 'party') && STICKY_KEY)}>{label}</TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {data.items.map((row) => (
-          // Closed purchase invoices stay listed (sorted last by the server), muted.
-          <TableRow key={row.id} className={cn('cursor-pointer', row.is_closed && 'text-muted-foreground')} onClick={() => onOpen(row.id)}>
-            {columns.map((column) => cell(column, row, config, onOpen))}
-          </TableRow>
-        ))}
-      </TableBody>
-      <TotalsRow columns={columns} data={data} />
-    </Table>
-  );
+function tradeTotals(columns, data) {
+  const totals = {};
+  if (columns.some(({ key }) => key === 'total')) totals.total = data.total_amount;
+  if (columns.some(({ key }) => key === 'balanceDue')) totals.balanceDue = data.total_balance_due;
+  return Object.keys(totals).length > 0 ? totals : undefined;
 }
 
 // "Discounts available" next to New Sales Invoice, only while some invoice still has an early payment discount.
@@ -108,14 +58,15 @@ function useDiscountsLink(businessId, config, active) {
 }
 
 // ?tab=<type tab>[&q=search][&p=N]: Manager's columns for the type, server totals, search and pages.
-export default function TradeDocumentsList({ businessId, config, page, search, active, canCreate }) {
+export default function TradeDocumentsList({ businessId, config, page, search, active, canCreate, canEdit }) {
   const navigate = useTabNavigate(config.tab);
   const [query, setQuery] = useUrlSearch(navigate, search, active);
   const { data, error } = useLoad(() => config.service.list(businessId, { page, search }), [businessId, config.type, page, search, active]);
   const showDiscounts = useDiscountsLink(businessId, config, active);
 
 
-  if (!data && !error) return <TableSkeleton columns={config.columns.length} />;
+  const columns = config.columns.map((column) => tradeColumn(column, config)).filter(Boolean);
+  if (!data && !error) return <TableSkeleton columns={columns.length} actions />;
 
   const actions = (
     <>
@@ -154,7 +105,16 @@ export default function TradeDocumentsList({ businessId, config, page, search, a
         {items.length === 0 ? (
           <EmptyState icon={FileText} title={search ? 'Nothing matches this search' : `No ${config.plural.toLowerCase()} yet`} />
         ) : (
-          <DocumentsTable config={config} data={data} onOpen={(id) => navigate({ q: search, view: id })} />
+          <ListTable
+            columns={columns}
+            rows={items}
+            totals={tradeTotals(columns, data)}
+            onView={(row) => navigate({ q: search, view: row.id })}
+            onEdit={canEdit ? (row) => navigate({ q: search, edit: row.id }) : null}
+            canEdit={isEditableDocument}
+            // Closed purchase invoices stay listed (sorted last by the server), muted.
+            rowClassName={(row) => row.is_closed && 'text-muted-foreground'}
+          />
         )}
       </ListCard>
     </div>

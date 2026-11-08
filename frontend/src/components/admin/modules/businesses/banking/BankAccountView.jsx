@@ -10,7 +10,8 @@ import {
   deleteBankAccount, getBankAccount, updateBankAccount,
 } from '@/lib/services/bank-accounts.service';
 import { isVersionConflict } from '@/lib/services/api-client';
-import { formatMoney } from '@/lib/utils/money';
+import { BalanceSection, SectionBalancesToggle } from '@/components/common/balances';
+import { Money } from '@/components/common/money';
 import { BackButton, ErrorAlert, useTabNavigate } from '../ledger/ledger-parts';
 import { BANKING_TABS, DocumentSkeleton, InactiveBadge, useLoad } from './banking-parts';
 import { BALANCE_COLUMNS } from './BankAccountsList';
@@ -18,14 +19,14 @@ import BankRegister, { registerParams } from './BankRegister';
 import NamedAccountDialog from './NamedAccountDialog';
 
 const IN_USE = 'bank_account_in_use';
+const ACTUAL_BALANCE = 'actual_balance';
 const IN_USE_MESSAGE = 'This account has transactions or a starting balance, so it cannot be deleted. Mark it Inactive instead.';
 
 function AccountCard({ account }) {
   return (
     <Card className="p-card">
-      <dl className="grid gap-x-8 gap-y-5 sm:grid-cols-3">
+      <dl className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
         <div><dt className="text-sm text-muted-foreground">Name</dt><dd className="mt-1 font-semibold">{account.name}</dd></div>
-        <div><dt className="text-sm text-muted-foreground">Code</dt><dd className="mt-1">{account.code || '—'}</dd></div>
         <div>
           <dt className="text-sm text-muted-foreground">Pending transactions</dt>
           <dd className="mt-1">{account.can_have_pending ? 'Allowed' : 'Not allowed'}</dd>
@@ -36,7 +37,9 @@ function AccountCard({ account }) {
         {BALANCE_COLUMNS.map(([key, label]) => (
           <div key={key}>
             <dt className="text-sm text-muted-foreground">{label}</dt>
-            <dd className="num mt-1 text-start font-semibold">{formatMoney(account[key])}</dd>
+            <dd className="mt-1 font-semibold">
+              <Money value={account[key]} zero="muted" tone={key === ACTUAL_BALANCE ? 'balance' : undefined} />
+            </dd>
           </div>
         ))}
       </dl>
@@ -77,6 +80,7 @@ export default function BankAccountView({ businessId, accountId, page, range, ri
 
   const actions = (
     <>
+      <SectionBalancesToggle name={account.name} />
       {rights.delete && (
         <MoreMenu items={[{ label: 'Delete', icon: Trash2, destructive: true, onSelect: () => setConfirmDelete(true) }]} />
       )}
@@ -85,34 +89,36 @@ export default function BankAccountView({ businessId, accountId, page, range, ri
   );
 
   return (
-    <div className="max-w-4xl">
-      {editing && (
-        <NamedAccountDialog title="Edit Bank or Cash Account" bank account={account} onSubmit={update} onClose={() => setEditing(false)} />
-      )}
-      <ConfirmDialog
-        confirm={confirmDelete ? { title: 'Delete this account?', body: account.name, action: 'Delete', destructive: true } : null}
-        busy={deleting}
-        onConfirm={remove}
-        onClose={() => setConfirmDelete(false)}
-        cancelLabel="Cancel"
-      />
-      <PageHeader
-        title={<span className="flex flex-wrap items-center gap-3">{account.name}{account.is_inactive && <InactiveBadge />}</span>}
-        description="Bank or Cash Account"
-        back={<BackButton onClick={() => navigate({})} />}
-        actions={actions}
-      />
-      {error && <ErrorAlert>{error}</ErrorAlert>}
-      <AccountCard account={account} />
-      <div className="mt-10">
-        <BankRegister
-          businessId={businessId}
-          accountId={account.id}
-          page={page}
-          range={range}
-          onChange={(next) => navigate({ view: account.id, ...registerParams(next) })}
+    <BalanceSection>
+      <div className="max-w-4xl">
+        {editing && (
+          <NamedAccountDialog title="Edit Bank or Cash Account" bank account={account} onSubmit={update} onClose={() => setEditing(false)} />
+        )}
+        <ConfirmDialog
+          confirm={confirmDelete ? { title: 'Delete this account?', body: account.name, action: 'Delete', destructive: true } : null}
+          busy={deleting}
+          onConfirm={remove}
+          onClose={() => setConfirmDelete(false)}
+          cancelLabel="Cancel"
         />
+        <PageHeader
+          title={<span className="flex flex-wrap items-center gap-3">{account.name}{account.is_inactive && <InactiveBadge />}</span>}
+          description="Bank or Cash Account"
+          back={<BackButton onClick={() => navigate({})} />}
+          actions={actions}
+        />
+        {error && <ErrorAlert>{error}</ErrorAlert>}
+        <AccountCard account={account} />
+        <div className="mt-10">
+          <BankRegister
+            businessId={businessId}
+            accountId={account.id}
+            page={page}
+            range={range}
+            onChange={(next) => navigate({ view: account.id, ...registerParams(next) })}
+          />
+        </div>
       </div>
-    </div>
+    </BalanceSection>
   );
 }

@@ -32,5 +32,5 @@ export default function BusinessBankAndCashAccounts({ business }) {
       />
     );
   }
-  return <BankAccountsList businessId={business.id} page={route.page} active={route.active} canCreate={rights.create} />;
+  return <BankAccountsList businessId={business.id} page={route.page} active={route.active} canCreate={rights.create} canEdit={rights.edit} />;
 }

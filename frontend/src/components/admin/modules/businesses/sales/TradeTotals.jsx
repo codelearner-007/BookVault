@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { formatMoney } from '@/lib/utils/money';
+import { Money } from '@/components/common/money';
 import { isZeroAmount } from '../coa/coa-tree';
 import { plainNumber } from './sales-documents';
 
@@ -44,7 +44,7 @@ function Row({ label, value, strong }) {
   return (
     <div className={strong ? 'flex justify-between gap-6 font-semibold' : 'flex justify-between gap-6 text-sm text-muted-foreground'}>
       <dt>{label}</dt>
-      <dd className="num">{formatMoney(value)}</dd>
+      <dd className="num"><Money value={value} /></dd>
     </div>
   );
 }
