@@ -11,7 +11,7 @@ import { RIGHT_EDIT } from '@/lib/constants/access-rights';
 import { NavGroup, NavItem } from './NavItem';
 import { BusinessSwitcher } from './BusinessSwitcher';
 import { useShell } from './ShellContext';
-import { PLATFORM_LINKS, WORKSPACE_LINKS } from './nav-links';
+import { workspaceLinks } from './nav-links';
 
 const PRODUCT_NAME = process.env.NEXT_PUBLIC_PRODUCTNAME || 'BookVault';
 
@@ -22,18 +22,12 @@ function isActivePath(pathname, { href, exact }) {
 function WorkspaceNav({ iconsOnly, onNavigate }) {
   const pathname = usePathname();
   const { isSuperAdmin } = useShell();
-  const item = (link) => (
-    <NavItem key={link.href} {...link} active={isActivePath(pathname, link)} iconsOnly={iconsOnly} onNavigate={onNavigate} />
-  );
   return (
-    <>
-      <NavGroup iconsOnly={iconsOnly}>{WORKSPACE_LINKS.map(item)}</NavGroup>
-      {isSuperAdmin && (
-        <NavGroup label={SHELL_COPY.groupPlatform} iconsOnly={iconsOnly}>
-          {PLATFORM_LINKS.map(item)}
-        </NavGroup>
-      )}
-    </>
+    <NavGroup iconsOnly={iconsOnly}>
+      {workspaceLinks(isSuperAdmin).map((link) => (
+        <NavItem key={link.href} {...link} active={isActivePath(pathname, link)} iconsOnly={iconsOnly} onNavigate={onNavigate} />
+      ))}
+    </NavGroup>
   );
 }
 

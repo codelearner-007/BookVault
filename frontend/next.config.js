@@ -14,6 +14,15 @@ const nextConfig = {
     ],
   },
 
+  // The old Platform area now lives in the Admin Panel tab of the one admin interface.
+  async redirects() {
+    return [
+      { source: "/super-admin/profile", destination: "/admin/profile", permanent: true },
+      { source: "/super-admin", destination: "/admin/panel", permanent: true },
+      { source: "/super-admin/:path*", destination: "/admin/panel/:path*", permanent: true },
+    ];
+  },
+
   async rewrites() {
     // FastAPI backend URL
     const apiUrl =

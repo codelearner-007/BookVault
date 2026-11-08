@@ -15,6 +15,7 @@ import { SUPER_ADMIN_COPY } from '@/lib/copy/super-admin';
 const DATE_FORMAT = 'd MMM yyyy';
 const DATE_TIME_FORMAT = 'd MMM yyyy, HH:mm';
 export const SUPER_ADMIN_ROLE = 'super_admin';
+export const ACCOUNT_STATUS = { active: 'active', suspended: 'suspended' };
 
 export function formatDate(value, fallback = '—') {
   return value ? format(new Date(value), DATE_FORMAT) : fallback;
@@ -38,11 +39,15 @@ export function PlatformRoleBadge({ name }) {
   return <Badge variant="role">{roleLabel(name)}</Badge>;
 }
 
+// An account's single Status: Active or Suspended. Set by the super admin today; a subscription
+// is planned to drive the same field later (subscription on -> Active, off -> Suspended).
+export function accountStatus(user) {
+  return user.is_banned ? ACCOUNT_STATUS.suspended : ACCOUNT_STATUS.active;
+}
+
 export function UserStatusBadge({ user }) {
-  const { status } = SUPER_ADMIN_COPY;
-  if (user.is_banned) return <Badge variant="bad">{status.suspended}</Badge>;
-  if (!user.email_confirmed_at) return <Badge variant="draft">{status.unverified}</Badge>;
-  return <Badge variant="ok">{status.active}</Badge>;
+  const status = accountStatus(user);
+  return <Badge variant={status === ACCOUNT_STATUS.suspended ? 'bad' : 'ok'}>{SUPER_ADMIN_COPY.status[status]}</Badge>;
 }
 
 // Footer of a paginated list card: the count, plus Previous / Next when there is more than one page.

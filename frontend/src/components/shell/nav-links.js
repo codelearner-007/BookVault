@@ -1,8 +1,9 @@
-import { Blocks, Building2, ClipboardList, LayoutDashboard, LayoutGrid, ScrollText, UserRound, Users } from 'lucide-react';
+import { Building2, ClipboardList, LayoutDashboard, ShieldCheck, UserRound } from 'lucide-react';
 import { SHELL_COPY } from '@/lib/copy/shell';
 import { SUPER_ADMIN_COPY } from '@/lib/copy/super-admin';
+import { ADMIN_PANEL_PATH } from '@/lib/navigation/admin-panel';
 
-// Workspace (outside a business) and Platform (super admin) navigation.
+// Workspace navigation (outside a business): the same for admins and the super admin.
 export const WORKSPACE_LINKS = [
   { href: '/admin', label: SHELL_COPY.dashboard, icon: LayoutDashboard, exact: true },
   { href: '/admin/businesses', label: SHELL_COPY.businesses, icon: Building2 },
@@ -10,9 +11,15 @@ export const WORKSPACE_LINKS = [
   { href: '/admin/profile', label: SHELL_COPY.account, icon: UserRound },
 ];
 
-export const PLATFORM_LINKS = [
-  { href: '/super-admin', label: SHELL_COPY.platformOverview, icon: LayoutGrid, exact: true },
-  { href: '/super-admin/users', label: SHELL_COPY.platformUsers, icon: Users },
-  { href: '/super-admin/features', label: SHELL_COPY.platformModules, icon: Blocks },
-  { href: '/super-admin/audit', label: SUPER_ADMIN_COPY.nav.audit, icon: ScrollText },
+// The one extra sidebar tab of the super admin; its sections are tabs on the page.
+export const ADMIN_PANEL_LINK = { href: ADMIN_PANEL_PATH, label: SUPER_ADMIN_COPY.panel.label, icon: ShieldCheck };
+
+export const ADMIN_PANEL_SECTIONS = [
+  { href: `${ADMIN_PANEL_PATH}/users`, label: SUPER_ADMIN_COPY.panel.users },
+  { href: `${ADMIN_PANEL_PATH}/audit`, label: SUPER_ADMIN_COPY.panel.audit },
+  { href: `${ADMIN_PANEL_PATH}/features`, label: SUPER_ADMIN_COPY.panel.features },
 ];
+
+export function workspaceLinks(isSuperAdmin) {
+  return isSuperAdmin ? [...WORKSPACE_LINKS, ADMIN_PANEL_LINK] : WORKSPACE_LINKS;
+}

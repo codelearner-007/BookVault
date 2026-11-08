@@ -6,6 +6,25 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+SCOPE_ADMINS = "admins"
+# Admin Panel list: platform admins, plus self-registered accounts demoted to member (so the
+# super admin can switch them back). Never the super admin, never provisioned business members
+# (those belong to the admin who created them and live on that business's Members page).
+ADMINS_SCOPE_SQL = """
+    NOT EXISTS (
+        SELECT 1 FROM user_roles ur JOIN roles r ON ur.role_id = r.id
+        WHERE ur.user_id = u.id AND r.name = 'super_admin'
+    )
+    AND (
+        EXISTS (
+            SELECT 1 FROM user_roles ur JOIN roles r ON ur.role_id = r.id
+            WHERE ur.user_id = u.id AND r.name = 'admin'
+        )
+        OR NOT EXISTS (SELECT 1 FROM user_profiles p WHERE p.user_id = u.id AND p.is_provisioned)
+    )
+"""
+
+
 class UserRepository:
     """Repository for auth.users table (read-only via raw SQL)."""
 
@@ -48,8 +67,9 @@ class UserRepository:
         email_verified: Optional[bool] = None,
         status: Optional[str] = None,
         search: Optional[str] = None,
+        scope: Optional[str] = None,
     ) -> int:
-        where_clause, params = self._build_where(role, email_verified, status, search)
+        where_clause, params = self._build_where(role, email_verified, status, search, scope)
         query = text(f"SELECT COUNT(DISTINCT u.id) FROM private.accounts u {where_clause}")
         result = await self.session.execute(query.bindparams(**params))
         return result.scalar() or 0
@@ -62,8 +82,9 @@ class UserRepository:
         email_verified: Optional[bool] = None,
         status: Optional[str] = None,
         search: Optional[str] = None,
+        scope: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        where_clause, params = self._build_where(role, email_verified, status, search)
+        where_clause, params = self._build_where(role, email_verified, status, search, scope)
         query = text(f"""
             SELECT DISTINCT
                 u.id,
@@ -72,7 +93,9 @@ class UserRepository:
                 u.updated_at,
                 u.last_sign_in_at,
                 u.email_confirmed_at,
-                u.banned_until
+                u.banned_until,
+                (SELECT p.full_name FROM user_profiles p WHERE p.user_id = u.id) AS full_name,
+                public.count_owned_businesses(u.id, false) AS businesses_owned
             FROM private.accounts u
             {where_clause}
             ORDER BY u.created_at DESC
@@ -90,6 +113,8 @@ class UserRepository:
                 "last_sign_in_at": row.last_sign_in_at,
                 "email_confirmed_at": row.email_confirmed_at,
                 "banned_until": row.banned_until,
+                "full_name": row.full_name,
+                "businesses_owned": row.businesses_owned or 0,
             }
             for row in result
         ]
@@ -100,6 +125,7 @@ class UserRepository:
         email_verified: Optional[bool],
         status: Optional[str],
         search: Optional[str],
+        scope: Optional[str] = None,
     ) -> tuple[str, Dict[str, Any]]:
         conditions: List[str] = []
         params: Dict[str, Any] = {}
@@ -128,6 +154,9 @@ class UserRepository:
                 )
             """)
             params["role"] = role
+
+        if scope == SCOPE_ADMINS:
+            conditions.append(ADMINS_SCOPE_SQL)
 
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
         return where_clause, params

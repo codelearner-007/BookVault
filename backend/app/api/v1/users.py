@@ -1,6 +1,6 @@
 """User management endpoints."""
 
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -43,14 +43,18 @@ async def list_users_with_roles(
     email_verified: Optional[bool] = Query(None),
     status: Optional[str] = Query(None, max_length=KEY_MAX),
     search: Optional[str] = Query(None, max_length=SEARCH_MAX),
+    scope: Optional[Literal["admins"]] = Query(None),
     db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[UserWithRolesResponse]:
-    """List users with pagination, filtering, and embedded roles. Requires: users:read_all"""
+    """List users with pagination, filtering, and embedded roles (live super admin + AAL2).
+
+    scope=admins: the Admin Panel list (platform admins; no super admin, no business members).
+    """
     service = UserService(db)
     return await service.list_users_with_roles(
         page=params.page, page_size=params.page_size,
         role=role, email_verified=email_verified,
-        status=status, search=search,
+        status=status, search=search, scope=scope,
     )
 
 

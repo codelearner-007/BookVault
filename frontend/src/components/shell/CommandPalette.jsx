@@ -9,7 +9,7 @@ import { SHELL_COPY } from '@/lib/copy/shell';
 import { groupTabs, tabMeta } from '@/lib/navigation/business-tabs';
 import { useNewActions } from './use-new-actions';
 import { useShell } from './ShellContext';
-import { PLATFORM_LINKS, WORKSPACE_LINKS } from './nav-links';
+import { workspaceLinks } from './nav-links';
 
 // Ctrl/Cmd+K: create, go to any tab (or workspace page), switch business.
 export function CommandPalette({ open, onOpenChange }) {
@@ -27,7 +27,7 @@ export function CommandPalette({ open, onOpenChange }) {
     ? groupTabs(workspace.tabs.filter((t) => t.enabled)).flatMap((group) =>
         group.tabs.map((tab) => ({ key: tab.key, label: tab.label, icon: tabMeta(tab.key).icon, href: `${pathname}?tab=${tab.key}` }))
       )
-    : [...WORKSPACE_LINKS, ...(isSuperAdmin ? PLATFORM_LINKS : [])].map((link) => ({ ...link, key: link.href }));
+    : workspaceLinks(isSuperAdmin).map((link) => ({ ...link, key: link.href }));
 
   return (
     <CommandDialog

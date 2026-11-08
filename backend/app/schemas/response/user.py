@@ -37,6 +37,8 @@ class UserWithRolesResponse(BaseModel):
     email_confirmed_at: Optional[datetime] = None
     banned_until: Optional[datetime] = None
     is_banned: bool = False
+    full_name: Optional[str] = None
+    businesses_owned: int = 0
     roles: List[UserRoleResponse]
 
     @field_validator("is_banned", mode="before")

@@ -1,7 +1,7 @@
 import SuperAdminUsersPage from '@/components/super-admin/SuperAdminUsersPage';
 
 export const metadata = {
-  title: 'Users and admins | Super Admin',
+  title: 'Users and admins | Admin Panel',
 };
 
 export const dynamic = 'force-dynamic';

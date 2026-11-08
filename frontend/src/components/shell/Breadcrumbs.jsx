@@ -6,17 +6,18 @@ import { SHELL_COPY, PAGE_LABELS } from '@/lib/copy/shell';
 import { DEFAULT_TAB, businessRoute } from '@/lib/navigation/business-tabs';
 import { SUPER_ADMIN_COPY } from '@/lib/copy/super-admin';
 import { useShell } from './ShellContext';
+import { ADMIN_PANEL_SECTIONS } from './nav-links';
+import { ADMIN_PANEL_PATH } from '@/lib/navigation/admin-panel';
+
+const PANEL_CRUMB = { label: SUPER_ADMIN_COPY.panel.label, href: ADMIN_PANEL_PATH };
 
 const AREA_CRUMBS = [
-  { prefix: '/super-admin/users', trail: [SHELL_COPY.groupPlatform, SHELL_COPY.platformUsers] },
-  { prefix: '/super-admin/features', trail: [SHELL_COPY.groupPlatform, SHELL_COPY.platformModules] },
-  { prefix: '/super-admin/audit', trail: [SHELL_COPY.groupPlatform, SUPER_ADMIN_COPY.nav.audit] },
-  { prefix: '/super-admin/profile', trail: [SHELL_COPY.groupPlatform, SHELL_COPY.account] },
-  { prefix: '/super-admin', trail: [SHELL_COPY.groupPlatform, SHELL_COPY.platformOverview] },
-  { prefix: '/admin/businesses', trail: [SHELL_COPY.businesses] },
-  { prefix: '/admin/audit', trail: [SHELL_COPY.auditLogs] },
-  { prefix: '/admin/profile', trail: [SHELL_COPY.account] },
-  { prefix: '/admin', trail: [SHELL_COPY.dashboard] },
+  ...ADMIN_PANEL_SECTIONS.map(({ href, label }) => ({ prefix: href, trail: [PANEL_CRUMB, { label }] })),
+  { prefix: ADMIN_PANEL_PATH, trail: [PANEL_CRUMB] },
+  { prefix: '/admin/businesses', trail: [{ label: SHELL_COPY.businesses }] },
+  { prefix: '/admin/audit', trail: [{ label: SHELL_COPY.auditLogs }] },
+  { prefix: '/admin/profile', trail: [{ label: SHELL_COPY.account }] },
+  { prefix: '/admin', trail: [{ label: SHELL_COPY.dashboard }] },
 ];
 
 function useBusinessCrumbs() {
@@ -36,7 +37,7 @@ function useBusinessCrumbs() {
 
 function areaCrumbs(pathname) {
   const match = AREA_CRUMBS.find((entry) => pathname.startsWith(entry.prefix));
-  return (match?.trail ?? []).map((label) => ({ label }));
+  return match?.trail ?? [];
 }
 
 function Trail({ crumbs }) {

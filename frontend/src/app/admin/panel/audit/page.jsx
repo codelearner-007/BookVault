@@ -1,7 +1,7 @@
 import PlatformAuditPage from '@/components/super-admin/PlatformAuditPage';
 
 export const metadata = {
-  title: 'Platform audit | Super Admin',
+  title: 'Platform audit | Admin Panel',
 };
 
 export const dynamic = 'force-dynamic';

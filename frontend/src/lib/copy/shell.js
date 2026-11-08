@@ -2,7 +2,6 @@
 export const SHELL_COPY = {
   navWorkspace: 'Workspace',
   navBusiness: 'Business tabs',
-  groupPlatform: 'Platform',
   dashboard: 'Dashboard',
   businesses: 'Businesses',
   allBusinesses: 'All businesses',
@@ -12,10 +11,6 @@ export const SHELL_COPY = {
   auditLogs: 'Audit logs',
   account: 'Account',
   security: 'Security and 2FA',
-  platformAdmin: 'Platform admin',
-  platformOverview: 'Overview',
-  platformUsers: 'Users and admins',
-  platformModules: 'Modules',
   logout: 'Log out',
   signedInAs: 'Signed in as',
   members: 'Members',

@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import { checkMFAStatus } from '@/lib/utils/mfa-check'
+import { isAdminPanelPath } from '@/lib/navigation/admin-panel'
 
 export async function updateSession(request) {
     let supabaseResponse = NextResponse.next({
@@ -47,8 +48,7 @@ export async function updateSession(request) {
     }
     const isProtectedArea =
         pathname.startsWith('/app') ||
-        pathname.startsWith('/admin') ||
-        pathname.startsWith('/super-admin')
+        pathname.startsWith('/admin')
 
     if ((!user || !user.user) && isProtectedArea) {
         const url = request.nextUrl.clone()
@@ -127,17 +127,18 @@ export async function updateSession(request) {
         // /app/* — legacy shell: redirect to role-appropriate dashboard
         if (pathname.startsWith('/app')) {
             const url = request.nextUrl.clone()
-            url.pathname = isSuperAdmin ? '/super-admin' : '/admin'
-            return NextResponse.redirect(url)
-        }
-
-        // /super-admin/* — only super_admin allowed
-        if (pathname.startsWith('/super-admin') && !isSuperAdmin) {
-            const url = request.nextUrl.clone()
             url.pathname = '/admin'
             return NextResponse.redirect(url)
         }
-        // /admin/* is open to super_admin too (CS-25): the Platform area stays under /super-admin.
+
+        // /admin/panel/* (Admin Panel) — only super_admin; AAL2 is already enforced above
+        // (verified factor -> /auth/2fa, none -> /auth/enroll-2fa). Everyone else shares /admin.
+        if (isAdminPanelPath(pathname) && !isSuperAdmin) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/admin'
+            url.search = ''
+            return NextResponse.redirect(url)
+        }
     }
 
     // IMPORTANT: You *must* return the supabaseResponse object as it is.

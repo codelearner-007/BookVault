@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { KeyRound, LogOut, PanelLeft, Plus, Search, ShieldCheck, UserRound } from 'lucide-react';
+import { KeyRound, LogOut, PanelLeft, Plus, Search, UserRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -17,7 +17,6 @@ import { SHELL_COPY } from '@/lib/copy/shell';
 import { nextSidebarState } from '@/lib/navigation/sidebar-state';
 import { Breadcrumbs } from './Breadcrumbs';
 import { useNewActions } from './use-new-actions';
-import { useShell } from './ShellContext';
 
 function initials(email) {
   const parts = (email || '?').split('@')[0].split(/[._-]/).filter(Boolean);
@@ -77,7 +76,6 @@ function NewMenu() {
 function UserMenu() {
   const { user } = useGlobal();
   const { logout } = useAuth();
-  const { isSuperAdmin } = useShell();
   const email = user?.email ?? '';
   return (
     <DropdownMenu>
@@ -99,11 +97,6 @@ function UserMenu() {
         <DropdownMenuItem asChild>
           <Link href="/admin/profile?tab=security"><KeyRound aria-hidden="true" />{SHELL_COPY.security}</Link>
         </DropdownMenuItem>
-        {isSuperAdmin && (
-          <DropdownMenuItem asChild>
-            <Link href="/super-admin"><ShieldCheck aria-hidden="true" />{SHELL_COPY.platformAdmin}</Link>
-          </DropdownMenuItem>
-        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => void logout().catch(() => {})}>
           <LogOut aria-hidden="true" />

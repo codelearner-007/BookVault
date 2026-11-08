@@ -69,10 +69,11 @@ class UserService:
         email_verified: Optional[bool] = None,
         status: Optional[str] = None,
         search: Optional[str] = None,
+        scope: Optional[str] = None,
     ) -> PaginatedResponse[UserWithRolesResponse]:
         total = await self.user_repo.count_filtered(
             role=role, email_verified=email_verified,
-            status=status, search=search,
+            status=status, search=search, scope=scope,
         )
         offset = (page - 1) * page_size
         total_pages = (total + page_size - 1) // page_size
@@ -80,7 +81,7 @@ class UserService:
         users = await self.user_repo.list_filtered(
             offset=offset, limit=page_size,
             role=role, email_verified=email_verified,
-            status=status, search=search,
+            status=status, search=search, scope=scope,
         )
 
         if not users:

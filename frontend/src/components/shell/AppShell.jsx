@@ -13,7 +13,8 @@ import { Topbar } from './Topbar';
 import { CommandPalette } from './CommandPalette';
 
 const LAST_ROUTE_KEY = 'admin_last_path';
-const TRACKED_PREFIXES = ['/admin', '/super-admin'];
+// /admin/panel (super admin) sits under /admin, so it is tracked too.
+const TRACKED_PREFIX = '/admin';
 const RESTORE_FROM = '/admin';
 
 // Restore runs once per document load, so a deliberate visit to the dashboard is never redirected.
@@ -48,7 +49,7 @@ function useRouteMemory() {
   }, [pathname, search, router]);
 
   useEffect(() => {
-    if (!TRACKED_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return;
+    if (!pathname.startsWith(TRACKED_PREFIX)) return;
     window.sessionStorage.setItem(LAST_ROUTE_KEY, search ? `${pathname}?${search}` : pathname);
   }, [pathname, search]);
 }
@@ -123,7 +124,7 @@ function ShellFrame({ initialSidebar, children }) {
   );
 }
 
-// One shell for the whole signed-in app: workspace pages, the business area and the Platform area.
+// One shell for the whole signed-in app: workspace pages, the business area and the Admin Panel.
 export default function AppShell({ role, initialSidebar, children }) {
   return (
     <ShellProvider role={role}>
