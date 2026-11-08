@@ -4,7 +4,6 @@ import { plainNumber } from '../sales/sales-documents';
 /*
   Inventory (B6): the sidebar tabs, the access areas a picker needs, and one config per stock document
   (transfer, write-off, production order) naming its words, service, list columns and which parts apply.
-    posts       hits the ledger: Transaction Journal on the view (a transfer only moves stock)
     locations   'pair': From and To (transfer); 'one': an optional location (null = the default one)
     lineAccount write-off lines take an account (null = Inventory write-offs)
     production  finished item + qty, bill of materials and non-inventory cost lines
@@ -37,7 +36,6 @@ export const STOCK_DOCUMENTS = {
     title: 'Inventory Transfer',
     plural: 'Inventory Transfers',
     noun: 'inventory transfer',
-    posts: false,
     locations: 'pair',
     voidCopy: TRANSFER_VOID,
     statuses: STOCK_STATUS,
@@ -53,7 +51,6 @@ export const STOCK_DOCUMENTS = {
     title: 'Inventory Write-off',
     plural: 'Inventory Write-offs',
     noun: 'write-off',
-    posts: true,
     locations: 'one',
     lineAccount: true,
     statuses: STOCK_STATUS,
@@ -66,7 +63,6 @@ export const STOCK_DOCUMENTS = {
     title: 'Production Order',
     plural: 'Production Orders',
     noun: 'production order',
-    posts: true,
     locations: 'one',
     production: true,
     statuses: PRODUCTION_STATUS,

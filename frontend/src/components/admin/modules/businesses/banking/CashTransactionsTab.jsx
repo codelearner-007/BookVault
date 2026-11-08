@@ -9,7 +9,7 @@ import CashTransactionView from './CashTransactionView';
 // ?tab=receipts|payments           list (&p=N)
 //                       &new=1     new document
 //                       &edit=<id> edit a document
-//                       &view=<id> view it, its Transaction Journal and attachments
+//                       &view=<id> view it and attachments
 // The server enforces every right; these only hide what the user cannot do.
 export default function CashTransactionsTab({ business, kind }) {
   const direction = CASH_DIRECTIONS[kind];

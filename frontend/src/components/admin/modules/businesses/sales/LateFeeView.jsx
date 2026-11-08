@@ -5,7 +5,6 @@ import { Card } from '@/components/ui/card';
 import { latePaymentFeesService } from '@/lib/services/late-payment-fees.service';
 import { FormattedDate } from '@/components/common/business-format';
 import { Money } from '@/components/common/money';
-import TransactionJournal from '../ledger/TransactionJournal';
 import { ErrorAlert, JE_STATUS, StatusBadge, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from '../banking/AttachmentsPanel';
 import { DocumentSkeleton, documentHref, useLoad } from '../banking/banking-parts';
@@ -13,7 +12,7 @@ import DocumentViewFrame from '../banking/DocumentViewFrame';
 import { DOC_TYPES, SALES_TABS } from './sales-documents';
 import { Field } from './sales-parts';
 
-// ?tab=late-payment-fees&view=<id>: the fee, Edit / Post / Void, its Transaction Journal and attachments.
+// ?tab=late-payment-fees&view=<id>: the fee, Edit / Post / Void and attachments.
 export default function LateFeeView({ business, feeId, rights }) {
   const navigate = useTabNavigate(SALES_TABS.lateFees);
   const { data, error, reload } = useLoad(
@@ -54,7 +53,6 @@ export default function LateFeeView({ business, feeId, rights }) {
         </dl>
         {fee.description && <p className="mt-6 whitespace-pre-wrap">{fee.description}</p>}
       </Card>
-      <TransactionJournal businessId={business.id} documentId={fee.id} version={fee.version} />
       <AttachmentsPanel businessId={business.id} documentId={fee.id} canEdit={rights.edit && !fee.is_locked} />
     </DocumentViewFrame>
   );

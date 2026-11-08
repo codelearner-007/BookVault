@@ -14,7 +14,6 @@ import {
 } from '@/lib/services/journal-entries.service';
 import { FormattedDate } from '@/components/common/business-format';
 import { Money } from '@/components/common/money';
-import TransactionJournal from './TransactionJournal';
 import {
   BackButton, ErrorAlert, JE_STATUS, JE_TAB, StatusBadge, accountLabel, useTabNavigate,
 } from './ledger-parts';
@@ -97,7 +96,7 @@ function useEntry(businessId, entryId) {
   return { ...state, reload: () => setReloadKey((k) => k + 1) };
 }
 
-// ?tab=journal-entries&view=<id>: the entry, its actions and its Transaction Journal.
+// ?tab=journal-entries&view=<id>: the entry, its actions.
 export default function JournalEntryView({ businessId, entryId, rights }) {
   const navigate = useTabNavigate(JE_TAB);
   const { entry, error: loadError, reload } = useEntry(businessId, entryId);
@@ -181,7 +180,6 @@ export default function JournalEntryView({ businessId, entryId, rights }) {
         </p>
       )}
       <EntryDocument entry={entry} />
-      <TransactionJournal businessId={businessId} documentId={entry.id} version={entry.version} />
     </div>
   );
 }

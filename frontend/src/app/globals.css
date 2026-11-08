@@ -455,6 +455,9 @@
   }
 }
 
+/* Manager-style grid: a faint rule between columns, header row included (row rules come from the cells). */
+:is(th, td):not(:last-child) { border-inline-end: 1px solid var(--row-divider); }
+
 /*
   Phones: a list table becomes stacked cards (one mechanism for every list, review-notes §6 H).
   Cells carry data-card tokens (title, end, meta, actions, start, hide) and an optional data-label
@@ -475,6 +478,7 @@
   .table-cards tbody tr:last-child { border-bottom: 0; }
   .table-cards tbody tr:has(> td[data-card~="start"]) { grid-template-columns: auto minmax(0, 1fr) auto; }
   .table-cards td {
+    border-inline-end: 0;
     grid-column: 1;
     height: auto;
     min-width: 0;

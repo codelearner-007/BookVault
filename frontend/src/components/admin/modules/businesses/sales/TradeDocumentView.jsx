@@ -9,7 +9,6 @@ import { RIGHT_CREATE } from '@/lib/constants/access-rights';
 import { can } from '@/lib/navigation/access';
 import { tabArea } from '@/lib/navigation/business-tabs';
 import { inventoryLocationsService } from '@/lib/services/inventory.service';
-import TransactionJournal from '../ledger/TransactionJournal';
 import { ErrorAlert, JE_STATUS, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from '../banking/AttachmentsPanel';
 import { DocumentSkeleton, useLoad } from '../banking/banking-parts';
@@ -51,7 +50,7 @@ function Warnings({ warnings }) {
 
 /*
   ?tab=<type tab>&view=<id>: the document, Edit / Post / Void (Cancel for quotes and orders), Copy to,
-  the Transaction Journal of posting types and attachments. Posting an invoice over the customer's credit
+  and attachments. Posting an invoice over the customer's credit
   limit asks first (409 credit_limit_warning), then posts with credit_limit_override.
 */
 export default function TradeDocumentView({ business, config, docId, rights }) {
@@ -124,7 +123,6 @@ export default function TradeDocumentView({ business, config, docId, rights }) {
       {postError && <ErrorAlert>{postError}</ErrorAlert>}
       <Warnings warnings={doc.warnings} />
       <TradeDocumentPaper doc={doc} config={config} businessName={business.name} locationName={locationName} />
-      {config.posts && <TransactionJournal businessId={business.id} documentId={doc.id} version={doc.version} />}
       <AttachmentsPanel businessId={business.id} documentId={doc.id} canEdit={rights.edit && !doc.is_locked} />
     </DocumentViewFrame>
   );

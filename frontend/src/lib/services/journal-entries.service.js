@@ -35,8 +35,3 @@ export async function computeJournalTotals(businessId, lines) {
     body: JSON.stringify({ lines }),
   });
 }
-
-// The posted ledger entries of any document: the original and, after a void or repost, its reversals.
-export async function getDocumentJournal(businessId, documentId) {
-  return apiClient.get(`/v1/businesses/${businessId}/documents/${documentId}/journal`);
-}

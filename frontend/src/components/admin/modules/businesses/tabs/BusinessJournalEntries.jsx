@@ -12,7 +12,7 @@ import { JE_AREA, JE_TAB, usePageParam } from '../ledger/ledger-parts';
 // ?tab=journal-entries                list (&p=N for the page)
 //                     &new=1          new entry
 //                     &edit=<id>      edit an entry
-//                     &view=<id>      view an entry and its Transaction Journal
+//                     &view=<id>      view an entry
 // The server enforces every right; these only hide what the user cannot do.
 export default function BusinessJournalEntries({ business }) {
   const searchParams = useSearchParams();

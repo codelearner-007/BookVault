@@ -69,7 +69,7 @@ const COLUMNS = [
       </>
     ),
   },
-  { key: 'counterparty', label: 'Counterparty', muted: true },
+  { key: 'counterparty', label: 'Counterparty', muted: true, truncate: true, className: 'md:min-w-36' },
   { key: 'received', label: 'Received', kind: COLUMN_KIND.money, tone: 'in', zero: 'blank', card: 'end' },
   { key: 'paid', label: 'Paid', kind: COLUMN_KIND.money, tone: 'out', zero: 'blank', card: 'end' },
   { key: 'balance', label: 'Balance', kind: COLUMN_KIND.money, tone: 'balance' },

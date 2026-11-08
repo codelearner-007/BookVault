@@ -14,7 +14,6 @@ import { tradeDocumentsService } from '@/lib/services/trade-documents.service';
     role      what the type is within its side (quote, order, invoice, note, stock), like the API's TradeType
     priced    lines carry unit price, discount and tax code (delivery notes, goods receipts only carry qty)
     accounts  every line needs an account (invoices, notes)
-    posts     the document hits the ledger: Transaction Journal on the view
     voidCopy  void is "Cancel" (quotes, orders): nothing to reverse
     stockMovementLabel  invoices and notes: the "Also acts as ..." checkbox and, while checked, its inventory location
                         (delivery notes and goods receipts always name a location)
@@ -157,7 +156,6 @@ export const TRADE_DOCUMENTS = {
     dateLabel: 'Issue date',
     priced: true,
     accounts: false,
-    posts: false,
     voidCopy: CANCEL_COPY,
     statuses: QUOTE_STATUS,
     copyTargets: [DOC_TYPES.order, DOC_TYPES.invoice],
@@ -179,7 +177,6 @@ export const TRADE_DOCUMENTS = {
     dateLabel: 'Date',
     priced: true,
     accounts: false,
-    posts: false,
     voidCopy: CANCEL_COPY,
     statuses: ORDER_STATUS,
     copyTargets: [DOC_TYPES.invoice, DOC_TYPES.deliveryNote],
@@ -201,7 +198,6 @@ export const TRADE_DOCUMENTS = {
     dateLabel: 'Issue date',
     priced: true,
     accounts: true,
-    posts: true,
     stockMovementLabel: 'Also acts as delivery note',
     statuses: INVOICE_STATUS,
     copyTargets: [DOC_TYPES.creditNote],
@@ -223,7 +219,6 @@ export const TRADE_DOCUMENTS = {
     dateLabel: 'Issue date',
     priced: true,
     accounts: true,
-    posts: true,
     stockMovementLabel: 'Also acts as delivery note',
     statuses: NOTE_STATUS,
     copyTargets: [],
@@ -245,7 +240,6 @@ export const TRADE_DOCUMENTS = {
     dateLabel: 'Delivery date',
     priced: false,
     accounts: false,
-    posts: false,
     statuses: NOTE_STATUS,
     copyTargets: [],
     columns: [
@@ -266,7 +260,6 @@ export const TRADE_DOCUMENTS = {
     dateLabel: 'Date',
     priced: true,
     accounts: false,
-    posts: false,
     voidCopy: CANCEL_COPY,
     statuses: QUOTE_STATUS,
     copyTargets: [DOC_TYPES.purchaseOrder, DOC_TYPES.purchaseInvoice],
@@ -288,7 +281,6 @@ export const TRADE_DOCUMENTS = {
     dateLabel: 'Date',
     priced: true,
     accounts: false,
-    posts: false,
     voidCopy: CANCEL_COPY,
     statuses: ORDER_STATUS,
     copyTargets: [DOC_TYPES.purchaseInvoice, DOC_TYPES.goodsReceipt],
@@ -309,7 +301,6 @@ export const TRADE_DOCUMENTS = {
     dateLabel: 'Issue date',
     priced: true,
     accounts: true,
-    posts: true,
     stockMovementLabel: 'Also acts as goods receipt',
     closable: true,
     statuses: INVOICE_STATUS,
@@ -332,7 +323,6 @@ export const TRADE_DOCUMENTS = {
     dateLabel: 'Date',
     priced: true,
     accounts: true,
-    posts: true,
     stockMovementLabel: 'Also acts as goods return',
     statuses: NOTE_STATUS,
     copyTargets: [],
@@ -351,7 +341,6 @@ export const TRADE_DOCUMENTS = {
     dateLabel: 'Date',
     priced: false,
     accounts: false,
-    posts: false,
     statuses: NOTE_STATUS,
     copyTargets: [],
     columns: [['date', 'Date'], ['party', 'Supplier'], ['description', 'Description']],

@@ -5,7 +5,6 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { FormattedDate, Quantity } from '@/components/common/business-format';
 import { Money } from '@/components/common/money';
 import { cn } from '@/lib/utils';
-import TransactionJournal from '../ledger/TransactionJournal';
 import { ErrorAlert, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from '../banking/AttachmentsPanel';
 import { DocumentSkeleton, useLoad } from '../banking/banking-parts';
@@ -113,8 +112,7 @@ function StockDocument({ doc, config, businessName }) {
   );
 }
 
-// ?tab=<stock tab>&view=<id>: the document, Edit / Post / Void, the Transaction Journal (write-offs and
-// production orders; a transfer only moves stock) and attachments.
+// ?tab=<stock tab>&view=<id>: the document, Edit / Post / Void and attachments.
 export default function StockDocumentView({ business, config, docId, rights }) {
   const navigate = useTabNavigate(config.tab);
   const { service } = config;
@@ -140,7 +138,6 @@ export default function StockDocumentView({ business, config, docId, rights }) {
       voidCopy={config.voidCopy}
     >
       <StockDocument doc={doc} config={config} businessName={business.name} />
-      {config.posts && <TransactionJournal businessId={business.id} documentId={doc.id} version={doc.version} />}
       <AttachmentsPanel businessId={business.id} documentId={doc.id} canEdit={rights.edit && !doc.is_locked} />
     </DocumentViewFrame>
   );

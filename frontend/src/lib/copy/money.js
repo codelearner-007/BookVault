@@ -27,20 +27,6 @@ export const ACCOUNT_PICKER_COPY = {
   none: 'None',
 };
 
-export const JOURNAL_COPY = {
-  title: 'Transaction journal',
-  show: 'Show transaction journal',
-  hide: 'Hide transaction journal',
-  empty: 'Nothing posted to the ledger yet. Drafts are not posted.',
-  loading: 'Loading the journal…',
-  original: 'Original',
-  reversal: 'Reversal',
-  account: 'Account',
-  debit: 'Debit',
-  credit: 'Credit',
-  total: 'Total',
-};
-
 export const SUSPENSE_COPY = {
   toAllocate: (amount) => `${amount} to allocate`,
   toAllocateSuffix: 'to allocate',

@@ -5,7 +5,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { getTransfer, postTransfer, voidTransfer } from '@/lib/services/inter-account-transfers.service';
 import { FormattedDate } from '@/components/common/business-format';
 import { Money } from '@/components/common/money';
-import TransactionJournal from '../ledger/TransactionJournal';
 import { ErrorAlert, JE_STATUS, StatusBadge, useTabNavigate } from '../ledger/ledger-parts';
 import AttachmentsPanel from './AttachmentsPanel';
 import { BANKING_TABS, DocumentSkeleton, PendingBadge, useLoad } from './banking-parts';
@@ -86,7 +85,6 @@ export default function TransferView({ business, docId, rights }) {
       onChanged={reload}
     >
       <TransferDocument doc={doc} businessName={business.name} />
-      <TransactionJournal businessId={business.id} documentId={doc.id} version={doc.version} />
       <AttachmentsPanel businessId={business.id} documentId={doc.id} canEdit={rights.edit && !doc.is_locked} />
     </DocumentViewFrame>
   );
