@@ -19,3 +19,8 @@ export async function listGeneralLedgerTransactions(businessId, filters) {
   if (filters.accountId) query.set('account_id', filters.accountId);
   return apiClient.get(`${base(businessId)}/general-ledger-transactions?${query}`);
 }
+
+// Balance Sheet as at `to` and Profit and Loss for [from, to], every figure computed by the server.
+export async function getSummary(businessId, from, to) {
+  return apiClient.get(`${base(businessId)}/summary?${new URLSearchParams({ from, to })}`);
+}

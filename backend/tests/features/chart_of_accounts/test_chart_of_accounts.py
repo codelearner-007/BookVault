@@ -7,6 +7,11 @@ def _url(business_id: str, part: str) -> str:
     return f"/api/v1/businesses/{business_id}/chart-of-accounts/{part}"
 
 
+async def _root_id(client, owner, business_id: str, root_key: str) -> str:
+    groups = (await client.get(_url(business_id, "groups?page_size=100"), headers=owner.headers)).json()
+    return next(g["id"] for g in groups["items"] if g["root_key"] == root_key)
+
+
 async def test_coa_seeded_on_business_create(client, users):
     owner = await users.create()
     business = await create_business(client, owner)
@@ -24,7 +29,8 @@ async def test_coa_group_and_account_crud(client, users):
 
     group = await client.post(
         _url(business_id, "groups"),
-        json={"name": "Assets X", "type": "balance_sheet"},
+        json={"name": "Assets X", "type": "balance_sheet",
+              "parent_group_id": await _root_id(client, owner, business_id, "assets")},
         headers=owner.headers,
     )
     account = await client.post(
@@ -52,7 +58,8 @@ async def test_coa_reorder_accounts(client, users):
     business_id = (await create_business(client, owner))["id"]
     group = (
         await client.post(
-            _url(business_id, "groups"), json={"name": "G", "type": "pl"}, headers=owner.headers
+            _url(business_id, "groups"), headers=owner.headers,
+            json={"name": "G", "type": "pl", "parent_group_id": await _root_id(client, owner, business_id, "income")},
         )
     ).json()
     ids = []

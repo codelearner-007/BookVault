@@ -14,6 +14,7 @@ import BusinessSettings from './tabs/BusinessSettings';
 import BusinessCustomize from './tabs/BusinessCustomize';
 import BusinessDetails from './tabs/BusinessDetails';
 import BusinessChartOfAccounts from './tabs/BusinessChartOfAccounts';
+import BusinessStartingBalances from './tabs/BusinessStartingBalances';
 import BusinessBankAndCashAccounts from './tabs/BusinessBankAndCashAccounts';
 import BusinessCustomers from './tabs/BusinessCustomers';
 import BusinessSuppliers from './tabs/BusinessSuppliers';
@@ -40,6 +41,7 @@ const BUILT_TABS = Object.keys(TAB_COMPONENTS);
 const SETTINGS_PAGE_COMPONENTS = {
   'business-details': BusinessDetails,
   'chart-of-accounts': BusinessChartOfAccounts,
+  'starting-balances': BusinessStartingBalances,
 };
 
 export function WorkspaceSkeleton() {

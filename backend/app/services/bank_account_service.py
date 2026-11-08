@@ -1,4 +1,4 @@
-"""Bank account service: CRUD, system COA accounts on the first account, audit."""
+"""Bank account service: CRUD and audit (system accounts are seeded with the business, B2)."""
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,7 +6,6 @@ from app.core.exceptions import ResourceNotFoundError
 from app.core.pagination import PageParams
 from app.models.bank_account import BankAccount
 from app.repositories.bank_account_repository import BankAccountRepository
-from app.repositories.coa_repository import CoaRepository
 from app.schemas.request.bank_account import BankAccountCreate, BankAccountUpdate
 from app.schemas.response.bank_account import BankAccountListResponse, BankAccountResponse
 from app.services.access_service import BusinessContext
@@ -15,17 +14,10 @@ from app.services.versioning import apply_versioned_update, check_version
 
 ENTITY = "BankAccount"
 
-# (name, account_type, group_name, group_panel_type, group_sort_order)
-_SYSTEM_ACCOUNTS: list[tuple[str, str, str, str, int]] = [
-    ("Cash and Cash Equivalents", "asset", "Assets", "balance_sheet", 0),
-    ("Inter Account Transfers", "equity", "Equity", "balance_sheet", 2),
-]
-
 
 class BankAccountService:
     def __init__(self, session: AsyncSession) -> None:
         self.repo = BankAccountRepository(session)
-        self.coa_repo = CoaRepository(session)
         self.audit = AuditService(session)
 
     async def _get_or_404(self, business_id: str, bank_account_id: str) -> BankAccount:
@@ -44,22 +36,7 @@ class BankAccountService:
     async def get(self, business_id: str, bank_account_id: str) -> BankAccountResponse:
         return BankAccountResponse.model_validate(await self._get_or_404(business_id, bank_account_id))
 
-    async def _ensure_cash_system_accounts(self, business_id: str) -> None:
-        """System COA accounts (and their groups) created with the first bank/cash account."""
-        for name, acct_type, group_name, group_panel, group_sort in _SYSTEM_ACCOUNTS:
-            if await self.coa_repo.get_account_by_name(business_id, name):
-                continue
-            group = await self.coa_repo.get_group_by_name(business_id, group_name)
-            if not group:
-                group = await self.coa_repo.create_group(
-                    business_id, group_name, group_panel, None, is_system=True, sort_order=group_sort,
-                )
-            await self.coa_repo.create_account(
-                business_id=business_id, name=name, type_=acct_type, group_id=group.id, is_system=True,
-            )
-
     async def create(self, ctx: BusinessContext, body: BankAccountCreate) -> BankAccountResponse:
-        is_first = await self.repo.count_by_business(ctx.business_id) == 0
         account = BankAccount(
             business_id=ctx.business_id,
             name=body.name,
@@ -68,8 +45,6 @@ class BankAccountService:
             description=body.description,
         )
         await self.repo.add(account)
-        if is_first:
-            await self._ensure_cash_system_accounts(ctx.business_id)
         after = BankAccountResponse.model_validate(account)
         await self.audit.record(ctx.user_id, "create", ENTITY, account.id, ctx.business_id, after=after)
         return after

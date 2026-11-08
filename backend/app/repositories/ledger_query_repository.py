@@ -91,6 +91,30 @@ _GLT_PAGE = text(f"""
 """)
 _GLT_COUNT = text(f"SELECT count(*) {_GLT_FILTER}")
 
+# Summary: every account with its net as at :date_to (closing) and over the period; system
+# accounts hidden until their tab is enabled or they have a balance (posting-rules §2).
+_ACCOUNT_NETS = text("""
+    SELECT CAST(a.id AS text) AS id, a.name, a.code, CAST(a.group_id AS text) AS group_id, a.type,
+           s.code AS system_account_code, COALESCE(n.closing, 0) AS closing, COALESCE(n.period, 0) AS period,
+           (s.id IS NULL OR s.always_visible OR COALESCE(n.closing, 0) <> 0 OR COALESCE(n.period, 0) <> 0
+            OR COALESCE(bt.enabled, t.default_enabled, false)) AS is_visible
+    FROM public.coa_accounts a
+    LEFT JOIN public.system_account_types s ON s.id = a.system_account_type_id
+    LEFT JOIN public.admin_tabs t ON t.id = s.enabled_by_admin_tab_id
+    LEFT JOIN public.business_tabs bt ON bt.business_id = a.business_id AND bt.key = t.key
+    LEFT JOIN (
+        SELECT l.account_id,
+               sum(l.debit - l.credit) AS closing,
+               sum(l.debit - l.credit) FILTER (WHERE COALESCE(l.line_date, e.entry_date) >= :date_from) AS period
+        FROM public.journal_lines l
+        JOIN public.journal_entries e ON e.business_id = l.business_id AND e.id = l.journal_entry_id
+        WHERE l.business_id = :business_id AND COALESCE(l.line_date, e.entry_date) <= :date_to
+        GROUP BY l.account_id
+    ) n ON n.account_id = a.id
+    WHERE a.business_id = :business_id
+    ORDER BY a.sort_order, a.code NULLS LAST, a.name
+""")
+
 
 class LedgerQueryRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -124,6 +148,10 @@ class LedgerQueryRepository:
 
     async def trial_balance(self, business_id: str, as_at: date) -> list[Row]:
         return list((await self.session.execute(_TRIAL_BALANCE, {"business_id": business_id, "as_at": as_at})).all())
+
+    async def account_nets(self, business_id: str, date_from: date, date_to: date) -> list[Row]:
+        args = {"business_id": business_id, "date_from": date_from, "date_to": date_to}
+        return list((await self.session.execute(_ACCOUNT_NETS, args)).all())
 
     async def general_ledger_page(
         self, business_id: str, date_from: date, date_to: date, account_id: str | None,

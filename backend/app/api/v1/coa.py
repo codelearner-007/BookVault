@@ -1,12 +1,14 @@
 """Chart of Accounts endpoints."""
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.access_rights import AreaRight
 from app.core.dependencies import get_db, require_business_access, require_idempotency_key
 from app.core.pagination import PageParams, page_params
-from app.schemas.common import PaginatedResponse
+from app.schemas.common import IdStr, PaginatedResponse
 from app.schemas.request.coa import (
     CoaAccountCreate,
     CoaAccountsOrderUpdate,
@@ -15,7 +17,7 @@ from app.schemas.request.coa import (
     CoaGroupsOrderUpdate,
     CoaGroupUpdate,
 )
-from app.schemas.response.coa import CoaAccountResponse, CoaGroupResponse
+from app.schemas.response.coa import CoaAccountResponse, CoaGroupResponse, CoaTreeResponse
 from app.services.access_service import BusinessContext
 from app.services.coa_service import CoaService
 from app.services.idempotency_service import IdempotencyService, business_scope
@@ -27,6 +29,17 @@ _EDIT = require_business_access(AREA, AreaRight.EDIT)
 _DELETE = require_business_access(AREA, AreaRight.DELETE)
 
 router = APIRouter(prefix="/businesses/{business_id}/chart-of-accounts", tags=["Chart of Accounts"])
+
+
+@router.get("/tree", response_model=CoaTreeResponse)
+async def chart_tree(
+    as_at: date = Query(...),
+    include_hidden: bool = Query(False, description="Also system accounts not shown yet"),
+    ctx: BusinessContext = Depends(_VIEW),
+    db: AsyncSession = Depends(get_db, scope="function"),
+) -> CoaTreeResponse:
+    """The 5 roots with their groups and accounts and each balance as at the date (ledger)."""
+    return await CoaService(db).tree(ctx.business_id, as_at, include_hidden)
 
 
 # -------------------------------------------------------------------- Groups
@@ -87,10 +100,11 @@ async def update_group(
 async def delete_group(
     group_id: str,
     version: int = Query(..., ge=1),
+    move_to: IdStr | None = Query(None, description="Group that receives its sub-groups and accounts"),
     ctx: BusinessContext = Depends(_DELETE),
     db: AsyncSession = Depends(get_db, scope="function"),
 ) -> None:
-    await CoaService(db).delete_group(ctx, group_id, version)
+    await CoaService(db).delete_group(ctx, group_id, version, move_to)
 
 
 # ------------------------------------------------------------------ Accounts

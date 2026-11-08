@@ -145,8 +145,14 @@ async def purge_business(conn: AsyncConnection, business_id: str, owner_id: str,
         await conn.execute(text("SELECT set_config('app.user_id', '', false)"))
 
 
+# Tests post documents on fixed dates; the books must start before them (documents dated
+# before books_start_date are rejected, B2).
+TEST_BOOKS_START = "2020-01-01"
+
+
 async def create_business(client: httpx.AsyncClient, user: TestUser, name: str = "Acme") -> dict:
-    response = await client.post("/api/v1/businesses", json={"name": name}, headers=user.headers)
+    response = await client.post("/api/v1/businesses", json={"name": name, "books_start_date": TEST_BOOKS_START},
+                                 headers=user.headers)
     assert response.status_code == 201, response.text
     return response.json()
 

@@ -7,6 +7,7 @@
 
 ## API contract
 - [B0.5 contract](project_b05_contract.md) — envelopes, money strings, versions, CSRF/idempotency headers, 'receipts' tab key
+- [B2 COA/Summary UI](project_b2_coa_summary.md) — coa/ folder, starting balances page, Summary URL params, GL drill-down
 - [B1 ledger UI](project_b1_ledger_ui.md) — JE/reports URL params (?p paging), server totals, idempotency reuse, font build flake
 
 ## Pre-existing Build Issues

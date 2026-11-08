@@ -51,8 +51,8 @@ def test_manager_only_setup_records_are_skipped():
     assert bookvault_setup_records(records) == [{"kind": "price"}]
 
 
-def test_b1_schedule_is_runnable():
-    assert {f["id"] for f in RUNNABLE} == B1_FIXTURES
+def test_b1_b2_schedule_is_runnable():
+    assert {f["id"] for f in RUNNABLE} == B1_FIXTURES | B2_FIXTURES
 
 
 def test_golden_support_report(capsys):
@@ -86,14 +86,55 @@ async def _new_run(client, users) -> GoldenRun:
     return run
 
 
+def _tree_nodes(nodes: list[dict]):
+    for node in nodes:
+        yield node
+        yield from _tree_nodes(node["groups"])
+
+
+async def _chart(run: GoldenRun) -> list[dict]:
+    response = await run.client.get(biz(run.business_id, "/chart-of-accounts/tree?as_at=2100-12-31&include_hidden=true"),
+                                    headers=run.owner.headers)
+    return list(_tree_nodes(response.json()["roots"]))
+
+
+async def _setup_groups(run: GoldenRun, fixture: dict) -> None:
+    """Groups under the root of their statement (P&L groups of the fixtures hold expenses)."""
+    specs = load_golden_file()["master_data"]["account_groups"]
+    for key in fixture.get("setup", {}).get("account_groups", []):
+        if key in run.groups:
+            continue
+        spec = specs[key]
+        root = next(n for n in await _chart(run) if n["root_key"] == STATEMENT_ROOT[spec["statement"]])
+        response = await run.client.post(biz(run.business_id, "/chart-of-accounts/groups"), headers=run.owner.headers,
+                                         json={"name": spec["name"], "type": spec["statement"],
+                                               "parent_group_id": root["id"]})
+        assert response.status_code == 201, response.text
+        run.groups[key] = response.json()["id"]
+
+
+def _group_of(run: GoldenRun, spec: dict) -> str | None:
+    """The setup group whose name the account's note names (T95: 'In P&L group ...')."""
+    groups = load_golden_file()["master_data"]["account_groups"]
+    return next((gid for key, gid in run.groups.items() if groups[key]["name"] in spec.get("note", "")), None)
+
+
 async def _setup_accounts(run: GoldenRun, fixture: dict) -> None:
+    """Seeded system accounts are looked up by their system type; others are created."""
     accounts = load_golden_file()["accounts"]
     for key in fixture.get("setup", {}).get("accounts", []):
-        if key not in run.accounts:
-            spec = accounts[key]
-            run.accounts[key] = await create_account(
-                run.client, run.owner, run.business_id, spec["manager_name"], SIDE_TO_TYPE[spec["side"]]
-            )
+        if key in run.accounts:
+            continue
+        spec = accounts[key]
+        if spec.get("system_account_type"):
+            run.accounts[key] = next(
+                a["id"] for n in await _chart(run) for a in n["accounts"]
+                if a["system_account_code"] == spec["system_account_type"])
+            continue
+        run.accounts[key] = await create_account(
+            run.client, run.owner, run.business_id, spec["manager_name"], SIDE_TO_TYPE[spec["side"]],
+            group_id=_group_of(run, spec),
+        )
 
 
 def _lock_setting(fixture: dict) -> dict | None:
@@ -106,7 +147,25 @@ async def _document_count(run: GoldenRun) -> int:
     return response.json()["total"]
 
 
+def _assert_one_opening_entry(fixture: dict, entries: list[dict]) -> None:
+    """runner.comparison.entry_checks: one opening entry per expected opening source record."""
+    if any(x.get("entry") == "opening" for x in expected_lines(fixture)):
+        assert [e["source"] for e in entries].count("opening") == 1, entries
+
+
+def _assert_actions(fixture: dict, actions: list[dict]) -> None:
+    expected = fixture["bookvault_expected"].get("action_outcomes", [])
+    got = {a["seq"]: a["status_code"] for a in actions}
+    for outcome in expected:
+        status = got[outcome["seq"]]
+        if outcome["outcome"] == "rejected":
+            assert status == outcome.get("http_status", status) and status >= 400, (outcome, status)
+        else:
+            assert status < 300, (outcome, status)
+
+
 async def _run_fixture(run: GoldenRun, fixture: dict) -> None:
+    await _setup_groups(run, fixture)
     await _setup_accounts(run, fixture)
     lock = _lock_setting(fixture)
     if lock and lock["value"]["enabled"]:
@@ -123,6 +182,8 @@ async def _run_fixture(run: GoldenRun, fixture: dict) -> None:
         missing, extra = unmatched(expected_lines(fixture), actual)
         assert (missing, extra) == ([], []), f"{fixture['id']}: missing {missing}, unexpected {extra}"
         assert_entry_groups_balanced(outcome.entries)
+        _assert_one_opening_entry(fixture, outcome.entries)
+        _assert_actions(fixture, outcome.actions)
     finally:
         if lock and lock.get("scope") == "fixture":
             await set_lock_date(run.client, run.owner, run.business_id, None, reason=TEARDOWN_REASON)
@@ -134,6 +195,8 @@ def _runnable(fixture: dict) -> bool:
 
 RUNNABLE = [f for f in DOCUMENTS if _runnable(f)]
 B1_FIXTURES = {"T30", "T96a", "T96"}
+B2_FIXTURES = {"T36", "T95"}
+STATEMENT_ROOT = {"pl": "expenses", "balance_sheet": "assets"}
 NOT_YET = [f for f in DOCUMENTS if not _runnable(f)]
 
 

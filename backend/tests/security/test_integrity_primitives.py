@@ -202,10 +202,13 @@ async def test_audit_row_written_for_every_mutation(client, users, db_conn, enti
         await client.post(_biz(business_id, "receipts"), json={"date": "2026-11-08"}, headers=owner.headers)
         expected = ["create"]
     elif entity == "CoaGroup":
+        groups = await client.get(_biz(business_id, "chart-of-accounts/groups"), headers=owner.headers)
+        income = next(g["id"] for g in groups.json()["items"] if g["root_key"] == "income")
         group = await client.post(_biz(business_id, "chart-of-accounts/groups"),
-                                  json={"name": "G", "type": "pl"}, headers=owner.headers)
+                                  json={"name": "G", "type": "pl", "parent_group_id": income}, headers=owner.headers)
         await client.put(_biz(business_id, "chart-of-accounts/groups/order"),
-                         json={"type": "pl", "items": [group.json()["id"]]}, headers=owner.headers)
+                         json={"type": "pl", "parent_group_id": income, "items": [group.json()["id"]]},
+                         headers=owner.headers)
         expected = ["create", "reorder"]
     elif entity == "TabColumns":
         await client.put(_biz(business_id, "tab-columns/customers"),

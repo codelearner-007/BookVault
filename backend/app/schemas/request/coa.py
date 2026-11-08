@@ -16,14 +16,16 @@ from app.schemas.common import (
 )
 
 GroupPanelType = Literal["balance_sheet", "pl"]
-AccountType = Literal["asset", "liability", "equity", "income", "expense", "total"]
+AccountType = Literal["asset", "liability", "equity", "income", "expense"]
 CashFlow = Literal["operating", "investing", "financing", "cash_equivalent"]
 
 
 class CoaGroupCreate(RequestModel):
+    """Every group sits under one of the 5 fixed roots or another group (same statement)."""
+
     name: ShortText
     type: GroupPanelType
-    parent_group_id: Optional[IdStr] = None
+    parent_group_id: IdStr
 
 
 class CoaGroupUpdate(VersionedRequest):
@@ -34,11 +36,13 @@ class CoaGroupUpdate(VersionedRequest):
 
 
 class CoaAccountCreate(RequestModel):
+    """No group: the root of the type. No type: the type of the group's root (else income)."""
+
     name: ShortText
     code: OptionalCode = None
     group_id: Optional[IdStr] = None
     cash_flow_category: Optional[CashFlow] = None
-    type: AccountType = "income"
+    type: Optional[AccountType] = None
     description: OptionalText = None
     is_active: bool = True
 
@@ -62,5 +66,5 @@ class CoaGroupsOrderUpdate(RequestModel):
 
 
 class CoaAccountsOrderUpdate(RequestModel):
-    group_id: Optional[IdStr] = None
+    group_id: IdStr
     items: list[IdStr] = Field(max_length=LIST_MAX)

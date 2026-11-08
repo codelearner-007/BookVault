@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Building2, BookOpen, ChevronRight, UserCog } from 'lucide-react';
+import { Building2, BookOpen, ChevronRight, Scale, UserCog } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/common/page';
 import { useBusinessWorkspace } from '@/components/shell/ShellContext';
@@ -22,6 +22,13 @@ const SETTING_PAGES = [
     label: 'Chart of Accounts',
     description: 'Manage your chart of accounts.',
     icon: BookOpen,
+  },
+  {
+    key: 'starting-balances',
+    href: '?tab=settings&page=starting-balances',
+    label: 'Starting Balances',
+    description: 'Opening balances of balance sheet accounts.',
+    icon: Scale,
   },
 ];
 

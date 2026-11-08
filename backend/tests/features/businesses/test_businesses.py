@@ -19,19 +19,22 @@ async def test_businesses_create_list_get(client, users):
 async def test_businesses_update_and_reset(client, users):
     owner = await users.create()
     business = await create_business(client, owner)
+    countries = await client.get("/api/v1/countries", params={"search": "Pakistan"}, headers=owner.headers)
+    pakistan = countries.json()["items"][0]["id"]
 
     updated = await client.put(
         f"{BASE}/{business['id']}",
-        json={"name": "Renamed", "country": "PK", "address": "Main St",
+        json={"name": "Renamed", "country_id": pakistan, "address": "Main St",
               "version": business["version"]},
         headers=owner.headers,
     )
     reset = await client.post(f"{BASE}/{business['id']}/reset", headers=owner.headers)
 
     assert updated.status_code == 200, updated.text
-    assert (updated.json()["name"], updated.json()["address"]) == ("Renamed", "Main St")
+    assert (updated.json()["name"], updated.json()["address"], updated.json()["country"]) == (
+        "Renamed", "Main St", "Pakistan")
     assert reset.status_code == 200, reset.text
-    assert reset.json()["country"] is None
+    assert (reset.json()["country_id"], reset.json()["country"]) == (None, None)
 
 
 async def test_businesses_soft_delete_restore(client, users):

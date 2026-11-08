@@ -32,6 +32,7 @@ from app.models.ledger import (
     JournalEntry,
     JournalEntrySource,
     JournalLine,
+    OpeningBalance,
 )
 from app.models.mfa_recovery_code import MfaRecoveryCode
 from app.models.receipt import Receipt
@@ -71,6 +72,7 @@ __all__ = [
     "BusinessFormat",
     "BusinessTab",
     "CoaAccount",
+    "OpeningBalance",
     "CoaGroup",
     "Customer",
     "Receipt",

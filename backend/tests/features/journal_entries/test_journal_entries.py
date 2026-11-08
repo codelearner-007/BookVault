@@ -205,11 +205,12 @@ async def test_totals_endpoint_rounds_half_away_from_zero(client, books):
     assert response.json() == {"total_debit": "0.11", "total_credit": "0.10", "difference": "0.01"}
 
 
-async def test_total_account_cannot_be_posted_to(client, books):
-    owner, bid, rent, _ = books
-    accounts = (await client.get(biz(bid, "/chart-of-accounts/accounts"), headers=owner.headers)).json()
-    total_row = next(a["id"] for a in accounts["items"] if a["type"] == "total")
-    response = await post_je(client, owner, bid, DAY, [(rent, "1", "0"), (total_row, "0", "1")])
+async def test_inactive_account_cannot_be_posted_to(client, books):
+    owner, bid, rent, charges = books
+    url = biz(bid, f"/chart-of-accounts/accounts/{charges}")
+    current = (await client.get(url, headers=owner.headers)).json()
+    await client.put(url, json={"version": current["version"], "is_active": False}, headers=owner.headers)
+    response = await post_je(client, owner, bid, DAY, [(rent, "1", "0"), (charges, "0", "1")])
     assert response.status_code == 422 and response.json()["details"]["code"] == "invalid_account"
 
 

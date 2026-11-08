@@ -37,13 +37,13 @@ import {
 import { PageHeader, MoreMenu, ListCard, EmptyState } from '@/components/common/page';
 import {
   listBusinesses,
-  createBusiness,
   deleteBusiness,
   listDeletedBusinesses,
   restoreBusiness,
   permanentDeleteBusiness,
   exportBusiness,
 } from '@/lib/services/business.service';
+import CreateBusinessDialog from './CreateBusinessDialog';
 
 const CREATE_PARAM = 'create';
 const SKELETON_ROWS = 3;
@@ -122,66 +122,6 @@ function BusinessList({ businesses, loading, onCreate }) {
         </li>
       ))}
     </ul>
-  );
-}
-
-/* ── Create dialog ───────────────────────────────────────────────────────── */
-
-function CreateBusinessDialog({ open, onOpenChange, form, setForm, error, loading, onCreate }) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Create business</DialogTitle>
-          <DialogDescription>
-            Create a new business workspace. You can configure details and settings after creation.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="biz-name">
-              Business Name <span className="text-bad" aria-hidden="true">*</span>
-            </Label>
-            <Input
-              id="biz-name"
-              placeholder="e.g. Acme Corp"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              onKeyDown={(e) => e.key === 'Enter' && onCreate()}
-              disabled={loading}
-              autoFocus
-              aria-required="true"
-              aria-invalid={Boolean(error && !form.name.trim())}
-              aria-describedby={error ? 'biz-name-error' : undefined}
-            />
-            {error && <p id="biz-name-error" className="text-sm text-bad" role="alert">{error}</p>}
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="biz-country">
-              Country <span className="font-normal text-muted-foreground">(optional)</span>
-            </Label>
-            <Input
-              id="biz-country"
-              placeholder="e.g. United States"
-              value={form.country}
-              onChange={(e) => setForm({ ...form, country: e.target.value })}
-              onKeyDown={(e) => e.key === 'Enter' && onCreate()}
-              disabled={loading}
-            />
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={loading}>
-            Cancel
-          </Button>
-          <Button onClick={onCreate} disabled={loading} className="min-w-20">
-            {loading ? <><Loader2 className="animate-spin" />Creating…</> : 'Create'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -353,8 +293,6 @@ function PermanentDeleteDialog({ open, onOpenChange, name, typed, onTypedChange,
 
 /* ── Page ────────────────────────────────────────────────────────────────── */
 
-const EMPTY_ADD_FORM = { name: '', country: '' };
-
 export default function BusinessesPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -368,9 +306,6 @@ export default function BusinessesPage() {
 
   // Add business dialog
   const [addOpen, setAddOpen] = useState(false);
-  const [addForm, setAddForm] = useState(EMPTY_ADD_FORM);
-  const [addLoading, setAddLoading] = useState(false);
-  const [addError, setAddError] = useState(null);
 
   // Remove dialog (flow 1)
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
@@ -414,39 +349,16 @@ export default function BusinessesPage() {
   // The business switcher opens this dialog with ?create=1; closing it drops the param.
   function handleAddOpenChange(open) {
     setAddOpen(open);
-    if (open) return;
-    setAddForm(EMPTY_ADD_FORM);
-    setAddError(null);
-    if (!createFromUrl) return;
+    if (open || !createFromUrl) return;
     const params = new URLSearchParams(searchParams.toString());
     params.delete(CREATE_PARAM);
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname);
   }
 
-  async function handleCreateBusiness() {
-    if (!addForm.name.trim()) {
-      setAddError('Business name is required');
-      return;
-    }
-    try {
-      setAddLoading(true);
-      setAddError(null);
-      const payload = { name: addForm.name.trim() };
-      if (addForm.country.trim()) payload.country = addForm.country.trim();
-      await createBusiness(payload);
-      handleAddOpenChange(false);
-      await loadBusinesses();
-    } catch (err) {
-      setAddError(err instanceof Error ? err.message : 'Failed to create business');
-    } finally {
-      setAddLoading(false);
-    }
-  }
-
-  function handleAddFormChange(next) {
-    setAddForm(next);
-    if (addError) setAddError(null);
+  async function handleBusinessCreated() {
+    handleAddOpenChange(false);
+    await loadBusinesses();
   }
 
   // ── Remove Dialog (flow 1) ────────────────────────────────────────────────
@@ -582,15 +494,7 @@ export default function BusinessesPage() {
         <BusinessList businesses={businesses} loading={loading} onCreate={() => setAddOpen(true)} />
       </ListCard>
 
-      <CreateBusinessDialog
-        open={addOpen || createFromUrl}
-        onOpenChange={handleAddOpenChange}
-        form={addForm}
-        setForm={handleAddFormChange}
-        error={addError}
-        loading={addLoading}
-        onCreate={handleCreateBusiness}
-      />
+      <CreateBusinessDialog open={addOpen || createFromUrl} onOpenChange={handleAddOpenChange} onCreated={handleBusinessCreated} />
       <RemoveBusinessDialog
         open={removeDialogOpen}
         onOpenChange={setRemoveDialogOpen}

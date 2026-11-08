@@ -103,7 +103,8 @@ async def test_rls_helpers_are_security_definer_with_empty_search_path(db_conn):
 
 
 # Documents are voided, never deleted; posted ledger rows are immutable (B1): no DELETE policy.
-APPEND_ONLY = {"audit_logs", "documents", "journal_entries", "journal_lines"}
+# An opening balance link stays with its (possibly void) document (B2).
+APPEND_ONLY = {"audit_logs", "documents", "journal_entries", "journal_lines", "opening_balances"}
 # One row per business, inserted by a trigger and removed by the FK cascade (B0.7).
 # business_currencies (creation trigger) and document_sequences (next_document_reference())
 # are written by SECURITY DEFINER functions only (B1).

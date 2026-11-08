@@ -25,12 +25,7 @@ class CoaAccount(Base, TimestampMixin, VersionedMixin):
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     code: Mapped[str | None] = mapped_column(Text, nullable=True)
-    group_id: Mapped[str | None] = mapped_column(
-        UUID(as_uuid=False),
-        ForeignKey("coa_groups.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
+    group_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
     parent_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("coa_accounts.id", ondelete="SET NULL"),
@@ -38,11 +33,17 @@ class CoaAccount(Base, TimestampMixin, VersionedMixin):
         index=True,
     )
     cash_flow_category: Mapped[str | None] = mapped_column(Text, nullable=True)
-    type: Mapped[str] = mapped_column(Text, nullable=False, default="income")
+    # Equals the account_type of its group's root (trigger coa_accounts_check_root).
+    type: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    system_account_type_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    @property
+    def is_system(self) -> bool:
+        """System accounts are typed by system_account_types: renameable, never deletable."""
+        return self.system_account_type_id is not None
 
     def __repr__(self) -> str:
         return f"<CoaAccount(id={self.id}, name={self.name}, business_id={self.business_id})>"

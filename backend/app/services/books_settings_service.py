@@ -1,7 +1,8 @@
 """Book settings: books start date and the lock date (PR-75, BUG-14; full screen in B15).
 
 Moving the lock date earlier or removing it re-opens locked periods: it needs a reason,
-and every change is audited with the old and new dates.
+and every change is audited with the old and new dates. Moving the books start date re-posts
+every opening entry at the new opening date (D-35).
 """
 
 from datetime import date
@@ -14,6 +15,7 @@ from app.schemas.request.journal_entry import UpdateBooksSettingsRequest
 from app.schemas.response.journal_entry import BooksSettingsResponse
 from app.services.access_service import BusinessContext
 from app.services.audit_service import AuditService
+from app.services.opening_balance_service import OpeningBalanceService
 
 ENTITY = "BookSettings"
 
@@ -26,6 +28,7 @@ class BooksSettingsService:
     def __init__(self, session: AsyncSession) -> None:
         self.repo = BusinessSettingsRepository(session)
         self.audit = AuditService(session)
+        self.openings = OpeningBalanceService(session)
 
     async def get(self, business_id: str) -> BooksSettingsResponse:
         row = await self.repo.get(business_id)
@@ -44,6 +47,8 @@ class BooksSettingsService:
         row = await self.repo.update_books(ctx.business_id, body.version, body.books_start_date, body.lock_date)
         if row is None:
             raise VersionConflictError()
+        if body.books_start_date != before.books_start_date:
+            await self.openings.redate_all(ctx, body.books_start_date)
         after = BooksSettingsResponse.model_validate(row._mapping)
         await self.audit.record(ctx.user_id, "update", ENTITY, ctx.business_id, ctx.business_id,
                                 before=before, after=after, details={"reason": body.reason})

@@ -13,12 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import JournalUnbalancedError, LedgerValidationError, PeriodLockedError
 from app.core.money import DEFAULT_CURRENCY_DECIMALS, round_money
-from app.models.ledger import Document, DocumentLine, JournalEntry, JournalLine
+from app.models.ledger import Document, DocumentLine, JournalEntry, JournalLine, OpeningBalance
 from app.repositories.ledger_repository import LedgerRepository
 from app.services.access_service import BusinessContext
 
 DRAFT, POSTED, VOID = "draft", "posted", "void"
-SOURCE_DOCUMENT, SOURCE_REVERSAL = "document", "reversal"
+SOURCE_DOCUMENT, SOURCE_REVERSAL, SOURCE_OPENING = "document", "reversal", "opening"
+OPENING_BALANCE = "opening_balance"
 MIN_POSTED_LINES = 2
 
 
@@ -62,6 +63,19 @@ class PostingService:
         if lock is not None and any(d <= lock for d in dates):
             raise PeriodLockedError(lock.isoformat())
 
+    async def books_start_date(self, business_id: str) -> date:
+        return await self.repo.books_start_date(business_id)
+
+    async def assert_on_or_after_books_start(self, business_id: str, type_key: str, document_date: date) -> None:
+        """Only opening balances (dated books_start_date - 1) may precede the books (posting-rules §10)."""
+        if type_key == OPENING_BALANCE:
+            return
+        start = await self.repo.books_start_date(business_id)
+        if document_date < start:
+            raise LedgerValidationError(
+                f"The date is before the books start date ({start.isoformat()})", "before_books_start"
+            )
+
     async def decimals(self, business_id: str) -> int:
         """Decimal places of the base currency (rounding unit of every amount)."""
         return await self.repo.base_decimals(business_id) or DEFAULT_CURRENCY_DECIMALS
@@ -96,6 +110,7 @@ class PostingService:
     ) -> Document:
         """Insert the document (numbered when no reference is given) and its lines."""
         await self.assert_open(ctx.business_id, header.document_date)
+        await self.assert_on_or_after_books_start(ctx.business_id, type_key, header.document_date)
         await self._assert_accounts_postable(ctx.business_id, lines)
         reference = header.reference or await self.repo.next_reference(ctx.business_id, type_key, area_key)
         document = Document(
@@ -118,6 +133,8 @@ class PostingService:
     ) -> None:
         """Replace header and lines (draft, or a posted document about to be reposted)."""
         await self.assert_open(ctx.business_id, document.document_date, header.document_date)
+        type_key = await self.repo.document_type_key(document.document_type_id)
+        await self.assert_on_or_after_books_start(ctx.business_id, type_key, header.document_date)
         await self._assert_accounts_postable(ctx.business_id, lines)
         document.document_date = header.document_date
         document.reference = header.reference or document.reference
@@ -151,7 +168,7 @@ class PostingService:
         ])
 
     # ---------------------------------------------------------------- journal
-    async def post(self, ctx: BusinessContext, document: Document) -> JournalEntry:
+    async def post(self, ctx: BusinessContext, document: Document, source: str = SOURCE_DOCUMENT) -> JournalEntry:
         """Copy the document's lines into one balanced journal entry dated the document date."""
         lines = await self.document_lines(document)
         debit, credit = totals(lines)
@@ -164,7 +181,7 @@ class PostingService:
         await self.assert_open(ctx.business_id, document.document_date)
         entry = JournalEntry(
             business_id=ctx.business_id, document_id=document.id,
-            source_id=await self.repo.source_id(SOURCE_DOCUMENT),
+            source_id=await self.repo.source_id(source),
             entry_date=document.document_date, memo=document.description, posted_by=ctx.user_id,
         )
         await self.repo.add_entry(entry, [
@@ -198,6 +215,13 @@ class PostingService:
     async def reverse_live_entry(self, ctx: BusinessContext, document: Document) -> JournalEntry | None:
         entry = await self.repo.live_entry(ctx.business_id, document.id)
         return await self.reverse(ctx, entry) if entry else None
+
+    async def link_opening_balance(self, ctx: BusinessContext, document: Document, kind_key: str,
+                                   account_id: str) -> None:
+        """Name the opening document's source record (one live row per record, DB trigger)."""
+        await self.repo.add_opening_balance(OpeningBalance(
+            document_id=document.id, business_id=ctx.business_id, kind_key=kind_key, account_id=account_id,
+        ))
 
     async def repost(self, ctx: BusinessContext, document: Document) -> JournalEntry:
         """PR-73: edit of a posted document = reversal of its current entry + a new entry."""

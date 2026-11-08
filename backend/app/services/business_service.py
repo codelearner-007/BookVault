@@ -1,15 +1,17 @@
-"""Business service: create (with default COA), update, soft delete, restore, export, purge, audit."""
+"""Business service: create (chart + country template), update, soft delete, restore, export, purge."""
 
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AppException, ResourceNotFoundError
+from app.core.exceptions import AppException, ResourceNotFoundError, ValidationError
 from app.core.pagination import PageParams
 from app.core.request_context import current_request_id
 from app.models.business import Business
 from app.repositories.business_repository import BusinessRepository
-from app.repositories.coa_repository import CoaRepository
+from app.repositories.business_settings_repository import BusinessSettingsRepository
+from app.repositories.country_repository import CountryRepository
+from app.repositories.profile_repository import ProfileRepository
 from app.schemas.common import PaginatedResponse
 from app.schemas.auth import CurrentUser
 from app.schemas.request.business import (
@@ -49,11 +51,26 @@ class BusinessService:
         items = [BusinessResponse.model_validate(b) for b in rows]
         return PaginatedResponse.build(items, total, params.page, params.page_size)
 
+    async def _country_id(self, owner_id: str, body: CreateBusinessRequest) -> str | None:
+        """The submitted country, else the user's own (D-28); null = no country."""
+        if "country_id" in body.model_fields_set:
+            return body.country_id
+        profile = await ProfileRepository(self.session).get_by_user_id(owner_id)
+        return profile.country_id if profile else None
+
+    async def _require_country(self, country_id: str | None) -> None:
+        if country_id is not None and not await CountryRepository(self.session).exists(country_id):
+            raise ValidationError("Unknown country", "country_id")
+
     async def create(self, owner_id: str, body: CreateBusinessRequest) -> BusinessResponse:
-        """Create a business with its default COA."""
-        business = Business(name=body.name, country=body.country, owner_id=owner_id)
+        """Insert the business; the database seeds the 5 roots, every system account and the
+        country's template (or the generic chart) in the same transaction (businesses_seed_chart)."""
+        country_id = await self._country_id(owner_id, body)
+        await self._require_country(country_id)
+        business = Business(name=body.name, country_id=country_id, owner_id=owner_id)
         await self.repo.add(business)
-        await CoaRepository(self.session).seed_default_coa(business.id)
+        if body.books_start_date is not None:
+            await BusinessSettingsRepository(self.session).set_books_start_date(business.id, body.books_start_date)
         after = BusinessResponse.model_validate(business)
         await self.audit.record(owner_id, "create", ENTITY, business.id, business.id, after=after)
         return after
@@ -65,8 +82,9 @@ class BusinessService:
         business = await self._owned(ctx.business_id, ctx.owner_id)
         check_version(business, body.version)
         before = await self._response(business)
+        await self._require_country(body.country_id)
         business.name = body.name
-        business.country = body.country
+        business.country_id = body.country_id
         await self.repo.save(business)
         await self.repo.upsert_details(business.id, body.address)
         after = await self._response(business)
@@ -78,7 +96,7 @@ class BusinessService:
         """Clear country and address (the name stays)."""
         business = await self._owned(ctx.business_id, ctx.owner_id)
         before = await self._response(business)
-        business.country = None
+        business.country_id = None
         await self.repo.save(business)
         await self.repo.upsert_details(business.id, None)
         after = await self._response(business)

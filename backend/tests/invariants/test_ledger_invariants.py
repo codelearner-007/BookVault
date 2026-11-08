@@ -14,7 +14,7 @@ from sqlalchemy.exc import DBAPIError, ProgrammingError
 from app.db import session as db_session
 from app.main import app
 from tests.conftest import CSRF_HEADER, _add_idempotency_key
-from tests.support.factories import create_business
+from tests.support.factories import TEST_BOOKS_START, create_business
 from tests.support.ledger import biz, create_account, journal, post_je, set_lock_date, trial_balance
 
 API_ROLE = "bookvault_api"
@@ -216,7 +216,8 @@ async def test_business_is_committed_before_the_response_is_sent(committed, live
         transport=httpx.ASGITransport(app=probe_app), base_url="http://test",
         headers={CSRF_HEADER: "web", "Idempotency-Key": str(uuid.uuid4())},
     ) as probe:
-        business = await probe.post("/api/v1/businesses", json={"name": "Race"}, headers=owner.headers)
+        business = await probe.post("/api/v1/businesses", json={"name": "Race", "books_start_date": TEST_BOOKS_START},
+                                    headers=owner.headers)
     assert business.status_code == 201 and seen_at_response_start == [1]
     bid = business.json()["id"]
     a = await create_account(live_client, owner, bid, "Race A")
@@ -224,3 +225,26 @@ async def test_business_is_committed_before_the_response_is_sent(committed, live
     entry = await post_je(live_client, owner, bid, DAY, [(a, "2", "0"), (b, "0", "2")])
     assert entry.status_code == 201
     assert (await journal(live_client, owner, bid, entry.json()["id"]))["entries"]
+
+
+async def test_summary_balances_and_retained_earnings_is_computed(client, users):
+    """B2 invariants: assets = liabilities + equity; BS retained earnings = openings + cumulative P&L."""
+    owner = await users.create()
+    bid = (await create_business(client, owner))["id"]
+    prepaid = await create_account(client, owner, bid, "Prepaid", "asset")
+    loan = await create_account(client, owner, bid, "Loan", "liability")
+    sales = await create_account(client, owner, bid, "Sales", "income")
+    rent = await create_account(client, owner, bid, "Rent", "expense")
+    for account, side, amount in ((prepaid, "debit", "400"), (loan, "credit", "150")):
+        await client.put(biz(bid, f"/starting-balances/accounts/{account}"), headers=owner.headers,
+                         json={"side": side, "amount": amount})
+    await post_je(client, owner, bid, "2025-03-01", [(prepaid, "90", "0"), (sales, "0", "90")])
+    await post_je(client, owner, bid, DAY, [(rent, "35", "0"), (loan, "0", "35")])
+
+    response = await client.get(biz(bid, f"/reports/summary?from=2026-01-01&to={DAY}"), headers=owner.headers)
+    body = response.json()
+    bs, re_ = body["balance_sheet"], body["retained_earnings"]
+
+    assert bs["is_balanced"] and bs["total_assets"] == bs["total_liabilities_and_equity"] == "490.00"
+    assert (re_["ledger_balance"], re_["cumulative_profit"], re_["total"]) == ("250.00", "55.00", "305.00")
+    assert body["profit_and_loss"]["net_profit"] == "-35.00"

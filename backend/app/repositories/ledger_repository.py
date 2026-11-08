@@ -18,6 +18,7 @@ from app.models.ledger import (
     JournalEntry,
     JournalEntrySource,
     JournalLine,
+    OpeningBalance,
 )
 
 _NEXT_REFERENCE = text("SELECT public.next_document_reference(:business_id, :type_key, :area_key)")
@@ -35,6 +36,9 @@ class LedgerRepository:
     # ---------------------------------------------------------------- reference data
     async def document_type_id(self, key: str) -> str:
         return (await self.session.execute(select(DocumentType.id).where(DocumentType.key == key))).scalar_one()
+
+    async def document_type_key(self, type_id: str) -> str:
+        return (await self.session.execute(select(DocumentType.key).where(DocumentType.id == type_id))).scalar_one()
 
     async def status_id(self, key: str) -> str:
         return (await self.session.execute(select(DocumentStatus.id).where(DocumentStatus.key == key))).scalar_one()
@@ -57,6 +61,13 @@ class LedgerRepository:
             )
         ).scalar_one_or_none()
 
+    async def books_start_date(self, business_id: str) -> date:
+        return (
+            await self.session.execute(
+                select(BusinessSettings.books_start_date).where(BusinessSettings.business_id == business_id)
+            )
+        ).scalar_one()
+
     async def base_decimals(self, business_id: str) -> int | None:
         return (await self.session.execute(_BASE_DECIMALS, {"business_id": business_id})).scalar_one_or_none()
 
@@ -67,13 +78,12 @@ class LedgerRepository:
         return result.scalar_one()
 
     async def postable_account_ids(self, business_id: str, account_ids: set[str]) -> set[str]:
-        """Accounts of this business that may carry journal lines (active, not a total row)."""
+        """Accounts of this business that may carry journal lines (active)."""
         result = await self.session.execute(
             select(CoaAccount.id).where(
                 CoaAccount.business_id == business_id,
                 CoaAccount.id.in_(account_ids),
                 CoaAccount.is_active.is_(True),
-                CoaAccount.type != "total",
             )
         )
         return set(result.scalars().all())
@@ -145,6 +155,10 @@ class LedgerRepository:
             .limit(1)
         )
         return result.scalar_one_or_none()
+
+    async def add_opening_balance(self, row: OpeningBalance) -> None:
+        self.session.add(row)
+        await self.session.flush()
 
     async def entry_lines(self, business_id: str, entry_id: str) -> list[JournalLine]:
         result = await self.session.execute(

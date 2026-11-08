@@ -44,7 +44,7 @@ ROUTE_MAP = {
     "PUT /tabs": [("settings.customize_tabs", E)],
     "GET /tab-columns/{tab_key}": "tab", "PUT /tab-columns/{tab_key}": [("settings.customize_tabs", E)],
     **{f"GET /chart-of-accounts/{p}": [(COA, V)] for p in
-       ("groups", "groups/{group_id}", "accounts", "accounts/{account_id}")},
+       ("groups", "groups/{group_id}", "accounts", "accounts/{account_id}", "tree")},
     **{f"POST /chart-of-accounts/{p}": [(COA, C)] for p in ("groups", "accounts")},
     **{f"PUT /chart-of-accounts/{p}": [(COA, E)] for p in
        ("groups/order", "groups/{group_id}", "accounts/order", "accounts/{account_id}")},
@@ -64,6 +64,10 @@ ROUTE_MAP = {
     "GET /reports/trial-balance": [("reports", V)],
     "GET /reports/general-ledger-transactions": [("reports", V)],
     "GET /settings/books": [("settings.lock_date", V)], "PUT /settings/books": [("settings.lock_date", E)],
+    # B2: Summary and starting balances
+    "GET /reports/summary": [("summary", V)],
+    "GET /starting-balances/accounts": [("settings.starting_balances", V)],
+    "PUT /starting-balances/accounts/{account_id}": [("settings.starting_balances", E)],
 }
 for _path, _area, _id in (("bank-accounts", "bank_cash_accounts", "bank_account_id"),
                           ("customers", "customers", "contact_id"),

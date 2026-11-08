@@ -39,12 +39,6 @@ class BankAccountRepository:
         )
         return result.scalar_one_or_none()
 
-    async def count_by_business(self, business_id: str) -> int:
-        result = await self.session.execute(
-            select(func.count()).where(BankAccount.business_id == business_id)
-        )
-        return result.scalar_one()
-
     async def add(self, account: BankAccount) -> None:
         self.session.add(account)
         await self.session.flush()

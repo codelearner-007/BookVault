@@ -11,7 +11,8 @@ class BusinessResponse(BaseModel):
 
     id: str
     name: str
-    country: str | None
+    country_id: str | None
+    country: str | None = None
     address: str | None = None
     owner_id: str
     version: int

@@ -1,94 +1,109 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { ChevronRight, ListTree } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PageHeader } from '@/components/common/page';
-import { listCoaGroups, listCoaAccounts } from '@/lib/services/coa.service';
+import { Switch } from '@/components/ui/switch';
+import { ListToolbar, PageHeader } from '@/components/common/page';
+import { getSummary } from '@/lib/services/ledger-reports.service';
 import { getSuspenseBalance } from '@/lib/services/suspense.service';
-import { listBankAccounts } from '@/lib/services/bank-accounts.service';
+import { cn } from '@/lib/utils';
 import { formatMoney } from '@/lib/utils/money';
+import { isZeroAmount } from '../coa/coa-tree';
+import { ErrorAlert, REPORTS_TAB, todayIso, useTabNavigate } from '../ledger/ledger-parts';
+import { REPORTS } from '../ledger/ReportsIndex';
+import { SectionRows, StatementTable, TotalRow } from '../summary/SummaryStatement';
 import BusinessSuspense from './BusinessSuspense';
 
-const CASH_ACCOUNT_KEYWORDS = ['cash', 'bank', 'cash and cash equivalents', 'cash & cash equivalents', 'cash equilent', 'cash equivalent'];
-const EMPTY_AMOUNT = '—';
-const ROW = 'flex min-h-row items-center justify-between gap-4 border-b border-row-divider';
+const SUMMARY_TAB = 'summary';
+const BALANCE_SHEET = 'Balance Sheet';
+const PROFIT_AND_LOSS = 'Profit and Loss Statement';
+const EXPENSES_LABEL = 'Less: Expenses';
+const SKELETON_ROWS = 7;
+// Boolean options held in the URL as "1".
+const FLAGS = { showCodes: 'codes', excludeZero: 'nonzero', collapse: 'collapse' };
+const FLAG_LABELS = { showCodes: 'Show account codes', excludeZero: 'Exclude zero balances', collapse: 'Collapse groups' };
 
-function isCashAccount(accountName) {
-  const lower = (accountName ?? '').toLowerCase().trim();
-  return CASH_ACCOUNT_KEYWORDS.some((kw) => lower === kw || lower.includes(kw));
+function startOfYear(isoDate) {
+  return `${isoDate.slice(0, 4)}-01-01`;
 }
 
-function Amount({ value }) {
-  if (value === null) return <span className="num text-muted-foreground">{EMPTY_AMOUNT}</span>;
-  return <span className="num">{formatMoney(value)}</span>;
+// ?tab=summary[&from&to&codes=1&nonzero=1&collapse=1]
+function useSummaryOptions() {
+  const params = useSearchParams();
+  const to = params.get('to') || todayIso();
+  const options = { active: params.get('tab') === SUMMARY_TAB, from: params.get('from') || startOfYear(to), to };
+  for (const [key, param] of Object.entries(FLAGS)) options[key] = params.get(param) === '1';
+  return options;
+}
+
+// The General Ledger Transactions report for the period, optionally one account.
+function transactionsHref({ from, to }, accountId) {
+  const query = new URLSearchParams({ tab: REPORTS_TAB, report: REPORTS.glTransactions, from, to });
+  if (accountId) query.set('account', accountId);
+  return `?${query}`;
 }
 
 function SummarySkeleton() {
   return (
-    <>
+    <div aria-busy="true">
       <Skeleton className="mb-8 h-9 w-40 max-md:mb-6" />
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        {[0, 1].map((card) => (
-          <Card key={card}>
-            <CardHeader><Skeleton className="h-5 w-40" /></CardHeader>
-            <CardContent className="space-y-6">
-              {[0, 1, 2].map((group) => (
-                <div key={group} className="space-y-3">
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-row w-full" />
-                  <Skeleton className="h-row w-full" />
+      <div className="mb-4 flex flex-wrap gap-3">
+        <Skeleton className="h-control w-56" />
+        <Skeleton className="h-control w-56" />
+        <Skeleton className="h-control w-44" />
+      </div>
+      <Card>
+        <CardHeader><Skeleton className="h-5 w-28" /></CardHeader>
+        <CardContent className="grid grid-cols-1 gap-10 lg:grid-cols-2">
+          {[0, 1].map((column) => (
+            <div key={column} className="space-y-3">
+              <Skeleton className="h-5 w-40" />
+              {Array.from({ length: SKELETON_ROWS }, (_, i) => (
+                <div key={i} className="flex justify-between gap-4">
+                  <Skeleton className={i % 3 === 0 ? 'h-5 w-36' : 'ms-6 h-5 w-44'} />
+                  <Skeleton className="h-5 w-20" />
                 </div>
               ))}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </>
-  );
-}
-
-function AccountRow({ account, bankTotal }) {
-  const amount = isCashAccount(account.name) && bankTotal !== null ? bankTotal : null;
-  const isTotal = account.type === 'total';
-  return (
-    <div className={ROW}>
-      <span className={isTotal ? 'text-muted-foreground italic' : undefined}>{account.name}</span>
-      <Amount value={amount} />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function GroupSection({ group, accounts, bankTotal = null }) {
-  const groupAccounts = accounts.filter((a) => a.group_id === group.id);
-  const groupTotal = bankTotal !== null && groupAccounts.some((a) => isCashAccount(a.name)) ? bankTotal : null;
-
+function OptionsBar({ options, onChange }) {
   return (
-    <section aria-label={group.name}>
-      <h3 className="pb-1 pt-2 text-sm font-semibold text-muted-foreground">{group.name}</h3>
-      {groupAccounts.length === 0 ? (
-        <p className={`${ROW} text-sm text-muted-foreground`}>No accounts</p>
-      ) : (
-        groupAccounts.map((account) => <AccountRow key={account.id} account={account} bankTotal={bankTotal} />)
-      )}
-      <div className="flex min-h-row items-center justify-between border-t border-border font-semibold">
-        <span className="text-sm text-muted-foreground">Total {group.name}</span>
-        <Amount value={groupTotal} />
+    <ListToolbar className="justify-start gap-x-5">
+      <div className="flex items-center gap-2">
+        <Label htmlFor="summary-from" className="text-muted-foreground">From</Label>
+        <Input id="summary-from" type="date" value={options.from} onChange={(e) => e.target.value && onChange({ from: e.target.value })} className="w-44" />
       </div>
-    </section>
+      <div className="flex items-center gap-2">
+        <Label htmlFor="summary-to" className="text-muted-foreground">To</Label>
+        <Input id="summary-to" type="date" value={options.to} onChange={(e) => e.target.value && onChange({ to: e.target.value })} className="w-44" />
+      </div>
+      {Object.keys(FLAGS).map((key) => (
+        <div key={key} className="flex items-center gap-2">
+          <Switch id={`summary-${FLAGS[key]}`} checked={options[key]} onCheckedChange={(on) => onChange({ [key]: on })} />
+          <Label htmlFor={`summary-${FLAGS[key]}`}>{FLAG_LABELS[key]}</Label>
+        </div>
+      ))}
+    </ListToolbar>
   );
 }
 
 function SuspenseRow({ balance, onOpen }) {
   return (
-    <Button
-      variant="ghost"
-      onClick={onOpen}
-      className="h-row w-full justify-between rounded-control px-2 text-base font-normal text-foreground"
-    >
+    <Button variant="ghost" onClick={onOpen} className="mt-3 h-row w-full justify-between rounded-control px-2 text-base font-normal text-foreground">
       <Badge variant="warn">Suspense</Badge>
       <span className="flex items-center gap-2">
         <span className="num">{formatMoney(balance)}</span>
@@ -98,85 +113,116 @@ function SuspenseRow({ balance, onOpen }) {
   );
 }
 
-function StatementCard({ title, children }) {
+function Column({ title, aside, children }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">{children}</CardContent>
-    </Card>
+    <section aria-label={title} className="min-w-0">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2 px-2 max-md:px-1">
+        <h2 className="font-semibold">{title}</h2>
+        {aside}
+      </div>
+      {children}
+    </section>
   );
 }
 
+function BalanceSheet({ sheet, options, suspense }) {
+  const [assets, ...liabilitiesAndEquity] = sheet.sections;
+  const status = (
+    <Badge variant={sheet.is_balanced ? 'ok' : 'bad'}>{sheet.is_balanced ? 'Balanced' : 'Unbalanced'}</Badge>
+  );
+  return (
+    <Column title={BALANCE_SHEET} aside={status}>
+      <StatementTable title={BALANCE_SHEET}>
+        {assets && <SectionRows section={assets} options={options} />}
+        <TotalRow label="Total assets" value={sheet.total_assets} />
+        {liabilitiesAndEquity.map((section) => <SectionRows key={section.root_key} section={section} options={options} />)}
+        <TotalRow label="Total liabilities and equity" value={sheet.total_liabilities_and_equity} />
+      </StatementTable>
+      {suspense}
+    </Column>
+  );
+}
+
+function ProfitAndLoss({ statement, options }) {
+  const [income, expenses] = statement.sections;
+  return (
+    <Column title={PROFIT_AND_LOSS}>
+      <StatementTable title={PROFIT_AND_LOSS}>
+        {income && <SectionRows section={income} options={options} />}
+        {expenses && <SectionRows section={expenses} label={EXPENSES_LABEL} options={options} />}
+        <TotalRow label="Net profit (loss)" value={statement.net_profit} />
+      </StatementTable>
+    </Column>
+  );
+}
+
+// The Summary tab: Balance Sheet as at `to` and Profit and Loss for the period, from GET /reports/summary.
 export default function BusinessFinancialSummary({ business, bankRefreshKey = 0 }) {
-  const [groups, setGroups] = useState([]);
-  const [accounts, setAccounts] = useState([]);
-  const [bankTotal, setBankTotal] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [suspenseBalance, setSuspenseBalance] = useState('0');
+  const options = useSummaryOptions();
+  const navigate = useTabNavigate(SUMMARY_TAB);
+  const [result, setResult] = useState({ key: null, summary: null, suspense: '0', error: null });
   const [showSuspense, setShowSuspense] = useState(false);
-
-  const fetchData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const [groupsData, accountsData, suspenseData, bankData] = await Promise.all([
-        listCoaGroups(business.id),
-        listCoaAccounts(business.id),
-        getSuspenseBalance(business.id).catch(() => ({ suspense_balance: '0' })),
-        listBankAccounts(business.id).catch(() => null),
-      ]);
-      setGroups(groupsData.items);
-      setAccounts(accountsData.items);
-      setSuspenseBalance(suspenseData.suspense_balance);
-      // coa_total: server-side balance of all bank and cash accounts
-      setBankTotal(bankData?.items.length > 0 ? bankData.coa_total : null);
-    } catch {
-      setGroups([]);
-      setAccounts([]);
-      setBankTotal(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [business.id]);
-
   // bankRefreshKey changes when a bank account changes elsewhere: reload then too.
+  const requestKey = JSON.stringify([business.id, options.from, options.to, bankRefreshKey]);
+
+  // Tabs stay mounted while hidden: only the visible Summary follows the URL.
   useEffect(() => {
-    fetchData();
-  }, [fetchData, bankRefreshKey]);
+    if (!options.active) return undefined;
+    let current = true;
+    const [businessId, from, to] = JSON.parse(requestKey);
+    Promise.all([
+      getSummary(businessId, from, to),
+      getSuspenseBalance(businessId).catch(() => ({ suspense_balance: '0' })),
+    ])
+      .then(([summary, suspense]) => {
+        if (current) setResult({ key: requestKey, summary, suspense: suspense.suspense_balance, error: null });
+      })
+      .catch((err) => {
+        if (current) setResult({ key: requestKey, summary: null, suspense: '0', error: err?.message ?? 'Failed to load the summary.' });
+      });
+    return () => { current = false; };
+  }, [options.active, requestKey]);
 
-  if (isLoading) return <SummarySkeleton />;
-
-  if (showSuspense) {
-    return <BusinessSuspense business={business} onBack={() => setShowSuspense(false)} />;
+  function update(change) {
+    const next = { ...options, ...change };
+    const params = { from: next.from, to: next.to };
+    for (const [key, param] of Object.entries(FLAGS)) params[param] = next[key] ? '1' : '';
+    navigate(params, { replace: true });
   }
 
-  const bsGroups = groups.filter((g) => g.type === 'balance_sheet');
-  const plGroups = groups.filter((g) => g.type === 'pl');
+  if (showSuspense) return <BusinessSuspense business={business} onBack={() => setShowSuspense(false)} />;
+  // The full skeleton only before the first answer; later reloads keep the options bar (and its focus).
+  const loading = result.key !== requestKey;
+  const { summary, suspense, error } = result;
+  if (loading && !summary && !error) return <SummarySkeleton />;
+
+  const statementOptions = { ...options, accountHref: (accountId) => transactionsHref(options, accountId) };
 
   return (
     <>
-      <PageHeader title="Summary" />
-      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
-        <StatementCard title="Balance Sheet">
-          {bsGroups.map((group) => (
-            <GroupSection key={group.id} group={group} accounts={accounts} bankTotal={bankTotal} />
-          ))}
-          {Number(suspenseBalance) !== 0 && (
-            <SuspenseRow balance={suspenseBalance} onOpen={() => setShowSuspense(true)} />
-          )}
-        </StatementCard>
-
-        <StatementCard title="Profit and Loss Statement">
-          {plGroups.map((group) => (
-            <GroupSection key={group.id} group={group} accounts={accounts} />
-          ))}
-          <div className="flex min-h-row items-center justify-between gap-4 border-t border-border font-semibold">
-            <span>Net profit (loss)</span>
-            <Amount value={null} />
-          </div>
-        </StatementCard>
-      </div>
+      <PageHeader title="Summary" description={`${options.from} to ${options.to}`} />
+      <OptionsBar options={options} onChange={update} />
+      {error && <ErrorAlert>{error}</ErrorAlert>}
+      {summary && (
+        <Card aria-busy={loading} className={cn('transition-opacity duration-150', loading && 'opacity-60')}>
+          <CardHeader>
+            <CardTitle>Summary</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-10 max-md:px-2 lg:grid-cols-2">
+            <BalanceSheet
+              sheet={summary.balance_sheet}
+              options={statementOptions}
+              suspense={!isZeroAmount(suspense) && <SuspenseRow balance={suspense} onOpen={() => setShowSuspense(true)} />}
+            />
+            <ProfitAndLoss statement={summary.profit_and_loss} options={statementOptions} />
+          </CardContent>
+          <CardFooter className="justify-end">
+            <Button variant="secondary" asChild>
+              <Link href={transactionsHref(options)}><ListTree aria-hidden="true" />Transactions</Link>
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
     </>
   );
 }

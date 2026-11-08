@@ -114,3 +114,15 @@ class JournalLine(Base):
     document_line_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
     line_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class OpeningBalance(Base):
+    """Links an opening_balance document to its source record (domain-model §3.5, D-35)."""
+
+    __tablename__ = "opening_balances"
+
+    document_id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True)
+    business_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    kind_key: Mapped[str] = mapped_column(Text, nullable=False)
+    account_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

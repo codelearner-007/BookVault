@@ -31,3 +31,10 @@ class BusinessSettingsRepository:
             .execution_options(synchronize_session=False)
         )
         return result.one_or_none()
+
+    async def set_books_start_date(self, business_id: str, books_start_date: date) -> None:
+        """At business creation only (no documents yet); later changes go through update_books."""
+        await self.session.execute(
+            update(BusinessSettings).where(BusinessSettings.business_id == business_id)
+            .values(books_start_date=books_start_date).execution_options(synchronize_session=False)
+        )

@@ -6,7 +6,7 @@ import httpx
 
 from tests.support.factories import TestUser
 
-# The account type BookVault uses for each golden `side` (COA types, until B2's system types).
+# The account type BookVault uses for each golden `side`.
 SIDE_TO_TYPE = {"asset": "asset", "liability": "liability", "equity": "equity",
                 "income": "income", "expense": "expense"}
 
@@ -16,9 +16,10 @@ def biz(business_id: str, path: str) -> str:
 
 
 async def create_account(client: httpx.AsyncClient, user: TestUser, business_id: str,
-                         name: str, type_: str = "expense") -> str:
-    response = await client.post(biz(business_id, "/chart-of-accounts/accounts"),
-                                 json={"name": name, "type": type_}, headers=user.headers)
+                         name: str, type_: str = "expense", group_id: str | None = None) -> str:
+    """No group: the account goes to the root of its type."""
+    body = {"name": name, "type": type_, **({"group_id": group_id} if group_id else {})}
+    response = await client.post(biz(business_id, "/chart-of-accounts/accounts"), json=body, headers=user.headers)
     assert response.status_code == 201, response.text
     return response.json()["id"]
 

@@ -44,6 +44,7 @@ const FIELD_LABELS = {
   description: 'Description',
   opening_balance: 'Opening Balance',
   country: 'Country',
+  country_id: 'Country',
   owner_id: 'Owner ID',
 };
 

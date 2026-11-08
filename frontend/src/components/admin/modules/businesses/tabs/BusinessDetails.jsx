@@ -36,7 +36,7 @@ export default function BusinessDetails({ business, onBusinessUpdated }) {
   const router = useRouter();
   const [name, setName] = useState(business.name ?? '');
   const [address, setAddress] = useState(business.address ?? '');
-  const [country, setCountry] = useState(business.country ?? '');
+  const [countryId, setCountryId] = useState(business.country_id ?? '');
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [error, setError] = useState(null);
@@ -52,7 +52,7 @@ export default function BusinessDetails({ business, onBusinessUpdated }) {
     const fresh = await getBusiness(business.id);
     setName(fresh.name ?? '');
     setAddress(fresh.address ?? '');
-    setCountry(fresh.country ?? '');
+    setCountryId(fresh.country_id ?? '');
     if (onBusinessUpdated) onBusinessUpdated(fresh);
   }
 
@@ -69,7 +69,7 @@ export default function BusinessDetails({ business, onBusinessUpdated }) {
       const updated = await updateBusiness(business.id, {
         name: name.trim(),
         address: address.trim() || null,
-        country: country || null,
+        country_id: countryId || null,
         version: business.version,
       });
       if (onBusinessUpdated) onBusinessUpdated(updated);
@@ -89,7 +89,7 @@ export default function BusinessDetails({ business, onBusinessUpdated }) {
     try {
       const updated = await resetBusiness(business.id);
       setAddress('');
-      setCountry('');
+      setCountryId('');
       if (onBusinessUpdated) onBusinessUpdated(updated);
       router.push('?tab=settings');
     } catch (err) {
@@ -151,8 +151,8 @@ export default function BusinessDetails({ business, onBusinessUpdated }) {
           <div className="space-y-2">
             <Label htmlFor="details-country">Country <Optional /></Label>
             <Select
-              value={country}
-              onValueChange={(value) => setCountry(value === NO_COUNTRY ? '' : value)}
+              value={countryId}
+              onValueChange={(value) => setCountryId(value === NO_COUNTRY ? '' : value)}
               disabled={isBusy}
             >
               <SelectTrigger id="details-country">
@@ -161,7 +161,7 @@ export default function BusinessDetails({ business, onBusinessUpdated }) {
               <SelectContent>
                 <SelectItem value={NO_COUNTRY}>No country</SelectItem>
                 {countries.map((c) => (
-                  <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

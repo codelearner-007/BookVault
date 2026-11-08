@@ -128,19 +128,19 @@ async def test_db_composite_fk_blocks_cross_business_coa_group(db_conn, users):
     group_b = (
         await db_conn.execute(
             text(
-                "INSERT INTO public.coa_groups (business_id, name, type)"
-                " VALUES (:b, 'G', 'balance_sheet') RETURNING id"
+                "SELECT id FROM public.coa_groups WHERE business_id = :b AND root_key = 'assets'"
             ),
             {"b": business_b},
         )
     ).scalar_one()
 
     savepoint = await db_conn.begin_nested()
-    with pytest.raises(IntegrityError, match="coa_accounts_business_group_fkey"):
+    # The root trigger (B2) refuses it before the composite FK would.
+    with pytest.raises(IntegrityError, match="coa_accounts_business_group_fkey|group of the same business"):
         await db_conn.execute(
             text(
-                "INSERT INTO public.coa_accounts (business_id, name, group_id)"
-                " VALUES (:a, 'X', :g)"
+                "INSERT INTO public.coa_accounts (business_id, name, type, group_id)"
+                " VALUES (:a, 'X', 'asset', :g)"
             ),
             {"a": business_a, "g": group_b},
         )
