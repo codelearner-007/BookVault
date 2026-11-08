@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    members,
     admin_tabs,
     audit,
     auth,
@@ -36,6 +37,7 @@ api_router.include_router(users.router)
 api_router.include_router(audit.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(modules.router)
+api_router.include_router(members.router)
 api_router.include_router(businesses.router)
 api_router.include_router(coa.router)
 api_router.include_router(bank_accounts.router)

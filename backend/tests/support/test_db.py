@@ -53,7 +53,11 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 """
 
 # Lines of the auth/storage dump that belong to our migrations, not to Supabase.
-_DUMP_SKIP_MARKERS = ("on_auth_user_created", "receipts_bucket_service_role_all")
+_DUMP_SKIP_MARKERS = (
+    "on_auth_user_created",
+    "on_auth_user_bootstrap_check",
+    "receipts_bucket_service_role_all",
+)
 
 
 def _docker(*args: str, stdin: str | None = None) -> str:

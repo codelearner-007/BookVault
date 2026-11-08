@@ -3,7 +3,8 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db, require_business_access, require_role
+from app.core.access_rights import AreaRight
+from app.core.dependencies import get_current_user, get_db, require_business_access
 from app.schemas.auth import CurrentUser
 from app.schemas.request.bank_account import BankAccountCreate, BankAccountUpdate
 from app.schemas.response.bank_account import BankAccountListResponse, BankAccountResponse
@@ -13,13 +14,11 @@ from app.services.bank_account_service import BankAccountService
 router = APIRouter(
     prefix="/businesses/{business_id}/bank-accounts",
     tags=["Bank Accounts"],
-    dependencies=[Depends(require_business_access)],
 )
 
-_ROLE_DEP = [Depends(require_role("admin", "super_admin"))]
 
 
-@router.get("", response_model=BankAccountListResponse, dependencies=_ROLE_DEP)
+@router.get("", response_model=BankAccountListResponse, dependencies=[Depends(require_business_access("bank_cash_accounts", AreaRight.VIEW))])
 async def list_bank_accounts(
     business_id: str,
     db: AsyncSession = Depends(get_db),
@@ -27,7 +26,7 @@ async def list_bank_accounts(
     return await BankAccountService(db).list_accounts(business_id)
 
 
-@router.post("", response_model=BankAccountResponse, status_code=status.HTTP_201_CREATED, dependencies=_ROLE_DEP)
+@router.post("", response_model=BankAccountResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_business_access("bank_cash_accounts", AreaRight.CREATE))])
 async def create_bank_account(
     business_id: str,
     body: BankAccountCreate,
@@ -51,7 +50,7 @@ async def create_bank_account(
 
 
 
-@router.get("/{bank_account_id}", response_model=BankAccountResponse, dependencies=_ROLE_DEP)
+@router.get("/{bank_account_id}", response_model=BankAccountResponse, dependencies=[Depends(require_business_access("bank_cash_accounts", AreaRight.VIEW))])
 async def get_bank_account(
     business_id: str,
     bank_account_id: str,
@@ -60,7 +59,7 @@ async def get_bank_account(
     return await BankAccountService(db).get_account(business_id, bank_account_id)
 
 
-@router.put("/{bank_account_id}", response_model=BankAccountResponse, dependencies=_ROLE_DEP)
+@router.put("/{bank_account_id}", response_model=BankAccountResponse, dependencies=[Depends(require_business_access("bank_cash_accounts", AreaRight.EDIT))])
 async def update_bank_account(
     business_id: str,
     bank_account_id: str,
@@ -85,7 +84,7 @@ async def update_bank_account(
     return result
 
 
-@router.delete("/{bank_account_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=_ROLE_DEP)
+@router.delete("/{bank_account_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_business_access("bank_cash_accounts", AreaRight.DELETE))])
 async def delete_bank_account(
     business_id: str,
     bank_account_id: str,

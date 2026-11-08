@@ -1,9 +1,10 @@
 """Receipts endpoints."""
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db, require_business_access, require_role
+from app.core.access_rights import AreaRight
+from app.core.dependencies import get_current_user, get_db, require_business_access
 from app.schemas.auth import CurrentUser
 from app.schemas.request.receipt import ReceiptCreate, ReceiptUpdate
 from app.schemas.response.receipt import ReceiptListResponse, ReceiptResponse
@@ -13,13 +14,11 @@ from app.services.receipt_service import ReceiptService
 router = APIRouter(
     prefix="/businesses/{business_id}/receipts",
     tags=["Receipts"],
-    dependencies=[Depends(require_business_access)],
 )
 
-_ROLE_DEP = [Depends(require_role("admin", "super_admin"))]
 
 
-@router.get("", response_model=ReceiptListResponse, dependencies=_ROLE_DEP)
+@router.get("", response_model=ReceiptListResponse, dependencies=[Depends(require_business_access("receipts", AreaRight.VIEW))])
 async def list_receipts(
     business_id: str,
     db: AsyncSession = Depends(get_db),
@@ -27,7 +26,17 @@ async def list_receipts(
     return await ReceiptService(db).list_receipts(business_id)
 
 
-@router.post("", response_model=ReceiptResponse, status_code=status.HTTP_201_CREATED, dependencies=_ROLE_DEP)
+@router.get(
+    "/upload-authorization",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_business_access("receipts", AreaRight.CREATE))],
+)
+async def authorize_receipt_upload() -> Response:
+    """Asked by the Next.js upload route (B0.2 stop-gap): may the caller attach files here?"""
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("", response_model=ReceiptResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_business_access("receipts", AreaRight.CREATE))])
 async def create_receipt(
     business_id: str,
     body: ReceiptCreate,
@@ -48,7 +57,7 @@ async def create_receipt(
     return result
 
 
-@router.get("/{receipt_id}", response_model=ReceiptResponse, dependencies=_ROLE_DEP)
+@router.get("/{receipt_id}", response_model=ReceiptResponse, dependencies=[Depends(require_business_access("receipts", AreaRight.VIEW))])
 async def get_receipt(
     business_id: str,
     receipt_id: str,
@@ -57,7 +66,7 @@ async def get_receipt(
     return await ReceiptService(db).get_receipt(business_id, receipt_id)
 
 
-@router.put("/{receipt_id}", response_model=ReceiptResponse, dependencies=_ROLE_DEP)
+@router.put("/{receipt_id}", response_model=ReceiptResponse, dependencies=[Depends(require_business_access("receipts", AreaRight.EDIT))])
 async def update_receipt(
     business_id: str,
     receipt_id: str,
@@ -84,7 +93,7 @@ async def update_receipt(
     return result
 
 
-@router.delete("/{receipt_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=_ROLE_DEP)
+@router.delete("/{receipt_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_business_access("receipts", AreaRight.DELETE))])
 async def delete_receipt(
     business_id: str,
     receipt_id: str,

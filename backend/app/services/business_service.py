@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.ids import is_uuid
 from app.models.admin_tab import AdminTab
 from app.models.business import Business
 from app.models.business_tab import BusinessTab
@@ -27,15 +26,6 @@ class BusinessService:
     def __init__(self, session: AsyncSession) -> None:
         self.repo = BusinessRepository(session)
 
-    async def list_by_owner(self, owner_id: str) -> BusinessListResponse:
-        """Return active businesses owned by the given user with total count."""
-        items = await self.repo.list_by_owner(owner_id)
-        total = await self.repo.count_by_owner(owner_id)
-        return BusinessListResponse(
-            items=[BusinessResponse.model_validate(b) for b in items],
-            total=total,
-        )
-
     async def list_deleted_by_owner(self, owner_id: str) -> BusinessListResponse:
         """Return soft-deleted businesses owned by the given user with total count."""
         items = await self.repo.list_deleted_by_owner(owner_id)
@@ -56,23 +46,6 @@ class BusinessService:
         created = await self.repo.create(business)
         await CoaRepository(self.repo.session).seed_default_coa(str(created.id))
         return BusinessResponse.model_validate(created)
-
-    async def require_owned(
-        self, business_id: str, owner_id: str, include_deleted: bool = False
-    ) -> None:
-        """Raise 404 unless owner_id owns the business (temporary owner check until B0.3).
-
-        Soft-deleted businesses count as missing unless include_deleted is set (CS-08).
-        A malformed id is answered exactly like an unknown one.
-        """
-        business = None
-        if is_uuid(business_id):
-            business = await self.repo.get_by_owner(business_id, owner_id, include_deleted)
-        if not business:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Business not found",
-            )
 
     async def get(self, business_id: str, owner_id: str) -> BusinessResponse:
         """Return a single business by ID if it belongs to owner, raising 404 otherwise."""

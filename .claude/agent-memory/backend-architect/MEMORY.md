@@ -51,3 +51,4 @@ from app.schemas.role import RoleCreate  # alias for CreateRoleRequest
 - 10 route files, 7 services, 8 repositories, 7 models
 - 5 request schemas, 8 response schemas, + common.py + auth.py
 - 27 total FastAPI routes
+- [Local migration apply](project_local_migrations.md) — CLI migration up broken; psql + schema_migrations row; auth triggers need _DUMP_SKIP_MARKERS

@@ -7,15 +7,14 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_db, require_business_access, require_role
+from app.core.access_rights import AreaRight
+from app.core.dependencies import get_db, require_business_access
 
 router = APIRouter(
     prefix="/businesses/{business_id}/suspense",
     tags=["Suspense"],
-    dependencies=[Depends(require_business_access)],
 )
 
-_ROLE_DEP = [Depends(require_role("admin", "super_admin"))]
 
 
 class SuspenseBalanceResponse(BaseModel):
@@ -39,7 +38,7 @@ class SuspenseEntriesResponse(BaseModel):
     total: int
 
 
-@router.get("/balance", response_model=SuspenseBalanceResponse, dependencies=_ROLE_DEP)
+@router.get("/balance", response_model=SuspenseBalanceResponse, dependencies=[Depends(require_business_access("suspense", AreaRight.VIEW))])
 async def get_suspense_balance(
     business_id: str,
     db: AsyncSession = Depends(get_db),
@@ -57,7 +56,7 @@ async def get_suspense_balance(
     return SuspenseBalanceResponse(business_id=business_id, suspense_balance=balance)
 
 
-@router.get("/entries", response_model=SuspenseEntriesResponse, dependencies=_ROLE_DEP)
+@router.get("/entries", response_model=SuspenseEntriesResponse, dependencies=[Depends(require_business_access("suspense", AreaRight.VIEW))])
 async def get_suspense_entries(
     business_id: str,
     db: AsyncSession = Depends(get_db),

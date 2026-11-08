@@ -125,10 +125,10 @@ export async function unbanUser(userId) {
 }
 
 /**
- * Delete a user permanently (uses frontend API with Supabase admin client)
+ * Delete a business user the caller created (D-30); any other account answers 404 (D-34)
  */
 export async function deleteUser(userId) {
-  await apiClient.delete(`/users/${userId}/delete`);
+  await apiClient.delete(`/users/${userId}`);
 }
 
 /**
@@ -139,8 +139,8 @@ export async function resendVerificationEmail(userId) {
 }
 
 /**
- * Send password reset email to user (uses frontend API with Supabase admin client)
+ * Reset the password of a business user the caller created (body: { password }, D-34)
  */
-export async function sendPasswordResetEmail(userId) {
-  await apiClient.post(`/users/${userId}/reset-password`);
+export async function sendPasswordResetEmail(userId, body) {
+  await apiClient.post(`/users/${userId}/reset-password`, body);
 }

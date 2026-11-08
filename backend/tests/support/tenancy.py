@@ -61,3 +61,28 @@ async def request_as(client, user, business_route: BusinessRoute, business_id: s
     if method in {"POST", "PUT", "PATCH"}:
         kwargs["json"] = {}
     return await client.request(method, business_route.url_for(business_id), **kwargs)
+
+
+def route_access_pairs(route: APIRoute) -> list[tuple[str, str]]:
+    """The (area, right) pairs a route's business-access guards declare, in order."""
+    pairs, stack = [], list(route.dependant.dependencies)
+    while stack:
+        dependant = stack.pop(0)
+        pair = getattr(dependant.call, "access_pair", None)
+        if pair:
+            pairs.append(pair)
+        stack.extend(dependant.dependencies)
+    return pairs
+
+
+def guard_kind(route: APIRoute) -> str:
+    """'pairs' (area rights), 'member' (membership only) or 'tab' (area of the tab_key)."""
+    stack = list(route.dependant.dependencies)
+    kinds = set()
+    while stack:
+        dependant = stack.pop()
+        if getattr(dependant.call, "grants_business_access", False):
+            kinds.add("pairs" if getattr(dependant.call, "access_pair", None) else
+                      "tab" if dependant.call.__name__ == "tab_area_access" else "member")
+        stack.extend(dependant.dependencies)
+    return "pairs" if "pairs" in kinds else kinds.pop() if kinds else "none"

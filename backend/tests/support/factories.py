@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -25,15 +26,18 @@ class TestUser:
     headers: dict[str, str]
 
 
-def make_token(secret: str, user_id: str, email: str, role: str) -> str:
+def make_token(
+    secret: str, user_id: str, email: str, role: str | None, app_metadata: dict | None = None
+) -> str:
     """Sign a Supabase-shaped access token with the test secret (HS256)."""
     now = datetime.now(timezone.utc)
     claims = {
+        "app_metadata": app_metadata or {},
         "sub": user_id,
         "email": email,
         "aud": "authenticated",
         "role": "authenticated",
-        "user_role": role,
+        **({"user_role": role} if role else {}),
         "iat": int(now.timestamp()),
         "exp": int((now + TOKEN_TTL).timestamp()),
     }
@@ -65,6 +69,29 @@ class UserFactory:
         self.created.append(user_id)
         token = make_token(self.secret, user_id, email, token_role or role)
         return TestUser(user_id, email, role, {"Authorization": f"Bearer {token}"})
+
+    async def create_member(
+        self, creator: TestUser, business_id: str, must_change_password: bool = False
+    ) -> TestUser:
+        """A business user as the Next.js route creates it: provisioned by the business owner."""
+        user_id = str(uuid.uuid4())
+        email = f"{user_id[:8]}@{EMAIL_DOMAIN}"
+        app_metadata = {"provisioned_for_business": business_id, "created_by_user_id": creator.id}
+        await self.conn.execute(
+            text(
+                "INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,"
+                " email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)"
+                " VALUES (:id, '00000000-0000-0000-0000-000000000000', 'authenticated',"
+                " 'authenticated', :email, '', now(), CAST(:meta AS jsonb), '{}', now(), now())"
+            ),
+            {"id": user_id, "email": email, "meta": json.dumps(app_metadata)},
+        )
+        self.created.append(user_id)
+        token = make_token(
+            self.secret, user_id, email, "member",
+            {"must_change_password": must_change_password},
+        )
+        return TestUser(user_id, email, "member", {"Authorization": f"Bearer {token}"})
 
     async def set_role(self, user_id: str, role: str) -> None:
         await self.conn.execute(
@@ -128,3 +155,34 @@ async def first_coa_group_id(client: httpx.AsyncClient, user: TestUser, business
     )
     assert response.status_code == 200, response.text
     return response.json()["items"][0]["id"]
+
+
+async def add_member(
+    client: httpx.AsyncClient,
+    owner: TestUser,
+    business_id: str,
+    member: TestUser,
+    access_mode: str = "custom",
+    areas: list[dict] | None = None,
+) -> dict:
+    response = await client.post(
+        f"/api/v1/businesses/{business_id}/members",
+        json={"user_id": member.id, "access_mode": access_mode, "areas": areas or []},
+        headers=owner.headers,
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+async def put_access(
+    client: httpx.AsyncClient, owner: TestUser, business_id: str, member_row: dict, **body
+) -> httpx.Response:
+    current = await client.get(
+        f"/api/v1/businesses/{business_id}/members/{member_row['id']}/access", headers=owner.headers
+    )
+    payload = {"access_mode": "custom", "version": current.json()["version"], "areas": [], **body}
+    return await client.put(
+        f"/api/v1/businesses/{business_id}/members/{member_row['id']}/access",
+        json=payload,
+        headers=owner.headers,
+    )

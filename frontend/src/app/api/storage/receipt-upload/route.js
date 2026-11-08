@@ -41,7 +41,13 @@ export async function POST(request) {
   if (!isUuid(businessId)) {
     return NextResponse.json({ error: 'Business not found' }, { status: 404 });
   }
-  const access = await fetchBackendAsCaller(request, `/api/v1/businesses/${businessId}`);
+  const access = await fetchBackendAsCaller(
+    request,
+    `/api/v1/businesses/${businessId}/receipts/upload-authorization`,
+  );
+  if (access.status === 403) {
+    return NextResponse.json({ error: 'You do not have permission for this action' }, { status: 403 });
+  }
   if (!access.ok) {
     return NextResponse.json({ error: 'Business not found' }, { status: 404 });
   }

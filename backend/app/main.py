@@ -18,6 +18,7 @@ from app.core.exceptions import AppException
 from app.core.logging_config import setup_logging
 from app.core.rate_limit import limiter
 from app.db.session import get_session_manager
+from app.services.startup_service import run_startup_checks
 
 # Setup logging
 setup_logging()
@@ -33,6 +34,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     # Startup
     logger.info("Starting FastAPI application...")
+    async with get_session_manager().session() as session:
+        await run_startup_checks(session)
     yield
 
     # Shutdown

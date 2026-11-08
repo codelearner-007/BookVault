@@ -3,7 +3,8 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db, require_business_access, require_role
+from app.core.access_rights import AreaRight
+from app.core.dependencies import get_current_user, get_db, require_business_access
 from app.schemas.auth import CurrentUser
 from app.schemas.request.customer import CustomerCreate, CustomerUpdate
 from app.schemas.response.customer import CustomerListResponse, CustomerResponse
@@ -14,13 +15,11 @@ from app.services.customer_service import CustomerService
 router = APIRouter(
     prefix="/businesses/{business_id}/customers",
     tags=["Customers"],
-    dependencies=[Depends(require_business_access)],
 )
 
-_ROLE_DEP = [Depends(require_role("admin", "super_admin"))]
 
 
-@router.get("", response_model=CustomerListResponse, dependencies=_ROLE_DEP)
+@router.get("", response_model=CustomerListResponse, dependencies=[Depends(require_business_access("customers", AreaRight.VIEW))])
 async def list_customers(
     business_id: str,
     db: AsyncSession = Depends(get_db),
@@ -28,7 +27,7 @@ async def list_customers(
     return await CustomerService(db).list_customers(business_id)
 
 
-@router.post("", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED, dependencies=_ROLE_DEP)
+@router.post("", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_business_access("customers", AreaRight.CREATE))])
 async def create_customer(
     business_id: str,
     body: CustomerCreate,
@@ -53,7 +52,7 @@ async def create_customer(
     return result
 
 
-@router.get("/{customer_id}", response_model=CustomerResponse, dependencies=_ROLE_DEP)
+@router.get("/{customer_id}", response_model=CustomerResponse, dependencies=[Depends(require_business_access("customers", AreaRight.VIEW))])
 async def get_customer(
     business_id: str,
     customer_id: str,
@@ -62,7 +61,7 @@ async def get_customer(
     return await CustomerService(db).get_customer(business_id, customer_id)
 
 
-@router.get("/{customer_id}/receipts", response_model=ReceiptListResponse, dependencies=_ROLE_DEP)
+@router.get("/{customer_id}/receipts", response_model=ReceiptListResponse, dependencies=[Depends(require_business_access("customers", AreaRight.VIEW)), Depends(require_business_access("receipts", AreaRight.VIEW))])
 async def list_customer_receipts(
     business_id: str,
     customer_id: str,
@@ -71,7 +70,7 @@ async def list_customer_receipts(
     return await CustomerService(db).list_customer_receipts(business_id, customer_id)
 
 
-@router.put("/{customer_id}", response_model=CustomerResponse, dependencies=_ROLE_DEP)
+@router.put("/{customer_id}", response_model=CustomerResponse, dependencies=[Depends(require_business_access("customers", AreaRight.EDIT))])
 async def update_customer(
     business_id: str,
     customer_id: str,
@@ -95,7 +94,7 @@ async def update_customer(
     return result
 
 
-@router.delete("/{customer_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=_ROLE_DEP)
+@router.delete("/{customer_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_business_access("customers", AreaRight.DELETE))])
 async def delete_customer(
     business_id: str,
     customer_id: str,

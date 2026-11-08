@@ -3,7 +3,8 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db, require_business_access, require_role
+from app.core.access_rights import AreaRight
+from app.core.dependencies import get_current_user, get_db, require_business_access
 from app.schemas.auth import CurrentUser
 from app.schemas.request.supplier import SupplierCreate, SupplierUpdate
 from app.schemas.response.receipt import ReceiptListResponse
@@ -14,13 +15,11 @@ from app.services.supplier_service import SupplierService
 router = APIRouter(
     prefix="/businesses/{business_id}/suppliers",
     tags=["Suppliers"],
-    dependencies=[Depends(require_business_access)],
 )
 
-_ROLE_DEP = [Depends(require_role("admin", "super_admin"))]
 
 
-@router.get("", response_model=SupplierListResponse, dependencies=_ROLE_DEP)
+@router.get("", response_model=SupplierListResponse, dependencies=[Depends(require_business_access("suppliers", AreaRight.VIEW))])
 async def list_suppliers(
     business_id: str,
     db: AsyncSession = Depends(get_db),
@@ -28,7 +27,7 @@ async def list_suppliers(
     return await SupplierService(db).list_suppliers(business_id)
 
 
-@router.post("", response_model=SupplierResponse, status_code=status.HTTP_201_CREATED, dependencies=_ROLE_DEP)
+@router.post("", response_model=SupplierResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_business_access("suppliers", AreaRight.CREATE))])
 async def create_supplier(
     business_id: str,
     body: SupplierCreate,
@@ -53,7 +52,7 @@ async def create_supplier(
     return result
 
 
-@router.get("/{supplier_id}", response_model=SupplierResponse, dependencies=_ROLE_DEP)
+@router.get("/{supplier_id}", response_model=SupplierResponse, dependencies=[Depends(require_business_access("suppliers", AreaRight.VIEW))])
 async def get_supplier(
     business_id: str,
     supplier_id: str,
@@ -62,7 +61,7 @@ async def get_supplier(
     return await SupplierService(db).get_supplier(business_id, supplier_id)
 
 
-@router.get("/{supplier_id}/receipts", response_model=ReceiptListResponse, dependencies=_ROLE_DEP)
+@router.get("/{supplier_id}/receipts", response_model=ReceiptListResponse, dependencies=[Depends(require_business_access("suppliers", AreaRight.VIEW)), Depends(require_business_access("receipts", AreaRight.VIEW))])
 async def list_supplier_receipts(
     business_id: str,
     supplier_id: str,
@@ -71,7 +70,7 @@ async def list_supplier_receipts(
     return await SupplierService(db).list_supplier_receipts(business_id, supplier_id)
 
 
-@router.put("/{supplier_id}", response_model=SupplierResponse, dependencies=_ROLE_DEP)
+@router.put("/{supplier_id}", response_model=SupplierResponse, dependencies=[Depends(require_business_access("suppliers", AreaRight.EDIT))])
 async def update_supplier(
     business_id: str,
     supplier_id: str,
@@ -95,7 +94,7 @@ async def update_supplier(
     return result
 
 
-@router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=_ROLE_DEP)
+@router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_business_access("suppliers", AreaRight.DELETE))])
 async def delete_supplier(
     business_id: str,
     supplier_id: str,

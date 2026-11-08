@@ -5,6 +5,7 @@ from typing import List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
+    AppException,
     DuplicateResourceError,
     HierarchyViolationError,
     ImmutableResourceError,
@@ -12,9 +13,12 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.models.user_role import UserRole
+from app.repositories.managed_user_repository import ManagedUserRepository
 from app.repositories.role_repository import RoleRepository
 from app.repositories.user_role_repository import UserRoleRepository
 from app.schemas.auth import CurrentUser
+
+ADMIN_ROLE = "admin"
 
 
 def validate_hierarchy(
@@ -35,6 +39,7 @@ class UserRoleService:
     def __init__(self, session: AsyncSession):
         self.repository = UserRoleRepository(session)
         self.role_repository = RoleRepository(session)
+        self.accounts = ManagedUserRepository(session)
 
     async def _get_target_user_info(self, user_id: str) -> Tuple[int, bool]:
         """
@@ -204,6 +209,10 @@ class UserRoleService:
 
         # Check role hierarchy
         role = await self.role_repository.get(role_id)
+        if role and role.name == ADMIN_ROLE and await self.accounts.count_active_owned_businesses(user_id):
+            raise AppException(
+                "This user owns active businesses and must stay an admin", status_code=409
+            )
         if role:
             is_super = current_user.user_role == "super_admin"
             validate_hierarchy(current_user.hierarchy_level, role.hierarchy_level, is_super)

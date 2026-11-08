@@ -61,6 +61,7 @@ async def assign_role_to_user(
 ) -> UserRoleResponse:
     """Assign a role to a user. Requires: users:assign_roles"""
     service = UserRoleService(db)
+    old_role = await service.get_live_role_name(user_id)
     user_role = await service.assign_role(user_id, role_data.role_id, current_user)
 
     audit_service = AuditService(db)
@@ -69,7 +70,12 @@ async def assign_role_to_user(
         action="user_role_assigned",
         module="user_roles",
         resource_id=user_role.id,
-        details={"target_user_id": user_id, "role_id": role_data.role_id},
+        details={
+            "target_user_id": user_id,
+            "role_id": role_data.role_id,
+            "old_role": old_role,
+            "new_role": await service.get_live_role_name(user_id),
+        },
     )
 
     # Refresh to load role relationship
@@ -93,6 +99,7 @@ async def remove_role_from_user(
 ) -> None:
     """Remove a role from a user. Requires: users:assign_roles"""
     service = UserRoleService(db)
+    old_role = await service.get_live_role_name(user_id)
     deleted = await service.remove_role(user_id, role_id, current_user)
 
     if deleted:
@@ -102,5 +109,10 @@ async def remove_role_from_user(
             action="user_role_removed",
             module="user_roles",
             resource_id=None,
-            details={"target_user_id": user_id, "role_id": role_id},
+            details={
+                "target_user_id": user_id,
+                "role_id": role_id,
+                "old_role": old_role,
+                "new_role": await service.get_live_role_name(user_id),
+            },
         )

@@ -91,8 +91,23 @@ export async function updateSession(request) {
         }
 
         const jwtClaims = claimsData?.claims ?? {}
-        const userRole = jwtClaims.user_role ?? 'admin'
+        // Fail closed: no role claim (no user_roles row) never defaults to a role.
+        const userRole = jwtClaims.user_role
+        if (!userRole) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/forbidden'
+            return NextResponse.redirect(url)
+        }
         const isSuperAdmin = userRole === 'super_admin'
+
+        // Business users created with "must change password at next login" (D-30):
+        // every protected page leads to the profile page until the password is changed.
+        const profilePath = isSuperAdmin ? '/super-admin/profile' : '/admin/profile'
+        if (user.user.app_metadata?.must_change_password && !pathname.startsWith(profilePath)) {
+            const url = request.nextUrl.clone()
+            url.pathname = profilePath
+            return NextResponse.redirect(url)
+        }
 
         // /app/* — legacy shell: redirect to role-appropriate dashboard
         if (pathname.startsWith('/app')) {

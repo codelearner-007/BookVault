@@ -44,6 +44,17 @@ class Settings(BaseSettings):
     ENABLE_CORS: bool = False
     ALLOWED_ORIGINS: str = '["http://localhost:3000"]'
 
+    # Bootstrap super admin (D-29): unset -> nobody becomes super admin by signing up.
+    BOOTSTRAP_SUPER_ADMIN_EMAIL: str | None = None
+
+    # Business user management (D-30): limits per creator.
+    USER_MANAGEMENT_RATE_LIMIT: str = "30/minute"
+    USER_CREATE_REFUSAL_RATE_LIMIT: str = "10/hour"
+
+    # Pagination
+    PAGE_SIZE_DEFAULT: int = 50
+    PAGE_SIZE_MAX: int = 100
+
     @field_validator("ALLOWED_ORIGINS")
     @classmethod
     def parse_allowed_origins(cls, v: str) -> List[str]:

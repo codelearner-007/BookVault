@@ -1,45 +1,53 @@
 """Business endpoints."""
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.access_rights import AREA_ACCOUNT_BUSINESSES, AreaRight
+from app.core.config import settings
 from app.core.dependencies import (
     get_current_user,
     get_db,
     require_business_access,
-    require_business_access_including_deleted,
-    require_role,
+    require_business_creator,
+    require_business_member,
 )
 from app.schemas.auth import CurrentUser
 from app.schemas.request.business import CreateBusinessRequest, UpdateBusinessRequest
 from app.schemas.request.tab import UpsertBusinessTabsRequest
 from app.schemas.response.business import BusinessListResponse, BusinessResponse
+from app.schemas.response.member import MyBusinessListResponse
 from app.schemas.response.tab import BusinessTabListResponse
+from app.services.access_service import BusinessContext
 from app.services.audit_service import AuditService
 from app.services.business_service import BusinessService
+from app.services.member_service import MemberService
+
+_OWNER_ONLY = require_business_access(AREA_ACCOUNT_BUSINESSES, AreaRight.DELETE)
+_OWNER_ONLY_INCLUDING_DELETED = require_business_access(
+    AREA_ACCOUNT_BUSINESSES, AreaRight.DELETE, include_deleted=True
+)
+_DETAILS_EDIT = require_business_access("settings.business_details", AreaRight.EDIT)
 
 router = APIRouter(prefix="/businesses", tags=["Businesses"])
 
 
-@router.get(
-    "",
-    response_model=BusinessListResponse,
-    dependencies=[Depends(require_role("admin", "super_admin"))],
-)
+@router.get("", response_model=MyBusinessListResponse)
 async def list_businesses(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(settings.PAGE_SIZE_DEFAULT, ge=1, le=settings.PAGE_SIZE_MAX),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
-) -> BusinessListResponse:
-    """List businesses owned by the requesting user."""
-    service = BusinessService(db)
-    return await service.list_by_owner(str(current_user.user_id))
+) -> MyBusinessListResponse:
+    """Businesses I own or am an active member of (alias of GET /me/businesses)."""
+    return await MemberService(db).list_my_businesses(current_user.user_id, page, page_size)
 
 
 @router.post(
     "",
     response_model=BusinessResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_role("admin", "super_admin"))],
+    dependencies=[Depends(require_business_creator)],
 )
 async def create_business(
     body: CreateBusinessRequest,
@@ -66,11 +74,7 @@ async def create_business(
     return business
 
 
-@router.get(
-    "/deleted",
-    response_model=BusinessListResponse,
-    dependencies=[Depends(require_role("admin", "super_admin"))],
-)
+@router.get("/deleted", response_model=BusinessListResponse)
 async def list_deleted_businesses(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
@@ -83,22 +87,20 @@ async def list_deleted_businesses(
 @router.get(
     "/{business_id}",
     response_model=BusinessResponse,
-    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access)],
 )
 async def get_business(
     business_id: str,
+    ctx: BusinessContext = Depends(require_business_member()),
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
 ) -> BusinessResponse:
-    """Get a single business by ID owned by the requesting user."""
-    service = BusinessService(db)
-    return await service.get(business_id, str(current_user.user_id))
+    """Get a business I am an active member of."""
+    return await BusinessService(db).get(business_id, ctx.owner_id)
 
 
 @router.delete(
     "/{business_id}",
     status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access)],
+    dependencies=[Depends(_OWNER_ONLY)],
 )
 async def delete_business(
     business_id: str,
@@ -124,7 +126,7 @@ async def delete_business(
 @router.delete(
     "/{business_id}/permanent",
     status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access_including_deleted)],
+    dependencies=[Depends(_OWNER_ONLY_INCLUDING_DELETED)],
 )
 async def permanently_delete_business(
     business_id: str,
@@ -151,7 +153,7 @@ async def permanently_delete_business(
     "/{business_id}/restore",
     response_model=BusinessResponse,
     status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access_including_deleted)],
+    dependencies=[Depends(_OWNER_ONLY_INCLUDING_DELETED)],
 )
 async def restore_business(
     business_id: str,
@@ -177,11 +179,11 @@ async def restore_business(
 @router.put(
     "/{business_id}",
     response_model=BusinessResponse,
-    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access)],
 )
 async def update_business(
     business_id: str,
     body: UpdateBusinessRequest,
+    ctx: BusinessContext = Depends(_DETAILS_EDIT),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> BusinessResponse:
@@ -189,7 +191,7 @@ async def update_business(
     service = BusinessService(db)
     business = await service.update(
         business_id=business_id,
-        owner_id=str(current_user.user_id),
+        owner_id=ctx.owner_id,
         name=body.name,
         country=body.country,
         address=body.address,
@@ -211,16 +213,16 @@ async def update_business(
     "/{business_id}/reset",
     response_model=BusinessResponse,
     status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access)],
 )
 async def reset_business(
     business_id: str,
+    ctx: BusinessContext = Depends(_DETAILS_EDIT),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> BusinessResponse:
     """Reset business country and address to null."""
     service = BusinessService(db)
-    business = await service.reset(business_id, str(current_user.user_id))
+    business = await service.reset(business_id, ctx.owner_id)
 
     audit_service = AuditService(db)
     await audit_service.log_action(
@@ -237,29 +239,26 @@ async def reset_business(
 @router.get(
     "/{business_id}/tabs",
     response_model=BusinessTabListResponse,
-    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access)],
 )
 async def list_business_tabs(
     business_id: str,
+    ctx: BusinessContext = Depends(require_business_member()),
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
 ) -> BusinessTabListResponse:
-    """List tabs for a specific business owned by the requesting user, filtered by globally-enabled admin tabs."""
-    service = BusinessService(db)
-    return await service.list_business_tabs(business_id, str(current_user.user_id))
+    """Tabs of the business (globally enabled); only the ones I can view when my access is custom."""
+    tabs = await BusinessService(db).list_business_tabs(business_id, ctx.owner_id)
+    return await MemberService(db).visible_tabs(ctx, tabs)
 
 
 @router.put(
     "/{business_id}/tabs",
     response_model=BusinessTabListResponse,
-    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access)],
 )
 async def upsert_business_tabs(
     business_id: str,
     body: UpsertBusinessTabsRequest,
+    ctx: BusinessContext = Depends(require_business_access("settings.customize_tabs", AreaRight.EDIT)),
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
 ) -> BusinessTabListResponse:
-    """Update tab enabled/order configuration for a specific business owned by the requesting user."""
-    service = BusinessService(db)
-    return await service.upsert_business_tabs(business_id, str(current_user.user_id), body.items)
+    """Update tab enabled/order configuration of the business."""
+    return await BusinessService(db).upsert_business_tabs(business_id, ctx.owner_id, body.items)

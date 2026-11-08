@@ -1,43 +1,37 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { revokeAllUserSessions } from '@/lib/supabase/serverAdminClient';
-import { authorizeAdminAction } from '@/lib/utils/admin-auth';
+import { authorizeManagedUserAction } from '@/lib/server/managed-users';
+import { resetBusinessUserPasswordSchema } from '@/lib/schemas/member-access';
+import { zodToApiError } from '@/lib/utils/api-errors';
+import { USER_MANAGEMENT_COPY } from '@/lib/copy/user-management';
 
 /**
  * POST /api/users/[userId]/reset-password
- * Send password reset email to user (requires users:update_all permission)
+ * The creator sets a new password for a business user they created (D-30; D-34: no
+ * longer a super-admin platform action). "Change at next login" defaults to on.
  */
 export async function POST(request, { params }) {
   try {
     const { userId } = await params;
-    const auth = await authorizeAdminAction(request, userId);
+    const input = resetBusinessUserPasswordSchema.parse(await request.json());
+    const auth = await authorizeManagedUserAction(request, userId, 'reset_password');
     if (auth instanceof NextResponse) return auth;
 
-    // Get target user email for the reset link
-    const { data: targetUserData } =
-      await auth.adminClient.auth.admin.getUserById(auth.userId);
-
-    if (!targetUserData?.user?.email) {
-      return NextResponse.json({ error: 'User email not found' }, { status: 404 });
-    }
-
-    const { error } = await auth.adminClient.auth.admin.generateLink({
-      type: 'recovery',
-      email: targetUserData.user.email,
+    const { error } = await auth.adminClient.auth.admin.updateUserById(userId, {
+      password: input.password,
+      app_metadata: { must_change_password: input.must_change_password },
     });
-
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: USER_MANAGEMENT_COPY.actionFailed }, { status: 400 });
     }
-
-    // Revoke all sessions for security - user must re-authenticate after password reset
-    await revokeAllUserSessions(auth.userId);
-
-    return NextResponse.json({ message: 'Password reset email sent successfully' });
+    await revokeAllUserSessions(userId);
+    return NextResponse.json({ user_id: userId });
   } catch (error) {
-    console.error('Reset password error:', error);
-    return NextResponse.json(
-      { error: 'Failed to send password reset email' },
-      { status: 500 }
-    );
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(zodToApiError(error), { status: 400 });
+    }
+    console.error('Reset business user password error:', error);
+    return NextResponse.json({ error: USER_MANAGEMENT_COPY.actionFailed }, { status: 500 });
   }
 }

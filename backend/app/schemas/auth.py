@@ -19,11 +19,10 @@ class CurrentUser(BaseModel):
     email: EmailStr
     user_role: str
     hierarchy_level: int
+    must_change_password: bool = False
 
     def has_role(self, role: str) -> bool:
         return self.user_role == role
 
-    def is_admin(self) -> bool:
-        return self.user_role in ("admin", "super_admin")
 
 

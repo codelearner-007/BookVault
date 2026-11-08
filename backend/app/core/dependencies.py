@@ -10,14 +10,23 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import InvalidTokenError, RoleDeniedError
+from app.core.access_rights import AreaRight
+from app.core.exceptions import (
+    AppException,
+    InvalidTokenError,
+    ResourceNotFoundError,
+    RoleDeniedError,
+)
 from app.core.security import extract_user_claims, verify_token
 from app.db.session import get_session_manager
 from app.schemas.auth import CurrentUser
-from app.services.business_service import BusinessService
+from app.services.access_service import AccessService, BusinessContext
+from app.services.entitlements import can_create_business
 from app.services.user_role_service import UserRoleService
 
 SUPER_ADMIN_ROLE = "super_admin"
+# Reachable while app_metadata.must_change_password is set (D-30); the change itself is Next.js.
+PASSWORD_CHANGE_EXEMPT_PATHS = frozenset({"/api/v1/auth/me", "/api/v1/profile"})
 
 # HTTP Bearer token security scheme (auto_error=False for fallback to cookies)
 security = HTTPBearer(auto_error=False)
@@ -188,7 +197,14 @@ async def get_current_user(
     # Always verify JWT, never blindly decode
     payload = await verify_token(token)
     claims = extract_user_claims(payload)
-    return CurrentUser(**claims)
+    user = CurrentUser(**claims)
+    if user.must_change_password and request.url.path not in PASSWORD_CHANGE_EXEMPT_PATHS:
+        raise AppException(
+            "You must change your password before continuing",
+            status_code=403,
+            details={"code": "password_change_required"},
+        )
+    return user
 
 
 def require_role(*allowed_roles: str) -> Callable:
@@ -230,25 +246,70 @@ async def require_live_super_admin(
     return current_user
 
 
-def _business_access(include_deleted: bool) -> Callable:
-    """Build the guard every /businesses/{business_id} route depends on (CS-01, CS-08).
+# Every (area, right) pair a route declares; validated against the DB seed at startup.
+REGISTERED_ACCESS_PAIRS: set[tuple[str, str]] = set()
 
-    Temporary owner check; B0.3 replaces it with membership + per-area rights.
-    """
 
+def _business_access(
+    area_key: str | None, right: AreaRight | None, include_deleted: bool = False
+) -> Callable:
     async def business_access(
         business_id: str,
         current_user: CurrentUser = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
-    ) -> CurrentUser:
-        await BusinessService(db).require_owned(
-            business_id, current_user.user_id, include_deleted
+    ) -> BusinessContext:
+        return await AccessService(db).resolve(
+            business_id, current_user.user_id, area_key, right, include_deleted
         )
-        return current_user
 
     business_access.grants_business_access = True  # read by the route-inventory test
+    business_access.access_pair = (area_key, right.value) if right else None
     return business_access
 
 
-require_business_access = _business_access(include_deleted=False)
-require_business_access_including_deleted = _business_access(include_deleted=True)
+def require_business_access(
+    area_key: str, right: AreaRight, include_deleted: bool = False
+) -> Callable:
+    """Guard for a /businesses/{business_id} route: active membership + exactly `right` on `area_key`.
+
+    Not a member / unknown / soft-deleted business -> 404 (same body); right not held -> 403.
+    """
+    if not isinstance(right, AreaRight):
+        raise TypeError(f"right must be an AreaRight, got {right!r}")
+    REGISTERED_ACCESS_PAIRS.add((area_key, right.value))
+    return _business_access(area_key, right, include_deleted)
+
+
+def require_business_member() -> Callable:
+    """Guard for business routes that need membership only (no area), e.g. GET /businesses/{id}."""
+    return _business_access(None, None)
+
+
+def require_tab_area_access(right: AreaRight) -> Callable:
+    """Guard for /businesses/{business_id}/.../{tab_key}: `right` on the area that tab opens."""
+
+    async def tab_area_access(
+        business_id: str,
+        tab_key: str,
+        current_user: CurrentUser = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> BusinessContext:
+        service = AccessService(db)
+        await service.resolve(business_id, current_user.user_id, None, None)
+        area_key = await service.area_for_tab(tab_key)
+        if area_key is None:
+            raise ResourceNotFoundError("Tab", tab_key)
+        return await service.resolve(business_id, current_user.user_id, area_key, right)
+
+    tab_area_access.grants_business_access = True
+    return tab_area_access
+
+
+async def require_business_creator(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CurrentUser:
+    decision = await can_create_business(db, current_user)
+    if not decision.allowed:
+        raise AppException(decision.reason, status_code=403)
+    return current_user
