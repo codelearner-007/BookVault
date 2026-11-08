@@ -9,6 +9,17 @@ from app.models.business import Business
 from app.models.business_details import BusinessDetails
 
 
+# How the business writes dates and amounts (business_format) and its base currency (business_currencies).
+_FORMAT = text("""
+    SELECT f.date_format, f.number_format, cur.code AS currency_code, cur.decimal_places
+    FROM public.businesses b
+    LEFT JOIN public.business_format f ON f.business_id = b.id
+    LEFT JOIN public.business_currencies bc ON bc.business_id = b.id AND bc.is_base
+    LEFT JOIN public.currencies cur ON cur.id = bc.currency_id
+    WHERE b.id = CAST(:id AS uuid)
+""")
+
+
 class BusinessRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -85,6 +96,12 @@ class BusinessRepository:
             select(BusinessDetails).where(BusinessDetails.business_id == business_id)
         )
         return result.scalar_one_or_none()
+
+    async def get_format(self, business_id: str) -> dict[str, Any] | None:
+        """The business's date and number format plus its base currency's code and decimal places."""
+        result = await self.session.execute(_FORMAT, {"id": business_id})
+        row = result.mappings().one_or_none()
+        return dict(row) if row else None
 
     async def upsert_details(self, business_id: str, address: str | None) -> BusinessDetails:
         details = await self.get_details(business_id)

@@ -19,7 +19,11 @@ from app.schemas.request.business import (
     PurgeBusinessRequest,
     UpdateBusinessRequest,
 )
-from app.schemas.response.business import BusinessExportResponse, BusinessResponse
+from app.schemas.response.business import (
+    BusinessExportResponse,
+    BusinessFormatResponse,
+    BusinessResponse,
+)
 from app.services.access_service import BusinessContext
 from app.services.audit_service import AuditService
 from app.services.reauth import assert_recent_reauth
@@ -45,6 +49,11 @@ class BusinessService:
         return BusinessResponse.model_validate(business).model_copy(
             update={"address": details.address if details else None}
         )
+
+    async def _with_format(self, response: BusinessResponse) -> BusinessResponse:
+        """Adds how the business writes dates and amounts (read responses only, never audit snapshots)."""
+        row = await self.repo.get_format(response.id)
+        return response.model_copy(update={"format": BusinessFormatResponse(**row) if row else None})
 
     async def list_deleted(self, owner_id: str, params: PageParams) -> PaginatedResponse[BusinessResponse]:
         rows, total = await self.repo.list_deleted_page(owner_id, params.offset, params.page_size)
@@ -76,7 +85,7 @@ class BusinessService:
         return after
 
     async def get(self, ctx: BusinessContext) -> BusinessResponse:
-        return await self._response(await self._owned(ctx.business_id, ctx.owner_id))
+        return await self._with_format(await self._response(await self._owned(ctx.business_id, ctx.owner_id)))
 
     async def update(self, ctx: BusinessContext, body: UpdateBusinessRequest) -> BusinessResponse:
         business = await self._owned(ctx.business_id, ctx.owner_id)
@@ -90,7 +99,7 @@ class BusinessService:
         after = await self._response(business)
         await self.audit.record(ctx.user_id, "update", ENTITY, business.id, business.id,
                                 before=before, after=after)
-        return after
+        return await self._with_format(after)
 
     async def reset(self, ctx: BusinessContext) -> BusinessResponse:
         """Clear country and address (the name stays)."""
@@ -102,7 +111,7 @@ class BusinessService:
         after = await self._response(business)
         await self.audit.record(ctx.user_id, "reset", ENTITY, business.id, business.id,
                                 before=before, after=after)
-        return after
+        return await self._with_format(after)
 
     async def soft_delete(self, ctx: BusinessContext) -> None:
         business = await self._owned(ctx.business_id, ctx.owner_id)

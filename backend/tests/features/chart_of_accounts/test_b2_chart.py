@@ -185,6 +185,19 @@ async def test_create_business_preselects_user_country_and_applies_template(clie
     assert "Accounting fees" in names(await _tree(client, owner, generic["id"]))
 
 
+async def test_business_read_carries_its_date_and_number_format(client, users, db_conn):
+    owner = await users.create()
+    await db_conn.execute(text("UPDATE user_profiles SET country_id = (SELECT id FROM countries WHERE code = 'PK')"
+                               " WHERE user_id = :u"), {"u": owner.id})
+    created = (await client.post("/api/v1/businesses", json={"name": "Karachi Books"}, headers=owner.headers)).json()
+
+    read = (await client.get(f"/api/v1/businesses/{created['id']}", headers=owner.headers)).json()
+
+    assert read["format"] == {
+        "date_format": "dd/MM/yyyy", "number_format": "1,234.56", "currency_code": "PKR", "decimal_places": 2,
+    }
+
+
 async def test_reapply_template_adds_only_missing(client, users, db_conn):
     owner, bid = await _business(client, users)
     count = text("SELECT count(*) FROM coa_accounts WHERE business_id = :b")

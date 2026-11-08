@@ -6,6 +6,15 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 
+class BusinessFormatResponse(BaseModel):
+    """How the business writes dates and amounts; null fields fall back to the client defaults."""
+
+    date_format: str | None = None
+    number_format: str | None = None
+    currency_code: str | None = None
+    decimal_places: int | None = None
+
+
 class BusinessResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -19,6 +28,7 @@ class BusinessResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
+    format: BusinessFormatResponse | None = None
 
 
 class BusinessExportResponse(BaseModel):
