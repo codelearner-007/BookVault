@@ -54,6 +54,17 @@ function useRouteMemory() {
   }, [pathname, search]);
 }
 
+const ACCENT_PREVIEWS = ['a', 'b', 'c'];
+
+// Development only: ?accent=a|b|c previews a contrast-accent candidate (globals.css, data-accent on <html>).
+function useAccentPreview() {
+  const accent = useSearchParams().get('accent');
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development' || !ACCENT_PREVIEWS.includes(accent)) return;
+    document.documentElement.dataset.accent = accent;
+  }, [accent]);
+}
+
 function useShellKeys({ onToggleSidebar, onOpenPalette }) {
   useEffect(() => {
     function onKeyDown(event) {
@@ -78,6 +89,7 @@ function ShellFrame({ initialSidebar, children }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   useRouteMemory();
+  useAccentPreview();
 
   const toggleSidebar = useCallback(() => {
     if (!window.matchMedia(DESKTOP_QUERY).matches) {

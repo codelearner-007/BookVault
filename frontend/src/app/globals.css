@@ -5,7 +5,10 @@
   The ONLY place with literal colour, radius, size and motion values.
   One brand hue (255, ice) in both themes; status hues: ok 152, warn 75, bad 25, info 255.
   Light = :root, dark = .dark on <html> (next-themes, attribute="class").
-  Colour is reserved for verdicts and focus; the brand appears as light (focus, selection, active tab).
+  Colour is reserved for verdicts and focus; the brand appears as light (selection, links, caret).
+  Contrast accent (electric violet, 288): ONLY the filled primary button, the selected tab, the active
+  sidebar marker and the focus ring. Hue kept clear of every status hue. Preview alternatives in
+  development with ?accent=b|c (sets data-accent on <html>).
 */
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -42,8 +45,12 @@
   --brand: oklch(0.5 0.17 255);
   --brand-foreground: oklch(0.99 0 0);
   --link: oklch(0.47 0.16 255);
-  --ring: oklch(0.55 0.17 255);
-  --ring-soft: oklch(0.55 0.17 255 / 0.22);
+  --accent-contrast: oklch(0.5 0.2 288);
+  --accent-contrast-hover: oklch(0.45 0.2 288);
+  --accent-contrast-foreground: oklch(0.985 0.01 288);
+  --accent-contrast-shadow: inset 0 1px 0 oklch(1 0 0 / 0.18), 0 6px 16px -6px color-mix(in oklch, var(--accent-contrast) 60%, transparent);
+  --ring: var(--accent-contrast);
+  --ring-soft: color-mix(in oklch, var(--accent-contrast) 22%, transparent);
   --primary: oklch(0.24 0.03 255);
   --primary-hover: oklch(0.32 0.04 255);
   --primary-foreground: oklch(0.985 0.004 255);
@@ -139,8 +146,12 @@
   --brand: oklch(0.8 0.11 255);
   --brand-foreground: oklch(0.18 0.02 255);
   --link: oklch(0.82 0.1 255);
-  --ring: oklch(0.8 0.11 255);
-  --ring-soft: oklch(0.8 0.11 255 / 0.25);
+  --accent-contrast: oklch(0.76 0.13 288);
+  --accent-contrast-hover: oklch(0.81 0.11 288);
+  --accent-contrast-foreground: oklch(0.18 0.04 288);
+  --accent-contrast-shadow: inset 0 1px 0 oklch(1 0 0 / 0.25), 0 8px 24px -8px color-mix(in oklch, var(--accent-contrast) 45%, transparent);
+  --ring: var(--accent-contrast);
+  --ring-soft: color-mix(in oklch, var(--accent-contrast) 25%, transparent);
   --primary: oklch(0.95 0.015 255);
   --primary-hover: oklch(1 0 0);
   --primary-foreground: oklch(0.2 0.02 255);
@@ -187,6 +198,28 @@
   --info-soft: oklch(0.8 0.1 255 / 0.12);
   --neutral: oklch(0.8 0.015 255);
   --neutral-soft: oklch(1 0 0 / 0.07);
+}
+
+/* Contrast-accent preview candidates (data-accent is only set in development). A = the defaults above. */
+:root[data-accent="b"] {
+  --accent-contrast: oklch(0.52 0.088 200);
+  --accent-contrast-hover: oklch(0.47 0.082 200);
+  --accent-contrast-foreground: oklch(0.985 0.01 200);
+}
+.dark[data-accent="b"] {
+  --accent-contrast: oklch(0.8 0.12 200);
+  --accent-contrast-hover: oklch(0.85 0.11 200);
+  --accent-contrast-foreground: oklch(0.18 0.035 200);
+}
+:root[data-accent="c"] {
+  --accent-contrast: oklch(0.52 0.2 340);
+  --accent-contrast-hover: oklch(0.47 0.19 340);
+  --accent-contrast-foreground: oklch(0.985 0.01 340);
+}
+.dark[data-accent="c"] {
+  --accent-contrast: oklch(0.77 0.15 340);
+  --accent-contrast-hover: oklch(0.82 0.13 340);
+  --accent-contrast-foreground: oklch(0.18 0.04 340);
 }
 
 /* Touch density below lg (64rem): every control, row, menu item and nav item is 44px, inputs 16px. */
@@ -241,6 +274,9 @@
   --color-input-hover: var(--input-hover);
   --color-field: var(--field);
   --color-ring: var(--ring);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-accent-contrast-hover: var(--accent-contrast-hover);
+  --color-accent-contrast-foreground: var(--accent-contrast-foreground);
   --color-ring-soft: var(--ring-soft);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
@@ -337,6 +373,7 @@
   --shadow-pop: var(--card-highlight), var(--pop-shadow);
   --shadow-dialog: var(--card-highlight), var(--dialog-shadow);
   --shadow-primary: var(--primary-shadow);
+  --shadow-accent-contrast: var(--accent-contrast-shadow);
   --shadow-secondary: var(--secondary-highlight);
   --shadow-field: var(--field-highlight);
   --shadow-seg: var(--seg-inset);

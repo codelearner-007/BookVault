@@ -5,7 +5,7 @@ import * as TabsPrimitive from "@radix-ui/react-tabs"
 
 import { cn } from "@/lib/utils"
 
-// Segmented control: a recessed pill track with a raised active segment.
+// Segmented control: a recessed pill track; the selected segment is filled with the contrast accent.
 const Tabs = TabsPrimitive.Root
 
 const TabsList = React.forwardRef(({ className, ...props }, ref) => (
@@ -24,7 +24,7 @@ const TabsTrigger = React.forwardRef(({ className, ...props }, ref) => (
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex h-seg items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 text-sm font-medium transition-[background-color,color,box-shadow] duration-150 ease-out hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-45 data-[state=active]:bg-seg-active data-[state=active]:text-foreground data-[state=active]:shadow-seg-active",
+      "inline-flex h-seg items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 text-sm font-medium transition-[background-color,color,box-shadow] duration-150 ease-out hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-45 data-[state=active]:bg-accent-contrast data-[state=active]:text-accent-contrast-foreground data-[state=active]:shadow-accent-contrast",
       className
     )}
     {...props}

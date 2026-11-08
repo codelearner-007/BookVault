@@ -4,13 +4,13 @@ import { cva } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
-// Three styles per screen at most: default (the one filled pill), secondary (tonal), ghost.
+// Three styles per screen at most: default (the one filled pill, in the contrast accent), secondary (tonal), ghost.
 const buttonVariants = cva(
   "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-transparent text-base font-semibold tracking-tight transition-[background-color,color,border-color,box-shadow,transform] duration-150 ease-out active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-primary hover:bg-primary-hover",
+        default: "bg-accent-contrast text-accent-contrast-foreground shadow-accent-contrast hover:bg-accent-contrast-hover",
         secondary: "border-secondary-border bg-secondary text-secondary-foreground shadow-secondary hover:bg-secondary-hover",
         outline: "border-secondary-border bg-secondary text-secondary-foreground shadow-secondary hover:bg-secondary-hover",
         ghost: "text-muted-foreground hover:bg-accent hover:text-foreground",

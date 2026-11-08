@@ -18,7 +18,13 @@ export function NavItem({ href, icon: Icon, label, active, iconsOnly, onNavigate
         iconsOnly && 'lg:justify-center lg:px-0'
       )}
     >
-      <Icon className={cn('size-4.5 shrink-0', active && 'text-brand')} strokeWidth={1.75} aria-hidden="true" />
+      {active && (
+        <span
+          aria-hidden="true"
+          className={cn('absolute inset-y-2 left-1 w-1 rounded-full bg-accent-contrast', iconsOnly && 'lg:left-0.5')}
+        />
+      )}
+      <Icon className={cn('size-4.5 shrink-0', active && 'text-accent-contrast')} strokeWidth={1.75} aria-hidden="true" />
       <span className={cn('truncate', iconsOnly && 'lg:sr-only')}>{label}</span>
     </Link>
   );
