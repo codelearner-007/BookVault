@@ -1,5 +1,10 @@
 # Frontend Next Dev - Agent Memory
 
+## Design work (2026-11-08)
+- [Design sample rules](feedback_design_samples.md) — Manager content parity, calm density, all 40 tabs in sidebar, how to verify samples
+- [Redesign v2 status](project_redesign_v2.md) — round 1 rejected; v2 options A/B/C await owner pick
+- NOTE: "Section headers: uppercase label above heading" (Key Conventions below) is superseded for the redesign: no kicker above headings.
+
 ## Pre-existing Build Issues
 - Turbopack build error when running `npx next build` outside project dir; always `cd frontend` first.
 - `frontend/src/app/api/users/[userId]/ban/route.ts` - type error: async params pattern

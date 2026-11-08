@@ -1,12 +1,13 @@
 // src/app/api/auth/callback/route.js
 import { NextResponse } from 'next/server'
 import { createSSRClient } from "@/lib/supabase/server";
+import { safeRedirectPath } from "@/lib/utils/safe-redirect";
 
 export async function GET(request) {
     const requestUrl = new URL(request.url)
     const code = requestUrl.searchParams.get('code')
     const rawNext = requestUrl.searchParams.get('next')
-    const next = rawNext?.startsWith('/') ? rawNext : '/app'
+    const next = safeRedirectPath(rawNext)
 
     if (!code) {
         return NextResponse.redirect(new URL('/auth/login', request.url))

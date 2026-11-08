@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_db, require_role
+from app.core.dependencies import get_db, require_business_access, require_role
 from app.schemas.request.tab_columns import TabColumnsUpdate
 from app.schemas.response.tab_columns import TabColumnsResponse
 from app.services.tab_columns_service import TabColumnsService
@@ -11,6 +11,7 @@ from app.services.tab_columns_service import TabColumnsService
 router = APIRouter(
     prefix="/businesses/{business_id}/tab-columns",
     tags=["Tab Columns"],
+    dependencies=[Depends(require_business_access)],
 )
 
 _ROLE_DEP = [Depends(require_role("admin", "super_admin"))]

@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db, require_role
+from app.core.dependencies import get_current_user, get_db, require_business_access, require_role
 from app.schemas.auth import CurrentUser
 from app.schemas.request.bank_account import BankAccountCreate, BankAccountUpdate
 from app.schemas.response.bank_account import BankAccountListResponse, BankAccountResponse
@@ -13,6 +13,7 @@ from app.services.bank_account_service import BankAccountService
 router = APIRouter(
     prefix="/businesses/{business_id}/bank-accounts",
     tags=["Bank Accounts"],
+    dependencies=[Depends(require_business_access)],
 )
 
 _ROLE_DEP = [Depends(require_role("admin", "super_admin"))]

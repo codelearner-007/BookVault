@@ -53,6 +53,18 @@ class UserRoleService:
         is_super = any(ur.role.name == "super_admin" for ur in user_roles)
         return highest, is_super
 
+    async def is_super_admin(self, user_id: str) -> bool:
+        """Return True when the user LIVE holds the super_admin role (reads user_roles)."""
+        _, is_super = await self._get_target_user_info(user_id)
+        return is_super
+
+    async def get_live_role_name(self, user_id: str) -> str | None:
+        """Return the name of the user's highest-hierarchy role, read live from user_roles."""
+        user_roles = await self.repository.list_by_user(user_id)
+        if not user_roles:
+            return None
+        return max(user_roles, key=lambda ur: ur.role.hierarchy_level).role.name
+
     async def list_user_roles(self, user_id: str) -> List[UserRole]:
         """
         List all roles for a user.

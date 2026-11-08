@@ -9,13 +9,7 @@ from app.schemas.request.coa import (
     CoaGroupUpdate,
     CoaGroupsOrderUpdate,
 )
-from app.schemas.request.permission import CreatePermissionRequest
 from app.schemas.request.profile import UpdateProfileRequest
-from app.schemas.request.role import (
-    CreateRoleRequest,
-    UpdateRolePermissionsRequest,
-    UpdateRoleRequest,
-)
 from app.schemas.request.tab import (
     AdminTabUpsertItem,
     BusinessTabUpdateItem,
@@ -37,11 +31,7 @@ __all__ = [
     "CoaGroupsOrderUpdate",
     "BusinessTabUpdateItem",
     "CreateBusinessRequest",
-    "CreatePermissionRequest",
-    "CreateRoleRequest",
     "UpdateProfileRequest",
-    "UpdateRolePermissionsRequest",
-    "UpdateRoleRequest",
     "TabColumnItemRequest",
     "TabColumnsUpdate",
     "UpsertAdminTabsRequest",

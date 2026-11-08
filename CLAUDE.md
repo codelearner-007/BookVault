@@ -220,6 +220,29 @@ Add bulk user import endpoint...
 
 ---
 
+## Ledger rules (REQUIRED for every money feature)
+
+- The general ledger (`journal_entries` + `journal_lines`) is the single source of truth for every
+  balance. Never store a balance, total or status that can be computed from it.
+- Only the posting service (`backend/app/services/posting/`) writes journal entries, inside the same
+  DB transaction as the document. A deferred constraint trigger rejects any entry whose debits != credits
+  at COMMIT.
+- Posted lines are immutable (trigger). Edit = reversal + new entry (version + 1); delete = void
+  (reversal). Drafts never reach the ledger. Only the audited `purge_business` function may delete.
+- Nothing may be posted on or before `business_settings.lock_date` (trigger + service check).
+  Opening balances are one entry dated `books_start_date - 1`.
+- Money is `numeric(19,4)` / Python `Decimal`, rounded half away from zero to the currency's
+  decimal places; the server computes every total and ignores client totals.
+- Every create/post/payment endpoint takes an `Idempotency-Key`; every mutable record has a
+  `version` column (409 on mismatch).
+- Every business table: `business_id NOT NULL`, `UNIQUE (business_id, id)`, composite FKs
+  `(business_id, x_id)`, index, RLS through `is_business_member()` / `has_area_access()`.
+- Reference names and accounts come from seeds (`system_account_types`, `admin_tabs`, ...), never
+  literals in code. Canonical table names: `backend-ref/manager-io/domain-model.md` section 1a.
+- Golden ledger tests (`backend/tests/golden/`) and invariants (INV-1...INV-8) must stay green.
+
+---
+
 ## Project Overview
 
 **Architecture:** Next.js 16 (Frontend + Auth) + FastAPI (Backend + Database) + Supabase (PostgreSQL + Auth)
@@ -232,9 +255,9 @@ Add bulk user import endpoint...
 
 > **No TypeScript anywhere.** Frontend uses `.js`/`.jsx` files only. Never create `.ts` or `.tsx` files.
 
-**Admin Modules:** Dashboard, Users, RBAC, Audit Logs  
-**Permissions:** 13 total across 4 modules (users, roles, permissions, audit)
-**Migrations:** 3 files (uuid_v7_function, rbac_system, jwt_claims_hook)
+**Admin modules:** Dashboard, Audit Logs, Businesses (business shell); Super Admin area: Users, Features (module catalogue)  
+**Permissions:** platform roles `super_admin`, `admin`, `member`; per-business access is Full access or Custom with independent rights per area (view / create / edit / delete) - see Roles model. There is no global permission table
+**Migrations:** see `ls supabase/migrations/` (29 files on 2026-11-08); never rely on a count in this file
 
 ---
 
@@ -244,7 +267,7 @@ Add bulk user import endpoint...
 
 **Next.js rewrites `/api/v1/*` to FastAPI automatically:**
 ```javascript
-// next.config.ts
+// next.config.js
 source: "/api/v1/:path*" → destination: "http://127.0.0.1:8000/api/v1/:path*"
 ```
 
@@ -322,7 +345,7 @@ async def list_roles(db: AsyncSession = Depends()):
 4. **Database logic in Next.js routes** → Move to FastAPI
 5. **Enabling CORS** → Not needed (rewrites)
 6. **Unnecessary hooks** → Call services directly
-7. **No superadmin protection** → Use `auth.admin.getUserById()` for LIVE check, never stale `app_metadata`
+7. **No superadmin protection** → read the target's role LIVE from `user_roles` (`getLivePlatformRole`), never from `app_metadata` or JWT claims
 8. **Missing CSRF on mutation routes** → All POST/PUT/DELETE API routes MUST call `enforceSameOrigin(request)` first
 9. **Leaking tokens in response** → Login/auth responses must NEVER include `access_token`/`refresh_token` (cookies handle it)
 10. **Leaking permissions in errors** → Never include user's permission list in error responses
@@ -339,13 +362,7 @@ async def list_roles(db: AsyncSession = Depends()):
 
 ## RBAC System
 
-**Roles:** `super_admin` (hierarchy 10000), `user` (hierarchy 100)
-
-**Permissions (13):**
-- users (4): read_all, update_all, delete_all, assign_roles
-- roles (4): create, read, update, delete
-- permissions (4): create, read, update, delete
-- audit (1): read
+**Platform roles:** `super_admin` (10000), `admin` (100), `member` (added in B0.3)
 
 **Permission Check (Client - Admin):**
 ```javascript
@@ -357,36 +374,58 @@ if (!hasPermission(claims.permissions, 'users:update_all')) {
   return <div>Access Denied</div>;
 }
 ```
+UI hiding only: read my rights from `GET /api/v1/businesses/{id}/me`; the server (`require_business_access(area_key, right)` + RLS) is the security boundary.
 
 **Superadmin Protection (API Routes):**
 ```javascript
-// ALWAYS fetch LIVE data for the target user, never trust stale app_metadata
-const { data: targetUser } = await adminClient.auth.admin.getUserById(userId);
-if (targetUser?.user?.app_metadata?.user_role === 'super_admin') {
-  return NextResponse.json({ error: 'Superadmin users cannot be modified' }, { status: 403 });
+// ALWAYS read the target's LIVE platform role from user_roles (via FastAPI or the admin client).
+// Never use app_metadata.user_role (nothing writes it) or the caller's JWT claims.
+const targetRole = await getLivePlatformRole(userId); // SELECT r.name FROM user_roles ur JOIN roles r ...
+if (targetRole === 'super_admin') {
+  return NextResponse.json({ error: 'This user cannot be modified' }, { status: 403 });
 }
 ```
 
 **Admin Route Auth Helper (DRY pattern):**
 ```javascript
-// Use authorizeAdminAction() from lib/utils/admin-auth.ts for all admin mutation routes
+// Use authorizeAdminAction() from lib/utils/admin-auth.js for all admin mutation routes
+// It must read the caller's and the target's roles live from user_roles, and for business-user actions check that the caller is super_admin or the owner of the business (D-30)
 const auth = await authorizeAdminAction(request, userId, 'users:update_all');
 if (auth instanceof NextResponse) return auth;
 // auth.adminClient and auth.userId are available
 ```
 
-**Promote User to Super Admin:**
-```bash
-psql "postgresql://postgres:postgres@127.0.0.1:55322/postgres"
-```
-```sql
-SELECT id, email FROM auth.users;
+**Super Admin creation:** only by signing up with the email in env `BOOTSTRAP_SUPER_ADMIN_EMAIL` while no super admin exists (D-29), and only after that email is confirmed. Do not promote by SQL; the `prevent_super_admin_manual_assignment` trigger blocks it for non-privileged roles.
 
-UPDATE user_roles 
-SET role_id = (SELECT id FROM roles WHERE name = 'super_admin')
-WHERE user_id = 'user-uuid-here';
-```
-**Important:** User must refresh session after role change.
+---
+
+## Roles model (user decisions 2026-11-08)
+
+- **super_admin**: only the signup whose email equals env `BOOTSTRAP_SUPER_ADMIN_EMAIL`, while no
+  super admin exists, and only after that self-signup confirms its email. Env unset -> nobody becomes
+  super admin by signing up (startup warning). Platform powers: list users, suspend/unsuspend, change
+  platform role (incl. member -> admin), platform audit (plus module catalogue and platform settings),
+  always checked LIVE plus MFA (AAL2). Also creates and runs own businesses like an admin. No default
+  access to other tenants' business data. Creates/manages users only for businesses the super admin owns.
+- **admin**: every other self-signup. Tenant owner: creates businesses (`can_create_business` is the
+  single decision point: super_admin or admin). NO platform powers: every `/platform/*` and
+  `/users/*` route returns 403 for an admin.
+- **member**: a user the super admin or an admin CREATED for a business (name, email, password;
+  no invitations). Cannot create businesses. Sees only the businesses and tabs granted.
+- An email that already has an account is REFUSED when an admin creates a user (generic "This email
+  can't be used, choose another"; rate-limited, audited); it never adds a membership or changes a
+  platform role. Each member has exactly one creator.
+- Accounts created by an admin are flagged `is_provisioned` and can never become super_admin; the
+  bootstrap email is refused in user creation.
+- An admin manages only users of businesses they own; account actions (edit email, reset password,
+  disable, delete) only for users that admin created who are `member` and in no other owner's business.
+- **Per-business access**: owner = full on everything (incl. member management, deletion). Member
+  `access_mode = 'full'` = full on every feature area, including future ones, never member
+  management or deletion. `custom` = independent rights per area: view / create / edit / delete
+  (delete = void for posted documents), in any combination; create/edit/delete imply view; a new
+  area defaults to no rights for custom members. Check: `require_business_access(area_key, right)` /
+  `has_area_access(business_id, area_key, right)`.
+- The JWT hook fails closed: no role row -> no role claim -> access denied.
 
 ---
 
@@ -430,8 +469,8 @@ backend/app/
 ├── api/v1/             # FastAPI endpoints (all database ops)
 │   ├── dashboard.py
 │   ├── users.py
-│   ├── roles.py
-│   ├── permissions.py
+│   ├── roles.py          # global editing to be removed (NA-01)
+│   ├── permissions.py    # global editing to be removed (NA-01)
 │   └── audit.py
 ├── services/           # Business logic layer
 ├── repositories/       # Data access layer
@@ -439,10 +478,7 @@ backend/app/
 └── schemas/            # Pydantic schemas
 
 supabase/
-├── migrations/         # 3 migration files
-│   ├── 20260201000000_uuid_v7_function.sql
-│   ├── 20260201000001_rbac_system.sql
-│   └── 20260201000002_jwt_claims_hook.sql
+├── migrations/         # all migrations (YYYYMMDDNNNNNN_description.sql)
 └── seeds/
     └── rbac_seed.sql   # Default roles & permissions
 ```
@@ -496,9 +532,9 @@ if (isLoading) {
 
 **1. Server Actions (Preferred):**
 ```javascript
-// app/actions/user.ts
+// app/actions/user.js
 'use server';
-export async function createUser(formData: FormData) {
+export async function createUser(formData) {
   const data = schema.parse(Object.fromEntries(formData));
   // Process...
 }
@@ -544,9 +580,10 @@ Component → Service → API Route (Next.js or FastAPI)
 
 **4. After Implementation - Verify (REQUIRED)**
 - Run `code-simplifier:code-simplifier` to clean up changes
-- Frontend: `cd frontend && npx tsc --noEmit && npx next build`
+- Frontend: `cd frontend && npx next build` (and `npx eslint .`); there is no TypeScript
 - Backend: `cd backend && python -m ruff check app/ --fix && python -c "from app.main import app; print('OK')"`
 - Use e2e-tester to verify features work
+- Run the FULL backend suite (golden + invariants + security + RLS) and the e2e smoke suite; any red test blocks completion
 - Check for superadmin protection and CSRF on mutation routes
 
 ---
@@ -634,12 +671,12 @@ Migration filenames follow the pattern: `YYYYMMDDNNNNNN_description.sql`
 5. **No CORS (rewrites handle it)**
 6. **No Supabase client in components/hooks/services**
 7. **Repository pattern in backend**
-8. **Superadmin protection via LIVE `auth.admin.getUserById()`**
+8. **Superadmin protection via the LIVE role in `user_roles`**
 9. **UUID v7 for all primary keys**
 10. **Semantic Tailwind tokens only**
 11. **CSRF (`enforceSameOrigin`) on ALL mutation routes**
 12. **Verify after implementation** - tsc, build, ruff, code-simplifier
-13. **13 permissions across 4 modules** (users, roles, permissions, audit)
+13. **Platform roles super_admin / admin / member; business access = owner, Full access or Custom per area**
 14. **Next.js 16: params/searchParams are Promise types**
 15. **Rate limiting via slowapi on sensitive endpoints**
 16. **Clean, simple & fast** - every file must pass the Code Quality checklist above

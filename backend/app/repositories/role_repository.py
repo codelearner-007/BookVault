@@ -1,6 +1,6 @@
 """Role repository."""
 
-from typing import List, Optional
+from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,40 +33,3 @@ class RoleRepository(BaseRepository[Role]):
             .options(selectinload(Role.role_permissions).selectinload(RolePermission.permission))
         )
         return result.scalar_one_or_none()
-
-    async def get_by_name(self, name: str) -> Optional[Role]:
-        """
-        Get role by name.
-
-        Args:
-            name: Role name
-
-        Returns:
-            Role instance or None
-        """
-        return await self.get_by_field("name", name)
-
-    async def assign_permissions(
-        self, role_id: str, permission_ids: List[str]
-    ) -> None:
-        """
-        Bulk assign permissions to a role (replaces existing).
-
-        Args:
-            role_id: Role ID
-            permission_ids: List of permission IDs to assign
-        """
-        # Delete existing permissions
-        await self.session.execute(
-            RolePermission.__table__.delete().where(RolePermission.role_id == role_id)
-        )
-
-        # Insert new permissions
-        if permission_ids:
-            role_permissions = [
-                RolePermission(role_id=role_id, permission_id=perm_id)
-                for perm_id in permission_ids
-            ]
-            self.session.add_all(role_permissions)
-
-        await self.session.flush()

@@ -33,9 +33,12 @@ _RECEIPT_COLS = """
 _ENRICHED_JOINS = """
     FROM receipts r
     LEFT JOIN bank_accounts  ba ON ba.id = r.received_in_account_id
+                                AND ba.business_id = r.business_id
     LEFT JOIN customers       c ON c.id  = r.paid_by_contact_id
+                                AND c.business_id = r.business_id
                                 AND r.paid_by_contact_type = 'customer'
     LEFT JOIN suppliers       s ON s.id  = r.paid_by_contact_id
+                                AND s.business_id = r.business_id
                                 AND r.paid_by_contact_type = 'supplier'
 """
 
@@ -109,7 +112,7 @@ class ReceiptRepository(BaseRepository[Receipt]):
     # ------------------------------------------------------------------
 
     async def _inject_account_names(
-        self, rows: list[dict]
+        self, business_id: str, rows: list[dict]
     ) -> list[dict]:
         """Batch-fetch COA account names and inject into each row's lines."""
         account_ids: set[str] = set()
@@ -124,9 +127,10 @@ class ReceiptRepository(BaseRepository[Receipt]):
 
         result = await self.session.execute(
             text(
-                "SELECT id::text, name FROM coa_accounts WHERE id::text = ANY(:ids)"
+                "SELECT id::text, name FROM coa_accounts"
+                " WHERE business_id = :business_id AND id::text = ANY(:ids)"
             ),
-            {"ids": list(account_ids)},
+            {"business_id": business_id, "ids": list(account_ids)},
         )
         name_map: dict[str, str] = {r.id: r.name for r in result}
 
@@ -150,7 +154,7 @@ class ReceiptRepository(BaseRepository[Receipt]):
         )
         result = await self.session.execute(sql, {"business_id": business_id})
         rows = [dict(r._mapping) for r in result]
-        return await self._inject_account_names(rows)
+        return await self._inject_account_names(business_id, rows)
 
     async def get_with_names(
         self, business_id: str, receipt_id: str
@@ -166,5 +170,5 @@ class ReceiptRepository(BaseRepository[Receipt]):
         row = result.first()
         if row is None:
             return None
-        rows = await self._inject_account_names([dict(row._mapping)])
+        rows = await self._inject_account_names(business_id, [dict(row._mapping)])
         return rows[0]

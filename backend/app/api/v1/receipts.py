@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db, require_role
+from app.core.dependencies import get_current_user, get_db, require_business_access, require_role
 from app.schemas.auth import CurrentUser
 from app.schemas.request.receipt import ReceiptCreate, ReceiptUpdate
 from app.schemas.response.receipt import ReceiptListResponse, ReceiptResponse
@@ -13,6 +13,7 @@ from app.services.receipt_service import ReceiptService
 router = APIRouter(
     prefix="/businesses/{business_id}/receipts",
     tags=["Receipts"],
+    dependencies=[Depends(require_business_access)],
 )
 
 _ROLE_DEP = [Depends(require_role("admin", "super_admin"))]

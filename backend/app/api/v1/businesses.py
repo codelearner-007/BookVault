@@ -3,7 +3,13 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db, require_role
+from app.core.dependencies import (
+    get_current_user,
+    get_db,
+    require_business_access,
+    require_business_access_including_deleted,
+    require_role,
+)
 from app.schemas.auth import CurrentUser
 from app.schemas.request.business import CreateBusinessRequest, UpdateBusinessRequest
 from app.schemas.request.tab import UpsertBusinessTabsRequest
@@ -77,7 +83,7 @@ async def list_deleted_businesses(
 @router.get(
     "/{business_id}",
     response_model=BusinessResponse,
-    dependencies=[Depends(require_role("admin", "super_admin"))],
+    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access)],
 )
 async def get_business(
     business_id: str,
@@ -92,7 +98,7 @@ async def get_business(
 @router.delete(
     "/{business_id}",
     status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_role("admin", "super_admin"))],
+    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access)],
 )
 async def delete_business(
     business_id: str,
@@ -118,7 +124,7 @@ async def delete_business(
 @router.delete(
     "/{business_id}/permanent",
     status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_role("admin", "super_admin"))],
+    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access_including_deleted)],
 )
 async def permanently_delete_business(
     business_id: str,
@@ -145,7 +151,7 @@ async def permanently_delete_business(
     "/{business_id}/restore",
     response_model=BusinessResponse,
     status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_role("admin", "super_admin"))],
+    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access_including_deleted)],
 )
 async def restore_business(
     business_id: str,
@@ -171,7 +177,7 @@ async def restore_business(
 @router.put(
     "/{business_id}",
     response_model=BusinessResponse,
-    dependencies=[Depends(require_role("admin", "super_admin"))],
+    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access)],
 )
 async def update_business(
     business_id: str,
@@ -205,7 +211,7 @@ async def update_business(
     "/{business_id}/reset",
     response_model=BusinessResponse,
     status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_role("admin", "super_admin"))],
+    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access)],
 )
 async def reset_business(
     business_id: str,
@@ -231,7 +237,7 @@ async def reset_business(
 @router.get(
     "/{business_id}/tabs",
     response_model=BusinessTabListResponse,
-    dependencies=[Depends(require_role("admin", "super_admin"))],
+    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access)],
 )
 async def list_business_tabs(
     business_id: str,
@@ -246,7 +252,7 @@ async def list_business_tabs(
 @router.put(
     "/{business_id}/tabs",
     response_model=BusinessTabListResponse,
-    dependencies=[Depends(require_role("admin", "super_admin"))],
+    dependencies=[Depends(require_role("admin", "super_admin")), Depends(require_business_access)],
 )
 async def upsert_business_tabs(
     business_id: str,

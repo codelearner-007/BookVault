@@ -22,7 +22,6 @@ async def test_extract_user_claims():
         "email": "test@example.com",
         "user_role": "super_admin",
         "hierarchy_level": 10000,
-        "permissions": ["roles:create", "users:read_all"],
     }
 
     claims = extract_user_claims(payload)
@@ -31,7 +30,7 @@ async def test_extract_user_claims():
     assert claims["email"] == "test@example.com"
     assert claims["user_role"] == "super_admin"
     assert claims["hierarchy_level"] == 10000
-    assert "roles:create" in claims["permissions"]
+    assert "permissions" not in claims  # NA-14: permissions are no longer a JWT claim
 
 
 @pytest.mark.anyio
@@ -47,7 +46,6 @@ async def test_extract_user_claims_defaults():
     assert claims["user_id"] == "user-456"
     assert claims["user_role"] == "user"  # default
     assert claims["hierarchy_level"] == 100  # default
-    assert claims["permissions"] == []  # default
 
 
 @pytest.mark.anyio

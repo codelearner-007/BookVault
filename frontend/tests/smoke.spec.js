@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test('landing page loads', async ({ page }) => {
+test('landing page loads (NA-14: current hero text)', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /bootstrap your saas/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /ship your saas/i })).toBeVisible();
 });
 
 test('auth pages load', async ({ page }) => {

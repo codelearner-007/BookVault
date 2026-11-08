@@ -131,6 +131,16 @@ class CoaRepository(BaseRepository[CoaGroup]):
         )
         return result.scalar_one_or_none()
 
+    async def existing_account_ids(self, business_id: str, account_ids: set[str]) -> set[str]:
+        """Return the subset of account_ids that are COA accounts of the given business."""
+        result = await self.session.execute(
+            select(CoaAccount.id).where(
+                CoaAccount.business_id == business_id,
+                CoaAccount.id.in_(account_ids),
+            )
+        )
+        return {str(account_id) for account_id in result.scalars().all()}
+
     async def get_group_by_name(self, business_id: str, name: str) -> CoaGroup | None:
         """Return the first COA group matching name for this business, or None."""
         result = await self.session.execute(

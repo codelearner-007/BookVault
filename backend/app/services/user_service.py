@@ -5,10 +5,16 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.repositories.business_repository import BusinessRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.user_role_repository import UserRoleRepository
 from app.schemas.common import PaginatedResponse
-from app.schemas.response.user import UserStatsResponse, UserWithRolesResponse
+from app.schemas.response.user import (
+    UserAccessSummaryResponse,
+    UserStatsResponse,
+    UserWithRolesResponse,
+)
+from app.services.user_role_service import UserRoleService
 from app.schemas.response.user_role import UserRoleResponse
 
 
@@ -18,6 +24,16 @@ class UserService:
     def __init__(self, session: AsyncSession):
         self.user_repo = UserRepository(session)
         self.user_role_repo = UserRoleRepository(session)
+        self.user_role_service = UserRoleService(session)
+        self.business_repo = BusinessRepository(session)
+
+    async def get_access_summary(self, user_id: str) -> UserAccessSummaryResponse:
+        """Live platform role and owned-business count of a user (CS-04, CS-10)."""
+        return UserAccessSummaryResponse(
+            user_id=user_id,
+            user_role=await self.user_role_service.get_live_role_name(user_id),
+            owned_business_count=await self.business_repo.count_all_by_owner(user_id),
+        )
 
     async def get_stats(self) -> UserStatsResponse:
         stats = await self.user_repo.get_stats()

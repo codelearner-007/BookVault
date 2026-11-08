@@ -1,13 +1,18 @@
 """User management endpoints."""
 
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_db, require_role
+from app.core.dependencies import get_db, require_live_super_admin
 from app.schemas.common import PaginatedResponse
-from app.schemas.response.user import UserStatsResponse, UserWithRolesResponse
+from app.schemas.response.user import (
+    UserAccessSummaryResponse,
+    UserStatsResponse,
+    UserWithRolesResponse,
+)
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -16,7 +21,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 @router.get(
     "/stats",
     response_model=UserStatsResponse,
-    dependencies=[Depends(require_role("admin", "super_admin"))],
+    dependencies=[Depends(require_live_super_admin)],
 )
 async def get_user_stats(
     db: AsyncSession = Depends(get_db),
@@ -29,7 +34,7 @@ async def get_user_stats(
 @router.get(
     "/with-roles",
     response_model=PaginatedResponse[UserWithRolesResponse],
-    dependencies=[Depends(require_role("admin", "super_admin"))],
+    dependencies=[Depends(require_live_super_admin)],
 )
 async def list_users_with_roles(
     page: int = Query(1, ge=1),
@@ -47,3 +52,16 @@ async def list_users_with_roles(
         role=role, email_verified=email_verified,
         status=status, search=search,
     )
+
+
+@router.get(
+    "/{user_id}/access-summary",
+    response_model=UserAccessSummaryResponse,
+    dependencies=[Depends(require_live_super_admin)],
+)
+async def get_user_access_summary(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> UserAccessSummaryResponse:
+    """Live role + owned businesses of a user; used by the Next.js user-admin routes."""
+    return await UserService(db).get_access_summary(str(user_id))

@@ -8,6 +8,14 @@ from pydantic import BaseModel, field_validator
 from app.schemas.response.user_role import UserRoleResponse
 
 
+class UserAccessSummaryResponse(BaseModel):
+    """Live platform role of a user and how many businesses they own (super admin only)."""
+
+    user_id: str
+    user_role: str | None
+    owned_business_count: int
+
+
 class UserStatsResponse(BaseModel):
     """User statistics for admin dashboard."""
 

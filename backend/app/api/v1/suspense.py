@@ -7,11 +7,12 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_db, require_role
+from app.core.dependencies import get_db, require_business_access, require_role
 
 router = APIRouter(
     prefix="/businesses/{business_id}/suspense",
     tags=["Suspense"],
+    dependencies=[Depends(require_business_access)],
 )
 
 _ROLE_DEP = [Depends(require_role("admin", "super_admin"))]
@@ -46,7 +47,7 @@ async def get_suspense_balance(
     result = await db.execute(
         text(
             "SELECT suspense_balance"
-            " FROM public.business_suspense_balance"
+            " FROM private.business_suspense_balance"
             " WHERE business_id = :business_id"
         ),
         {"business_id": business_id},

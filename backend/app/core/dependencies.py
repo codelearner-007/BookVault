@@ -14,6 +14,10 @@ from app.core.exceptions import InvalidTokenError, RoleDeniedError
 from app.core.security import extract_user_claims, verify_token
 from app.db.session import get_session_manager
 from app.schemas.auth import CurrentUser
+from app.services.business_service import BusinessService
+from app.services.user_role_service import UserRoleService
+
+SUPER_ADMIN_ROLE = "super_admin"
 
 # HTTP Bearer token security scheme (auto_error=False for fallback to cookies)
 security = HTTPBearer(auto_error=False)
@@ -211,3 +215,40 @@ def require_role(*allowed_roles: str) -> Callable:
         return current_user
 
     return role_checker
+
+
+async def require_live_super_admin(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CurrentUser:
+    """Platform-route guard: the caller must hold super_admin in user_roles right now.
+
+    The JWT claim is not trusted here (it can be stale for the token lifetime, CS-03/CS-26).
+    """
+    if not await UserRoleService(db).is_super_admin(current_user.user_id):
+        raise RoleDeniedError(SUPER_ADMIN_ROLE)
+    return current_user
+
+
+def _business_access(include_deleted: bool) -> Callable:
+    """Build the guard every /businesses/{business_id} route depends on (CS-01, CS-08).
+
+    Temporary owner check; B0.3 replaces it with membership + per-area rights.
+    """
+
+    async def business_access(
+        business_id: str,
+        current_user: CurrentUser = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> CurrentUser:
+        await BusinessService(db).require_owned(
+            business_id, current_user.user_id, include_deleted
+        )
+        return current_user
+
+    business_access.grants_business_access = True  # read by the route-inventory test
+    return business_access
+
+
+require_business_access = _business_access(include_deleted=False)
+require_business_access_including_deleted = _business_access(include_deleted=True)

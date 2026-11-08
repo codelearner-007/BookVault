@@ -1,6 +1,6 @@
 """Permission repository."""
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,26 +14,6 @@ class PermissionRepository(BaseRepository[Permission]):
 
     def __init__(self, session: AsyncSession):
         super().__init__(Permission, session)
-
-    async def get_by_module_action(
-        self, module: str, action: str
-    ) -> Optional[Permission]:
-        """
-        Get permission by module and action.
-
-        Args:
-            module: Module name
-            action: Action name
-
-        Returns:
-            Permission instance or None
-        """
-        result = await self.session.execute(
-            select(Permission).where(
-                Permission.module == module, Permission.action == action
-            )
-        )
-        return result.scalar_one_or_none()
 
     async def list_grouped_by_module(self) -> Dict[str, List[Permission]]:
         """
@@ -54,18 +34,3 @@ class PermissionRepository(BaseRepository[Permission]):
             grouped[perm.module].append(perm)
 
         return grouped
-
-    async def get_by_ids(self, permission_ids: List[str]) -> List[Permission]:
-        """
-        Get permissions by list of IDs.
-
-        Args:
-            permission_ids: List of permission IDs
-
-        Returns:
-            List of Permission instances
-        """
-        result = await self.session.execute(
-            select(Permission).where(Permission.id.in_(permission_ids))
-        )
-        return list(result.scalars().all())

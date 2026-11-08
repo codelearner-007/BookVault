@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db, require_role
+from app.core.dependencies import get_current_user, get_db, require_business_access, require_role
 from app.schemas.auth import CurrentUser
 from app.schemas.request.coa import (
     CoaAccountCreate,
@@ -24,6 +24,7 @@ from app.services.coa_service import CoaService
 router = APIRouter(
     prefix="/businesses/{business_id}/chart-of-accounts",
     tags=["Chart of Accounts"],
+    dependencies=[Depends(require_business_access)],
 )
 
 _ROLE_DEP = [Depends(require_role("admin", "super_admin"))]

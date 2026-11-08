@@ -5,7 +5,12 @@ from typing import List
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db, require_role
+from app.core.dependencies import (
+    SUPER_ADMIN_ROLE,
+    get_current_user,
+    get_db,
+    require_live_super_admin,
+)
 from app.core.exceptions import RoleDeniedError
 from app.core.rate_limit import limiter
 from app.schemas.auth import CurrentUser
@@ -29,12 +34,12 @@ async def list_user_roles(
     """
     List all roles assigned to a user.
 
-    Users can view their own roles. Viewing other users' roles requires users:read_all.
+    Users can view their own roles. Viewing other users' roles requires a live super_admin.
     """
-    if user_id != current_user.user_id and not current_user.is_admin():
-        raise RoleDeniedError("admin, super_admin")
-
     service = UserRoleService(db)
+    if user_id != current_user.user_id and not await service.is_super_admin(current_user.user_id):
+        raise RoleDeniedError(SUPER_ADMIN_ROLE)
+
     user_roles = await service.list_user_roles(user_id)
 
     return [UserRoleResponse.model_validate(ur) for ur in user_roles]
@@ -44,7 +49,7 @@ async def list_user_roles(
     "/{user_id}/roles",
     response_model=UserRoleResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_role("admin", "super_admin"))],
+    dependencies=[Depends(require_live_super_admin)],
 )
 @limiter.limit("30/minute")
 async def assign_role_to_user(
@@ -76,7 +81,7 @@ async def assign_role_to_user(
 @router.delete(
     "/{user_id}/roles/{role_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_role("admin", "super_admin"))],
+    dependencies=[Depends(require_live_super_admin)],
 )
 @limiter.limit("30/minute")
 async def remove_role_from_user(

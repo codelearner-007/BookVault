@@ -54,25 +54,29 @@ class BusinessRepository(BaseRepository[Business]):
         )
         return result.scalar_one()
 
-    async def get_by_owner(self, business_id: str, owner_id: str) -> Business | None:
-        """Return a business only if it belongs to the given owner, None otherwise."""
-        result = await self.session.execute(
-            select(Business).where(
-                Business.id == business_id,
-                Business.owner_id == owner_id,
-            )
+    async def get_by_owner(
+        self, business_id: str, owner_id: str, include_deleted: bool = False
+    ) -> Business | None:
+        """Return the owner's business, None otherwise. Soft-deleted ones only if include_deleted."""
+        query = select(Business).where(
+            Business.id == business_id,
+            Business.owner_id == owner_id,
         )
+        if not include_deleted:
+            query = query.where(Business.deleted_at.is_(None))
+        result = await self.session.execute(query)
         return result.scalar_one_or_none()
+
+    async def count_all_by_owner(self, owner_id: str) -> int:
+        """Return how many businesses (active or soft-deleted) the given auth user owns."""
+        result = await self.session.execute(
+            select(func.count()).select_from(Business).where(Business.owner_id == owner_id)
+        )
+        return result.scalar_one()
 
     async def hard_delete(self, business_id: str, owner_id: str) -> None:
         """Permanently delete a business from the database if it belongs to the given owner."""
-        result = await self.session.execute(
-            select(Business).where(
-                Business.id == business_id,
-                Business.owner_id == owner_id,
-            )
-        )
-        business = result.scalar_one_or_none()
+        business = await self.get_by_owner(business_id, owner_id, include_deleted=True)
         if business:
             await self.delete(business)
 

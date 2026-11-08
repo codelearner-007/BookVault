@@ -3,6 +3,8 @@
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import ValidationError
+from app.core.ids import is_uuid
 from app.repositories.business_repository import BusinessRepository
 from app.repositories.coa_repository import CoaRepository
 from app.schemas.response.coa import (
@@ -28,6 +30,15 @@ class CoaService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Business not found",
             )
+
+    async def _require_group_in_business(
+        self, business_id: str, group_id: str | None, field: str
+    ) -> None:
+        """Reject a group reference that is not a group of this business (CS-05)."""
+        if group_id is None:
+            return
+        if not is_uuid(group_id) or not await self.repo.get_group(business_id, group_id):
+            raise ValidationError("Referenced group not found in this business", field)
 
     # ------------------------------------------------------------------ Groups
 
@@ -63,6 +74,7 @@ class CoaService:
     ) -> CoaGroupResponse:
         """Create a new COA group under the given business."""
         await self._require_business(business_id, owner_id)
+        await self._require_group_in_business(business_id, parent_group_id, "parent_group_id")
         group = await self.repo.create_group(
             business_id, name, type_, parent_group_id, is_system=False
         )
@@ -89,6 +101,7 @@ class CoaService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="This group is system-managed and cannot be modified.",
             )
+        await self._require_group_in_business(business_id, parent_group_id, "parent_group_id")
         updated = await self.repo.update_group(business_id, group_id, name, parent_group_id)
         return CoaGroupResponse.model_validate(updated)
 
@@ -162,6 +175,7 @@ class CoaService:
     ) -> CoaAccountResponse:
         """Create a new COA account under the given business."""
         await self._require_business(business_id, owner_id)
+        await self._require_group_in_business(business_id, group_id, "group_id")
         account = await self.repo.create_account(
             business_id=business_id,
             name=name,
@@ -204,6 +218,8 @@ class CoaService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="This account is system-managed and cannot be modified.",
             )
+        if update_group_id:
+            await self._require_group_in_business(business_id, group_id, "group_id")
         updated = await self.repo.update_account(
             business_id,
             account_id,

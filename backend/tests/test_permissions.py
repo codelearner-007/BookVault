@@ -1,65 +1,39 @@
-"""Test permission guards and authorization."""
+"""Role guards and token extraction (NA-14: replaces the removed require_permission tests)."""
+
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch
 
+from app.core.dependencies import require_role
+from app.core.exceptions import RoleDeniedError
 from app.schemas.auth import CurrentUser
 
 
-@pytest.mark.anyio
-async def test_permission_guard_blocks_unauthorized(client: AsyncClient):
-    """Test that permission guards return 401 for missing auth."""
+def _user(role: str) -> CurrentUser:
+    return CurrentUser(
+        user_id="0190f1d2-1111-7aaa-8bbb-0123456789ab",
+        email="guard@bookvault-test.dev",
+        user_role=role,
+        hierarchy_level=100,
+    )
+
+
+async def test_role_guard_blocks_missing_token(client: AsyncClient):
     response = await client.get("/api/v1/roles")
     assert response.status_code == 401
     assert "authentication token" in response.json()["error"].lower()
 
 
-@pytest.mark.anyio
-async def test_permission_guard_requires_specific_permission():
-    """Test that permission guards check for specific permissions."""
-    from app.core.dependencies import require_permission
-
-    # Create a mock user without required permission
-    mock_user = CurrentUser(
-        user_id="user-123",
-        email="test@example.com",
-        user_role="user",
-        hierarchy_level=100,
-        permissions=["users:read_all"],  # Missing roles:create
-    )
-
-    permission_checker = require_permission("roles:create")
-
-    # Should raise PermissionDeniedError (consistent app error format)
-    from app.core.exceptions import PermissionDeniedError
-
-    with pytest.raises(PermissionDeniedError) as exc_info:
-        await permission_checker(mock_user)
-
+async def test_role_guard_rejects_other_role():
+    with pytest.raises(RoleDeniedError) as exc_info:
+        await require_role("super_admin")(_user("admin"))
     assert exc_info.value.status_code == 403
-    assert "roles:create" in exc_info.value.message
 
 
-@pytest.mark.anyio
-async def test_permission_guard_allows_with_permission():
-    """Test that permission guards allow access with correct permission."""
-    from app.core.dependencies import require_permission
-
-    # Create a mock user with required permission
-    mock_user = CurrentUser(
-        user_id="user-123",
-        email="admin@example.com",
-        user_role="super_admin",
-        hierarchy_level=10000,
-        permissions=["roles:create", "users:read_all"],
-    )
-
-    permission_checker = require_permission("roles:create")
-
-    # Should not raise exception
-    result = await permission_checker(mock_user)
-    assert result == mock_user
+async def test_role_guard_allows_listed_role():
+    user = _user("admin")
+    assert await require_role("admin", "super_admin")(user) == user
 
 
 @pytest.mark.anyio
