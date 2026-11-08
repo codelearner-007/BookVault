@@ -7,13 +7,13 @@ test('landing page loads (NA-14: current hero text)', async ({ page }) => {
 
 test('auth pages load', async ({ page }) => {
   await page.goto('/auth/login');
-  await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Log in', level: 1 })).toBeVisible();
 
   await page.goto('/auth/register');
   await expect(page.getByRole('heading', { name: /create your account/i })).toBeVisible();
 
   await page.goto('/auth/forgot-password');
-  await expect(page.getByRole('heading', { name: /forgot password/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Reset your password', level: 1 })).toBeVisible();
 });
 
 test('legal pages load', async ({ page }) => {
@@ -32,9 +32,9 @@ test('optional: login flow (requires env credentials)', async ({ page }) => {
 
   await page.goto('/auth/login');
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: /sign in/i }).click();
+  await page.getByLabel('Password', { exact: true }).fill(password);
+  await page.getByRole('button', { name: /^log in$/i }).click();
 
-  // Either lands in app or goes to MFA verify page depending on account setup
-  await page.waitForURL(/\/(app|auth\/2fa)/);
+  // Either lands in the app or goes to the 2FA step, depending on the account.
+  await page.waitForURL(/\/(admin|auth\/2fa)/);
 });

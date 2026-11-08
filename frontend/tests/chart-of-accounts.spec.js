@@ -2,6 +2,7 @@
 // through the account form, then see it in the Summary with a balanced Balance Sheet. Needs the local
 // stack, FastAPI on :8000 and Next.js on :3000 (PLAYWRIGHT_BASE_URL=http://localhost:3000).
 import { test, expect } from '@playwright/test';
+import { format, parseISO } from 'date-fns';
 import { PASSWORD, api, trackAccounts, uniqueSuffix } from './support/accounts';
 
 const BOOKS_START = '2026-01-01';
@@ -42,6 +43,8 @@ test('add an account with a starting balance and see it in a balanced Summary', 
   expect(created.ok(), await created.text()).toBeTruthy();
   const business = await created.json();
   accounts.addBusiness(email, business);
+  const { format: businessFormat } = await (await calls.get(`/api/v1/businesses/${business.id}`)).json();
+  const openingDate = format(parseISO(OPENING_DATE), businessFormat.date_format);
 
   // Settings -> Chart of Accounts.
   await page.goto(`/admin/businesses/${business.id}?tab=settings`);
@@ -54,7 +57,7 @@ test('add an account with a starting balance and see it in a balanced Summary', 
   const dialog = page.getByRole('dialog', { name: 'New Account' });
   await dialog.getByLabel('Account Name').fill(accountName);
   await expect(dialog.getByRole('combobox', { name: 'Group' })).toHaveText(/Assets/);
-  await expect(dialog.getByText(`Opening balance dated ${OPENING_DATE}`)).toBeVisible();
+  await expect(dialog.getByText(`Opening balance dated ${openingDate}.`)).toBeVisible();
   await dialog.getByRole('combobox', { name: 'Starting balance side' }).click();
   await page.getByRole('option', { name: 'Debit', exact: true }).click();
   await dialog.getByLabel('Starting balance amount').fill(AMOUNT);

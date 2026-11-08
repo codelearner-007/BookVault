@@ -3,6 +3,7 @@
 // and Next.js on :3000 (PLAYWRIGHT_BASE_URL=http://localhost:3000).
 import { test, expect } from '@playwright/test';
 import { PASSWORD, api, trackAccounts, uniqueSuffix } from './support/accounts';
+import { openTransactionJournal } from './support/documents';
 
 const AMOUNT = '125.50';
 
@@ -57,7 +58,7 @@ test('post a journal entry, see it in the trial balance, void it and see the rev
   const entryUrl = page.url();
   await expect(page.getByRole('heading', { name: /^Journal Entry/ })).toBeVisible();
   await expect(page.getByText('Posted', { exact: true })).toBeVisible();
-  const journal = page.getByRole('region', { name: 'Transaction Journal' });
+  const journal = await openTransactionJournal(page);
   await expect(journal.getByText('Original', { exact: true })).toBeVisible();
   await expect(journal.getByRole('row', { name: new RegExp(expenseAccount) })).toContainText(AMOUNT);
 
@@ -74,6 +75,7 @@ test('post a journal entry, see it in the trial balance, void it and see the rev
   await page.getByRole('menuitem', { name: 'Void' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Void' }).click();
   await expect(page.getByText('Void', { exact: true })).toBeVisible();
+  await openTransactionJournal(page);
   await expect(journal.getByText('Original', { exact: true })).toBeVisible();
   await expect(journal.getByText('Reversal', { exact: true })).toBeVisible();
   await expect(journal.getByRole('row', { name: new RegExp(expenseAccount) })).toHaveCount(2);

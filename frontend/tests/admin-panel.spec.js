@@ -1,17 +1,26 @@
 // One interface for admins and the super admin (2026-11-08): the same sidebar, plus one
-// "Admin Panel" tab for the super admin only. Needs the local stack (Docker DB container
-// supabase_db_BookVault), FastAPI on :8000 and Next.js (PLAYWRIGHT_BASE_URL).
+// "Admin Panel" tab for the super admin only. Needs FastAPI and Next.js (PLAYWRIGHT_BASE_URL).
+//
+// The super-admin test promotes its own throwaway user, so it never runs against the development database:
+// it needs an isolated, disposable stack (E2E_ISOLATED_STACK=1 and TEST_DB_CONTAINER naming that stack's
+// database container). Teardown demotes every user it promoted, then deletes all users the spec created.
 import { test, expect } from '@playwright/test';
 import { createHmac } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { PASSWORD, trackAccounts, uniqueEmail } from './support/accounts';
 
-const DB_CONTAINER = process.env.TEST_DB_CONTAINER || 'supabase_db_BookVault';
+const DB_CONTAINER = process.env.TEST_DB_CONTAINER;
+const ISOLATED_STACK = process.env.E2E_ISOLATED_STACK === '1' && Boolean(DB_CONTAINER);
 const TOTP_STEP_SECONDS = 30;
 const WORKSPACE_ITEMS = ['Dashboard', 'Businesses', 'Audit logs', 'Account'];
 
 const accounts = trackAccounts();
-test.afterEach(({ request, baseURL }) => accounts.cleanup(request, baseURL));
+const promoted = [];
+test.afterEach(async ({ request, baseURL }) => {
+  // No super admin outlives the test, even if deleting the user fails.
+  while (promoted.length > 0) setRole(promoted.pop(), 'user');
+  await accounts.cleanup(request, baseURL);
+});
 
 function base32Decode(secret) {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -30,10 +39,15 @@ function totp(secret) {
   return String((hmac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, '0');
 }
 
-// Test setup only: the platform has no UI that creates a super admin.
-function promoteToSuperAdmin(userId) {
-  const sql = `UPDATE user_roles SET role_id = (SELECT id FROM roles WHERE name = 'super_admin') WHERE user_id = '${userId}'`;
+// Test setup only (isolated stack): the platform has no UI that creates a super admin.
+function setRole(userId, role) {
+  const sql = `UPDATE user_roles SET role_id = (SELECT id FROM roles WHERE name = '${role}') WHERE user_id = '${userId}'`;
   execFileSync('docker', ['exec', DB_CONTAINER, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-c', sql]);
+}
+
+function promoteToSuperAdmin(userId) {
+  promoted.push(userId);
+  setRole(userId, 'super_admin');
 }
 
 function api(page) {
@@ -82,6 +96,7 @@ test('an admin sees no Admin Panel and is sent away from /admin/panel', async ({
 });
 
 test('the super admin gets the same sidebar plus Admin Panel, which lists admins', async ({ page }) => {
+  test.skip(!ISOLATED_STACK, 'Creates a super admin: runs only on an isolated stack (E2E_ISOLATED_STACK=1, TEST_DB_CONTAINER).');
   test.setTimeout(120_000);
   const adminEmail = uniqueEmail('listed-admin');
   await accounts.createUser(page.request, adminEmail);

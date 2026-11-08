@@ -3,6 +3,7 @@
 // Needs the local stack: Next.js at PLAYWRIGHT_BASE_URL (e.g. http://localhost:3020) proxying /api/v1 to FastAPI.
 import { test, expect } from '@playwright/test';
 import { PASSWORD, api, trackAccounts, uniqueSuffix } from './support/accounts';
+import { openTransactionJournal } from './support/documents';
 
 const LINE_AMOUNTS = ['100.25', '25.25'];
 const TOTAL = '125.50';
@@ -72,7 +73,7 @@ test('post a two-line receipt, see it in the journal, bank balance and summary, 
   const receiptUrl = page.url();
   await expect(page.getByRole('heading', { name: /^Receipt/, level: 1 })).toBeVisible();
   await expect(page.getByTestId('document-total')).toHaveText(TOTAL);
-  const journal = page.getByRole('region', { name: 'Transaction Journal' });
+  const journal = await openTransactionJournal(page);
   await expect(journal.getByText('Original', { exact: true })).toBeVisible();
   await expect(journal.getByRole('row', { name: new RegExp(bankName) })).toContainText(TOTAL);
 
@@ -88,6 +89,7 @@ test('post a two-line receipt, see it in the journal, bank balance and summary, 
   await page.getByRole('button', { name: 'More actions' }).click();
   await page.getByRole('menuitem', { name: 'Void' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Void' }).click();
+  await openTransactionJournal(page);
   await expect(journal.getByText('Reversal', { exact: true })).toBeVisible();
   await expectActualBalance(page, business.id, bankName, ZERO);
 });

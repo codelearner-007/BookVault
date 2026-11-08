@@ -4,6 +4,7 @@
 // Needs the local stack: Next.js at PLAYWRIGHT_BASE_URL proxying /api/v1 to FastAPI.
 import { test, expect } from '@playwright/test';
 import { PASSWORD, api, trackAccounts, uniqueSuffix } from './support/accounts';
+import { openTransactionJournal } from './support/documents';
 
 const accounts = trackAccounts();
 test.afterEach(({ request, baseURL }) => accounts.cleanup(request, baseURL));
@@ -64,7 +65,7 @@ test('purchase invoice with tax, partial payment, status and AP, then a debit no
   const invoiceUrl = page.url();
   const invoiceId = new URL(invoiceUrl).searchParams.get('view');
   const invoice = await ok(await calls.get(`${base}/purchase-invoices/${invoiceId}`));
-  const journal = page.getByRole('region', { name: 'Transaction Journal' });
+  const journal = await openTransactionJournal(page);
   await expect(journal.getByRole('row', { name: /Accounts payable/ })).toContainText('1,100.00');
   await expect(journal.getByRole('row', { name: new RegExp(expenseName) })).toContainText('1,000.00');
   await expect(journal.getByRole('row', { name: /Tax/ })).toContainText('100.00');
@@ -101,7 +102,7 @@ test('purchase invoice with tax, partial payment, status and AP, then a debit no
   }));
   expect(debit.applied[0].document_id).toBe(invoiceId);
   await page.goto(`/admin/businesses/${business.id}?tab=debit-notes&view=${debit.id}`);
-  await expect(page.getByRole('region', { name: 'Transaction Journal' }).getByRole('row', { name: /Accounts payable/ }))
+  await expect((await openTransactionJournal(page)).getByRole('row', { name: /Accounts payable/ }))
     .toContainText('100.00');
   await page.goto(invoiceUrl);
   await expect(page.getByText('400.00').first()).toBeVisible();
